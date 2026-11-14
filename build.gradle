@@ -237,6 +237,9 @@ android {
             shrinkResources = true
             minifyEnabled = true
             proguardFiles(getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro')
+            // Tatrak: no git commit in the APK, so a build from a worktree or an archive matches
+            // F-Droid's reproducible build from its clone
+            vcsInfo.include = false
             if (signingPropertiesFile.exists()) {
                 signingConfig = signingConfigs.getByName('release')
             }

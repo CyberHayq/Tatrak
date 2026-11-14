@@ -59,7 +59,10 @@ the development tree, because F-Droid rebuilds that tag and compares it with the
 ```sh
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk ANDROID_HOME=$HOME/Android/Sdk
 BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
-cd ~/workspace/tatrak-public && git checkout v<version> && ./gradlew assembleConversationsFreeRelease
+unset ANDROID_SDK_ROOT   # the shell's /opt/android-sdk conflicts with ANDROID_HOME and fails the build
+# a clean tree; the release APK carries no git data (vcsInfo off), so a worktree would do too
+git clone ~/workspace/tatrak-public ~/workspace/tatrak-release && git -C ~/workspace/tatrak-release checkout v<version>
+cd ~/workspace/tatrak-release && ./gradlew assembleConversationsFreeRelease
 RELEASE_DIR=build/outputs/apk/conversationsFree/release
 mkdir -p "$RELEASE_DIR/signed"
 for abi in arm64-v8a armeabi-v7a x86 x86_64; do
