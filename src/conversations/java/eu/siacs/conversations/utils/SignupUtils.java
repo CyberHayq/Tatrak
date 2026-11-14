@@ -43,12 +43,13 @@ public class SignupUtils {
     }
 
     public static Intent getSignUpIntent(final Context context, final boolean toServerChooser) {
-        if (Config.MAGIC_CREATE_DOMAIN == null) {
-            // Tatrak: the welcome and server-picker screens offer the built-in server; skip them
+        if (!SetupMode.isChosen(context)) {
+            // Tatrak: a fresh install picks the easy or advanced security defaults first
             return getRedirectionIntent(context);
         }
         final Intent intent;
-        if (toServerChooser) {
+        // Tatrak: the server picker offers the built-in server; without one, open the welcome screen
+        if (toServerChooser && Config.MAGIC_CREATE_DOMAIN != null) {
             intent = new Intent(context, PickServerActivity.class);
         } else {
             intent = new Intent(context, WelcomeActivity.class);
@@ -77,10 +78,9 @@ public class SignupUtils {
                 intent = new Intent(context, SetupModeActivity.class);
             } else if (Config.X509_VERIFICATION) {
                 intent = new Intent(context, ManageAccountActivity.class);
-            } else if (Config.MAGIC_CREATE_DOMAIN != null) {
-                intent = new Intent(context, WelcomeActivity.class);
             } else {
-                intent = new Intent(context, EditAccountActivity.class);
+                // Tatrak: welcome screen even without a built-in server (login, certificate, backup)
+                intent = new Intent(context, WelcomeActivity.class);
             }
         } else {
             throw new AssertionError("Invalid setup state");

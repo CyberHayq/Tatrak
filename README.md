@@ -65,6 +65,13 @@ APKs land in `build/outputs/apk/conversationsFree/`. `conversationsFree` is the 
 `quicksy` and `playstore` flavours are kept from upstream so upstream merges stay clean, and are
 not shipped. More in the [build setup](knowledge/build/build-setup.md).
 
+Release APKs are reproducible and signed with one key (GitHub and F-Droid alike). Check a download
+with `apksigner verify --print-certs <apk>`; the certificate's SHA-256 digest must be:
+
+```
+3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b
+```
+
 ## Project documentation
 
 Design notes, decisions and the roadmap live in `knowledge/`; start with the

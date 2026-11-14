@@ -48,7 +48,7 @@ On 2026-10-31: 196 tests, 0 failures. For the emulator use the `x86_64` APK.
 `assembleConversationsFreeRelease` signs with the release key only when the ignored
 `signing.properties` exists; otherwise its APK is unsigned and cannot be installed. Tatrak keeps no
 `signing.properties` (owner, 2026-11-14): the release key is a password-protected PKCS#12 file,
-`~/android-apk-signing-backup.p12`, and its password is typed for every release, never stored.
+`~/tatrak-release.p12`, and its password is typed for every release, never stored.
 Agents cannot sign with it; they build the unsigned APKs and the owner runs the signing in their own
 terminal. Never generate a replacement release key to update an existing app.
 
@@ -68,14 +68,20 @@ mkdir -p "$RELEASE_DIR/signed"
 for abi in arm64-v8a armeabi-v7a x86 x86_64; do
   APK="am.cyberhayq.chat-<version>+free-$abi.apk"
   # asks for the key password; v1 is off (minSdk 26)
-  "$BUILD_TOOLS/apksigner" sign --ks ~/android-apk-signing-backup.p12 --v1-signing-enabled false \
+  "$BUILD_TOOLS/apksigner" sign --ks ~/tatrak-release.p12 --v1-signing-enabled false \
     --out "$RELEASE_DIR/signed/$APK" "$RELEASE_DIR/$APK" || exit 1
   "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RELEASE_DIR/signed/$APK" || exit 1
   "$BUILD_TOOLS/zipalign" -c 4 "$RELEASE_DIR/signed/$APK" || exit 1
 done
 ```
 
-The signed APKs go to the tag's GitHub release. Not run yet (the key has not signed an APK).
+The signed APKs go to the tag's GitHub release. The release certificate (`CN=Tatrak, O=CyberHayq`,
+RSA-2048, valid 2026-11-14 to 2054-04-01; public key SHA-256 `25087311…5b64`) has the SHA-256
+digest
+`3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b`, the value for F-Droid's
+`AllowedAPKSigningKeys` and the README. First run 2026-11-14 for `v0.1.0`: all five APKs signed
+(v2 + v3), aligned, one certificate. The same key first had a certificate named `CN=Android APK
+Signing`; it was reissued before anything was published, and that certificate is not used.
 
 When release APKs are only requested for testing, verify and provide the signed `arm64-v8a` APK
 only, unless the owner asks for other variants: the owner signs it with the command above, or the
