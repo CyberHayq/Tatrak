@@ -291,7 +291,7 @@ public class ImportBackupWorkerTest {
 
     @Test
     public void onlyRealValuesOfUnknownColumnsAreReported() throws IOException {
-        db.execSQL("create table messages (uuid text primary key)");
+        db.execSQL("create table messages (uuid text primary key, occupantId text)");
         final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final var jsonReader =
                 new JsonReader(
@@ -301,7 +301,8 @@ public class ImportBackupWorkerTest {
                                                 ",",
                                                 account("a1"),
                                                 conversation("c1"),
-                                                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m1\",\"subject\":null,\"flag\":\"0\"}}",
+                                                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m1\",\"subject\":null,\"flag\":\"0\","
+                                                        + "\"fileParams\":\"\",\"occupant_id\":\"occ-1\"}}",
                                                 "{\"table\":\"messages\",\"values\":{\"uuid\":\"m2\",\"subject\":\"hi\",\"flag\":\"1\"}}")
                                         + "]"));
         jsonReader.beginArray();
@@ -313,6 +314,10 @@ public class ImportBackupWorkerTest {
         final String preview = worker.previewText();
         assertTrue(preview, preview.contains("messages.subject: 1\n"));
         assertTrue(preview, preview.contains("messages.flag: 1\n"));
+        assertFalse(preview, preview.contains("fileParams")); // an empty string is the default
+        // monocles' occupant_id lands in Tatrak's occupantId
+        assertFalse(preview, preview.contains("occupant_id"));
+        assertEquals("occ-1", DatabaseUtils.stringForQuery(db, "select occupantId from messages where uuid = 'm1'", null));
     }
 
     @Test
@@ -464,6 +469,17 @@ public class ImportBackupWorkerTest {
         assertEquals("orig-1", replyTo.id);
         assertEquals(0, replyTo.fallbackStart);
         assertEquals(8, replyTo.fallbackEnd);
+        // the formatting was not carried over, so payloads stays and is reported
+        assertTrue(values.containsKey("payloads"));
+
+        final var replyOnly = new android.content.ContentValues();
+        replyOnly.put("payloads",
+                "<reply xmlns=\"urn:xmpp:reply:0\" id=\"orig-2\"/>"
+                        + "<fallback xmlns=\"urn:xmpp:fallback:0\" for=\"urn:xmpp:reply:0\"><body start=\"0\" end=\"3\"/></fallback>");
+        ImportBackupWorker.restoreReplyTo(replyOnly);
+        assertEquals("orig-2", eu.siacs.conversations.entities.ReplyTo.fromString(
+                replyOnly.getAsString(eu.siacs.conversations.entities.Message.REPLY_TO)).id);
+        assertFalse(replyOnly.containsKey("payloads"));
 
         final var broken = new android.content.ContentValues();
         broken.put("payloads", "<reply xmlns=");

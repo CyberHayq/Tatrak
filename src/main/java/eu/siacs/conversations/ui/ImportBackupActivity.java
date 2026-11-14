@@ -293,6 +293,8 @@ public class ImportBackupActivity extends ActionBarActivity
                         R.string.enter_password_to_restore,
                         backupFile.getHeader().getJid().toString()));
         final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
+        // Tatrak: full screen, so the password field stays in view below the three OMEMO choices
+        builder.setBackgroundInsetTop(0).setBackgroundInsetBottom(0).setBackgroundInsetStart(0).setBackgroundInsetEnd(0);
         this.currentRestoreOmemo = omemoImport;
         enterPasswordBinding.omemoImport.check(omemoButton(omemoImport));
         enterPasswordBinding.omemoImport.setOnCheckedChangeListener(
@@ -312,6 +314,11 @@ public class ImportBackupActivity extends ActionBarActivity
         final AlertDialog dialog = builder.create();
         dialog.setOnShowListener((d) -> onDialogShow(backupFile, d, enterPasswordBinding));
         dialog.show();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().setLayout(
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                    android.view.ViewGroup.LayoutParams.MATCH_PARENT);
+        }
     }
 
     private void onDialogShow(

@@ -690,6 +690,12 @@ public class ImportBackupWorker extends Worker {
                 ? new eu.siacs.conversations.entities.ReplyTo(id, reply.getTo(), r.start(), r.end())
                 : new eu.siacs.conversations.entities.ReplyTo(id, reply.getTo(), -1, -1);
         values.put(Message.REPLY_TO, eu.siacs.conversations.entities.ReplyTo.toString(replyTo));
+        // payloads that held only the reply and its fallback are fully carried over: not an omission
+        final boolean onlyReply = packet.getChildren().stream().allMatch(child ->
+                child instanceof im.conversations.android.xmpp.model.reply.Reply
+                        || (child instanceof im.conversations.android.xmpp.model.fallback.Fallback fallback
+                                && eu.siacs.conversations.xml.Namespace.REPLY.equals(fallback.getFor())));
+        if (onlyReply) values.remove("payloads");
     }
 
     private static boolean positive(final ContentValues values, final String name) {
@@ -961,16 +967,22 @@ public class ImportBackupWorker extends Worker {
         if (Message.TABLENAME.equals(table)) {
             restoreFileBody(contentValues);
             restoreReplyTo(contentValues);
+            // monocles names the XEP-0421 occupant id column occupant_id
+            final String occupantId = contentValues.getAsString("occupant_id");
+            if (occupantId != null && contentValues.getAsString(Message.OCCUPANT_ID) == null) {
+                contentValues.put(Message.OCCUPANT_ID, occupantId);
+                contentValues.remove("occupant_id");
+            }
             restoreFilePath(contentValues);
         }
         for (final String name : new java.util.ArrayList<>(contentValues.keySet())) {
             if (!columns.get(table).contains(name)) {
                 final Object value = contentValues.get(name);
                 contentValues.remove(name);
-                // NULL or 0 is the column's default, so nothing is lost; count only real values.
+                // NULL, 0 or an empty string is the column's default, so nothing is lost; count only real values.
                 // shortcut: a column where 0 is real data is under-reported; list such columns if one appears
                 // backups write every value as text, so a 0 arrives as "0"
-                if (value != null && !"0".equals(String.valueOf(value))) {
+                if (value != null && !"0".equals(String.valueOf(value)) && !"".equals(String.valueOf(value))) {
                     omitted(R.string.tatrak_backup_omit_field, table, name);
                 }
             }
