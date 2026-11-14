@@ -68,8 +68,8 @@ not shipped. More in the [build setup](knowledge/build/build-setup.md).
 ## Project documentation
 
 Design notes, decisions and the roadmap live in `knowledge/`; start with the
-[roadmap](knowledge/project/roadmap.md). A source-based comparison with other
-messengers is in `docs/`.
+[roadmap](knowledge/project/roadmap.md). A source-based [comparison with other
+messengers](docs/messenger-comparison.md) is in `docs/`.
 
 ## Credits and licence
 

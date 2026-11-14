@@ -46,13 +46,40 @@ On 2026-10-31: 196 tests, 0 failures. For the emulator use the `x86_64` APK.
 # Signed release APK
 
 `assembleConversationsFreeRelease` signs with the release key only when the ignored
-`signing.properties` exists; otherwise its APK is unsigned and cannot be installed. When a release
-APKs are requested, verify and provide the signed `arm64-v8a` APK only, unless the owner asks for
-other variants.
-If no release key is configured, sign separate local test APKs with the existing debug key (find its path with
-`./gradlew signingReport`); never generate a replacement release key to update an existing app.
+`signing.properties` exists; otherwise its APK is unsigned and cannot be installed. Tatrak keeps no
+`signing.properties` (owner, 2026-11-14): the release key is a password-protected PKCS#12 file,
+`~/android-apk-signing-backup.p12`, and its password is typed for every release, never stored.
+Agents cannot sign with it; they build the unsigned APKs and the owner runs the signing in their own
+terminal. Never generate a replacement release key to update an existing app.
 
-On this machine, after assembling the release:
+A published release (GitHub and F-Droid's reproducible build) is built from the public
+repository's tag (`~/workspace/tatrak-public`, see public export), not from
+the development tree, because F-Droid rebuilds that tag and compares it with the signed APKs:
+
+```sh
+export JAVA_HOME=/usr/lib/jvm/java-25-openjdk ANDROID_HOME=$HOME/Android/Sdk
+BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
+cd ~/workspace/tatrak-public && git checkout v<version> && ./gradlew assembleConversationsFreeRelease
+RELEASE_DIR=build/outputs/apk/conversationsFree/release
+mkdir -p "$RELEASE_DIR/signed"
+for abi in arm64-v8a armeabi-v7a x86 x86_64; do
+  APK="am.cyberhayq.chat-<version>+free-$abi.apk"
+  # asks for the key password; v1 is off (minSdk 26)
+  "$BUILD_TOOLS/apksigner" sign --ks ~/android-apk-signing-backup.p12 --v1-signing-enabled false \
+    --out "$RELEASE_DIR/signed/$APK" "$RELEASE_DIR/$APK" || exit 1
+  "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RELEASE_DIR/signed/$APK" || exit 1
+  "$BUILD_TOOLS/zipalign" -c 4 "$RELEASE_DIR/signed/$APK" || exit 1
+done
+```
+
+The signed APKs go to the tag's GitHub release. Not run yet (the key has not signed an APK).
+
+When release APKs are only requested for testing, verify and provide the signed `arm64-v8a` APK
+only, unless the owner asks for other variants: the owner signs it with the command above, or the
+agent signs a separate local test APK with the existing debug key (find its path with
+`./gradlew signingReport`) and labels it debug-signed.
+
+Debug-signed test APK, on this machine, after assembling the release:
 
 ```sh
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk ANDROID_HOME=$HOME/Android/Sdk

@@ -65,6 +65,10 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
   Conversations upstream and monocles (a subagent may do the check). If one of them has it too,
   record it outside the repository in `../tatrak-private-findings/` (where, how to reproduce, our fix) so the
   owner can file issues with their developers later.
+- A defect of another project that is not public yet never goes into the repository: not in
+  code comments, commit messages, `knowledge/` or `docs/`; it lives only in
+  `../tatrak-private-findings/` until it is disclosed. Older details in `docs/` sit between
+  private markers, which the public export cuts (`knowledge/ops/public-export.md`).
 
 ## Handing work to another agent
 
@@ -215,9 +219,9 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
   an empty root-owned SDK and breaks the emulator; with `~/Android` lint vital fails with an
   `Instantiatable` error on every class); adb is `~/Android/Sdk/platform-tools/adb`.
 - When asked for release APKs, deliver only the signed `arm64-v8a` APK unless the owner asks for
-  other variants, not merely unsigned Gradle outputs. Use the configured release key if available; otherwise sign
-  separate local test APKs with the existing Android debug key, and clearly label them as
-  debug-signed. Verify each signature
+  other variants, not merely unsigned Gradle outputs. The release key's password is never
+  stored, so only the owner signs with it; an agent signs separate local test APKs with the
+  existing Android debug key and labels them debug-signed. Verify each signature
   with `apksigner verify --verbose --print-certs` and check signing-key compatibility before
   claiming it will update an installed app. Never delete app data to resolve a signature mismatch.
   See `knowledge/build/build-setup.md` for the commands and limitations.
