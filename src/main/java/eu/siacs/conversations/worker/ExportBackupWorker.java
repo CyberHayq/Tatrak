@@ -15,6 +15,7 @@ import android.net.Uri;
 import android.os.SystemClock;
 import android.util.Log;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.core.app.NotificationCompat;
 import androidx.documentfile.provider.DocumentFile;
@@ -647,46 +648,13 @@ public class ExportBackupWorker extends Worker {
             int i = 0;
             int p = Integer.MIN_VALUE;
             final int typeColumn = cursor.getColumnIndexOrThrow(Message.TYPE);
-            final boolean monocles = AppSettings.BACKUP_FORMAT_MONOCLES.equals(format);
             while (cursor.moveToNext()) {
                 throwIfWorkStopped(location);
                 if (!exportedType(cursor.getInt(typeColumn), format)) {
                     ++i;
                     continue;
                 }
-                writer.beginObject();
-                writer.name("table");
-                writer.value(Message.TABLENAME);
-                writer.name("values");
-                writer.beginObject();
-                String replyTo = null;
-                String fileParams = null;
-                for (int j = 0; j < cursor.getColumnCount(); ++j) {
-                    final String name = cursor.getColumnName(j);
-                    if (monocles && Message.REPLY_TO.equals(name)) {
-                        replyTo = cursor.getString(j); // monocles keeps it as payloads XML
-                    }
-                    if (!exported(name, format)) continue;
-                    writer.name(name);
-                    String value = cursor.getString(j);
-                    if (monocles && value != null && Message.ENCRYPTION.equals(name)) {
-                        value = Integer.toString(monoclesEncryption(cursor.getInt(j)));
-                    } else if (monocles && value != null && Message.RELATIVE_FILE_PATH.equals(name)) {
-                        value = portablePaths.getOrDefault(value, value);
-                    } else if (monocles && Message.BODY.equals(name)) {
-                        fileParams = monoclesFileParams(cursor.getInt(typeColumn), value);
-                        if (fileParams != null) value = monoclesFileBody(value);
-                    }
-                    writer.value(value);
-                }
-                if (fileParams != null) {
-                    writer.name("fileParams").value(fileParams);
-                }
-                if (monocles && replyTo != null) {
-                    writer.name("payloads").value(monoclesReplyPayload(replyTo));
-                }
-                writer.endObject();
-                writer.endObject();
+                writeMessage(cursor, format, portablePaths, writer);
                 final int percentage = i * 100 / size;
                 if (p < percentage && (SystemClock.elapsedRealtime() - lastUpdate) > 2_000) {
                     p = percentage;
@@ -701,6 +669,103 @@ public class ExportBackupWorker extends Worker {
             }
         }
     }
+
+
+    // a Conversations backup's caption message sorts right after its file
+    @VisibleForTesting static final long CAPTION_DELAY_MS = 1;
+
+    /**
+     * Tatrak: one message row of the backup in {@code format}. A caption (Message.CAPTION) stays in
+     * its column in Tatrak backups; monocles keeps it as the body of the file message (the file is
+     * in fileParams) and shows it under the file; Conversations has no captions, so it gets a text
+     * message right after the file, a row that exists only in the backup.
+     */
+    @VisibleForTesting
+    static void writeMessage(final Cursor cursor, final String format,
+            final java.util.Map<String, String> portablePaths, final JsonWriter writer) throws IOException {
+        final int typeColumn = cursor.getColumnIndexOrThrow(Message.TYPE);
+        final boolean monocles = AppSettings.BACKUP_FORMAT_MONOCLES.equals(format);
+        final int captionColumn = cursor.getColumnIndex(Message.CAPTION);
+        final String caption = captionColumn < 0 ? null : Strings.emptyToNull(cursor.getString(captionColumn));
+        final int type = attachmentType(cursor.getInt(typeColumn), caption,
+                cursor.getString(cursor.getColumnIndexOrThrow(Message.BODY)));
+        final boolean tatrak = AppSettings.BACKUP_FORMAT_TATRAK.equals(format);
+        final var captionRow = new java.util.LinkedHashMap<String, String>();
+        writer.beginObject();
+        writer.name("table");
+        writer.value(Message.TABLENAME);
+        writer.name("values");
+        writer.beginObject();
+        String replyTo = null;
+        String fileParams = null;
+        for (int j = 0; j < cursor.getColumnCount(); ++j) {
+            final String name = cursor.getColumnName(j);
+            if (monocles && Message.REPLY_TO.equals(name)) {
+                replyTo = cursor.getString(j); // monocles keeps it as payloads XML
+            }
+            if (!exported(name, format)) continue;
+            writer.name(name);
+            String value = cursor.getString(j);
+            if (CAPTION_MESSAGE_COLUMNS.contains(name)) captionRow.put(name, value);
+            if (!tatrak && Message.TYPE.equals(name)) {
+                value = Integer.toString(type);
+            } else if (monocles && value != null && Message.ENCRYPTION.equals(name)) {
+                value = Integer.toString(monoclesEncryption(cursor.getInt(j)));
+            } else if (monocles && value != null && Message.RELATIVE_FILE_PATH.equals(name)) {
+                value = portablePaths.getOrDefault(value, value);
+            } else if (monocles && Message.BODY.equals(name)) {
+                fileParams = monoclesFileParams(type, value);
+                if (fileParams != null) value = caption != null ? caption : monoclesFileBody(value);
+            }
+            writer.value(value);
+        }
+        if (fileParams != null) {
+            writer.name("fileParams").value(fileParams);
+        }
+        if (monocles && replyTo != null) {
+            writer.name("payloads").value(monoclesReplyPayload(replyTo));
+        }
+        writer.endObject();
+        writer.endObject();
+        if (caption == null || !AppSettings.BACKUP_FORMAT_CONVERSATIONS.equals(format)) return;
+        if (type != Message.TYPE_IMAGE && type != Message.TYPE_FILE && type != Message.TYPE_PRIVATE_FILE) return;
+        writer.beginObject();
+        writer.name("table").value(Message.TABLENAME);
+        writer.name("values");
+        writer.beginObject();
+        for (final var column : captionRow.entrySet()) writer.name(column.getKey()).value(column.getValue());
+        writer.name(Message.UUID).value(java.util.UUID.randomUUID().toString());
+        writer.name(Message.TYPE).value(type == Message.TYPE_PRIVATE_FILE ? Message.TYPE_PRIVATE : Message.TYPE_TEXT);
+        writer.name(Message.BODY).value(caption);
+        writer.name(Message.TIME_SENT).value(cursor.getLong(cursor.getColumnIndexOrThrow(Message.TIME_SENT)) + CAPTION_DELAY_MS);
+        // a historical message: never sent again by the app that restores it
+        final int status = cursor.getInt(cursor.getColumnIndexOrThrow(Message.STATUS));
+        writer.name(Message.STATUS).value(status == Message.STATUS_RECEIVED ? Message.STATUS_RECEIVED : Message.STATUS_SEND);
+        writer.endObject();
+        writer.endObject();
+    }
+
+    /**
+     * Tatrak: the type a captioned attachment has outside Tatrak. HttpDownloadConnection stores
+     * an attachment as text while its re-download runs and leaves it so when that is cancelled
+     * or fails; with a caption and a file body (a link first) it is still the file.
+     */
+    @VisibleForTesting
+    static int attachmentType(final int type, @Nullable final String caption, @Nullable final String body) {
+        if (caption == null || body == null || (type != Message.TYPE_TEXT && type != Message.TYPE_PRIVATE)) return type;
+        // the file descriptor Conversations stores: url, then at most size|width|height|runtime as numbers
+        final String[] parts = body.split("\\|", -1);
+        if (parts.length > 5 || eu.siacs.conversations.http.URL.tryParse(parts[0]) == null) return type;
+        for (int i = 1; i < parts.length; i++) {
+            if (!parts[i].matches("\\d{1,19}")) return type;
+        }
+        return type == Message.TYPE_PRIVATE ? Message.TYPE_PRIVATE_FILE : Message.TYPE_FILE;
+    }
+
+    // what the Conversations caption message takes from its file message: never a file field
+    private static final java.util.Set<String> CAPTION_MESSAGE_COLUMNS = java.util.Set.of(
+            Message.CONVERSATION, Message.COUNTERPART, Message.TRUE_COUNTERPART, Message.ENCRYPTION,
+            Message.FINGERPRINT, Message.READ, Message.OCCUPANT_ID, Message.CARBON);
 
     /**
      * Tatrak: the key of a version 4 backup, Argon2id with monocles chat's parameters (3 passes, 64

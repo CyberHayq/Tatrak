@@ -106,6 +106,8 @@ public class Message extends AbstractEntity
     public static final String REPLY_TO = "replyTo";
     // Tatrak: time an unverified retraction of this (encrypted) message arrived; 0 when none
     public static final String RETRACT_ATTEMPT = "tatrakRetractAttempt";
+    // Tatrak: text shown under a file or image (from monocles backups); null if none
+    public static final String CAPTION = "tatrak_caption";
     public static final String ME_COMMAND = "/me ";
 
     public static final String ERROR_MESSAGE_CANCELLED = "eu.siacs.conversations.cancelled";
@@ -140,6 +142,7 @@ public class Message extends AbstractEntity
     private Collection<Reaction> reactions = Collections.emptyList();
     private ReplyTo replyTo;
     private long retractAttempt = 0;
+    private String caption; // Tatrak: see CAPTION
 
     private Boolean isGeoUri = null;
     private Boolean isEmojisOnly = null;
@@ -305,6 +308,7 @@ public class Message extends AbstractEntity
                 Reaction.fromString(cursor.getString(cursor.getColumnIndexOrThrow(REACTIONS))));
         message.replyTo = ReplyTo.fromString(cursor.getString(cursor.getColumnIndexOrThrow(REPLY_TO)));
         message.retractAttempt = cursor.getLong(cursor.getColumnIndexOrThrow(RETRACT_ATTEMPT));
+        message.caption = cursor.getString(cursor.getColumnIndexOrThrow(CAPTION));
         return message;
     }
 
@@ -394,6 +398,7 @@ public class Message extends AbstractEntity
         values.put(REACTIONS, Reaction.toString(this.reactions));
         values.put(REPLY_TO, ReplyTo.toString(this.replyTo));
         values.put(RETRACT_ATTEMPT, retractAttempt);
+        values.put(CAPTION, caption);
         return values;
     }
 
@@ -578,6 +583,7 @@ public class Message extends AbstractEntity
         this.reactions = Collections.emptyList();
         this.replyTo = null;
         this.retractAttempt = 0;
+        this.caption = null;
         final var bare = new ImmutableList.Builder<Edit>();
         for (final Edit edit : this.edits) {
             bare.add(new Edit(edit.id(), edit.serverMsgId(), edit.sentAt(), null, null, null));
@@ -840,6 +846,8 @@ public class Message extends AbstractEntity
     public boolean acceptMessageCorrection() {
         // Tatrak: imported PQ history cannot be edited/resubmitted through the legacy engine.
         if (encryption >= 8 && encryption <= 10) return false;
+        // Tatrak: a captioned attachment stays one, also as text while its re-download runs or after it was cancelled
+        if (caption != null) return false;
         return type == Message.TYPE_TEXT && !this.isGeoUri() && !this.treatAsDownloadable();
     }
 
@@ -903,6 +911,15 @@ public class Message extends AbstractEntity
      * sent the request (no matching OMEMO key), the message is kept and this records when; 0 if
      * never.
      */
+    /** Tatrak: the text shown under this file or image; null if none. */
+    public String getCaption() {
+        return caption;
+    }
+
+    public void setCaption(final String caption) {
+        this.caption = caption;
+    }
+
     public long getRetractAttempt() {
         return retractAttempt;
     }

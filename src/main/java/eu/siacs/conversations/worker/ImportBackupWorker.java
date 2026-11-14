@@ -146,6 +146,8 @@ public class ImportBackupWorker extends Worker {
     // Tatrak: the backup carried monocles' PQ state, so its contact keys need a legacy OMEMO message
     // (dropUnprovenContactKeys). Taken from the authenticated rows: the header's app name is not.
     private boolean sawPqState;
+    // Tatrak: the source's prekey counters (Full mode); restorePreKeyCounter raises the account's to them
+    private long preKeyCounter;
     // Tatrak: only a Tatrak backup may carry Tatrak's message types (7, 8); other apps number theirs differently
     @VisibleForTesting boolean sourceTatrak;
     // Tatrak: media rows (monocles' `files` format): backup path -> final attachment file, and the
@@ -195,6 +197,8 @@ public class ImportBackupWorker extends Worker {
             result = importBackup(this.uri, this.password);
         } catch (final FileNotFoundException e) {
             return failure(Reason.FILE_NOT_FOUND);
+        } catch (final UnsafePreKeysException e) {
+            return failure(Reason.UNSAFE_OMEMO_KEYS); // Tatrak
         } catch (final Exception e) {
             Log.d(Config.LOGTAG, "error restoring backup");
             final Throwable throwable = e.getCause();
@@ -359,7 +363,80 @@ public class ImportBackupWorker extends Worker {
         try (final Cursor c = db.query("SELECT 1 FROM messages WHERE conversationUuid IS NULL LIMIT 1")) {
             if (c.moveToFirst()) throw new IOException("Missing message ownership");
         }
+        if (omemoImport == OmemoImport.FULL) restorePreKeyCounter(db);
         return writePreview(jid);
+    }
+
+    // libsignal's KeyHelper.generatePreKeys(start, n) numbers ((start - 1 + i) % (Medium.MAX_VALUE - 1)) + 1:
+    // ids 1..16777214, after which it starts again at 1
+    @VisibleForTesting
+    static final long MAX_PREKEY_ID = org.whispersystems.libsignal.util.Medium.MAX_VALUE - 1;
+    // AxolotlService.NUM_KEYS_TO_PUBLISH: the most prekeys one refill generates
+    private static final long PREKEYS_PER_REFILL = 100;
+
+    /** Tatrak: a Full restore whose prekeys could be replaced by the next ones generated. */
+    static final class UnsafePreKeysException extends IOException {
+        UnsafePreKeysException(final String message) { super(message); }
+    }
+
+    /**
+     * Tatrak: new prekeys are numbered from the account's counter + 1 and replace a stored prekey
+     * of the same id (UNIQUE ... ON CONFLICT REPLACE), so in Full mode the counter must not fall
+     * below an imported prekey. monocles counts its legacy prekeys in axolotl_cur_legacy_prekey_id
+     * (its axolotl_cur_prekey_id is OMEMO2's): the highest of both and of the imported ids. Every
+     * id must be one libsignal generates, and the counter must leave a whole refill below the
+     * wrap to 1; otherwise the restore is refused (no clamping: a clamped counter could reuse ids).
+     * Past that, the wrap after 16.7 million prekeys is libsignal's own limit for any account.
+     */
+    private void restorePreKeyCounter(final SupportSQLiteDatabase db) throws IOException {
+        if (preKeyCounter < 0) throw new UnsafePreKeysException("Invalid prekey counter");
+        long counter = preKeyCounter;
+        final String where = " FROM " + SQLiteAxolotlStore.PREKEY_TABLENAME + " WHERE " + SQLiteAxolotlStore.ACCOUNT + " = ?";
+        try (final Cursor c = db.query("SELECT 1" + where + " AND (typeof(" + SQLiteAxolotlStore.ID + ") != 'integer' OR "
+                + SQLiteAxolotlStore.ID + " < 1 OR " + SQLiteAxolotlStore.ID + " > " + MAX_PREKEY_ID + ") LIMIT 1",
+                new Object[] {importAccount})) {
+            if (c.moveToFirst()) throw new UnsafePreKeysException("Prekey id out of range");
+        }
+        try (final Cursor c = db.query("SELECT max(" + SQLiteAxolotlStore.ID + ")" + where, new Object[] {importAccount})) {
+            if (c.moveToFirst() && !c.isNull(0)) counter = Math.max(counter, c.getLong(0));
+        }
+        if (counter > MAX_PREKEY_ID - PREKEYS_PER_REFILL) throw new UnsafePreKeysException("Prekey counter too close to the wrap");
+        if (counter <= 0) return;
+        final String keys;
+        try (final Cursor c = db.query("SELECT " + Account.KEYS + " FROM " + Account.TABLENAME + " WHERE "
+                + Account.UUID + " = ?", new Object[] {importAccount})) {
+            keys = c.moveToFirst() ? c.getString(0) : null;
+        }
+        try {
+            final var json = new org.json.JSONObject(Strings.isNullOrEmpty(keys) ? "{}" : keys)
+                    .put("axolotl_cur_prekey_id", counter);
+            db.execSQL("UPDATE " + Account.TABLENAME + " SET " + Account.KEYS + " = ? WHERE " + Account.UUID + " = ?",
+                    new Object[] {json.toString(), importAccount});
+        } catch (final org.json.JSONException e) { throw new IOException("Account keys", e); }
+    }
+
+    // -1: a counter that is not one libsignal can have; refused once the backup is authenticated
+    private static long sourcePreKeyCounter(@Nullable final String keys) {
+        if (Strings.isNullOrEmpty(keys)) return 0;
+        final org.json.JSONObject json;
+        try {
+            json = new org.json.JSONObject(keys);
+        } catch (final org.json.JSONException e) {
+            return 0; // Account.Keys.parse reads such keys as empty too
+        }
+        final long current = preKeyCounter(json, "axolotl_cur_prekey_id");
+        final long legacy = preKeyCounter(json, "axolotl_cur_legacy_prekey_id");
+        return current < 0 || legacy < 0 ? -1 : Math.max(current, legacy);
+    }
+
+    // the apps write a counter as a number or as a string of digits; anything else is refused, never narrowed
+    private static long preKeyCounter(final org.json.JSONObject json, final String name) {
+        final Object value = json.opt(name);
+        if (value == null || value == org.json.JSONObject.NULL) return 0;
+        final Long counter = value instanceof Integer || value instanceof Long
+                ? Long.valueOf(((Number) value).longValue())
+                : value instanceof String text ? com.google.common.primitives.Longs.tryParse(text) : null;
+        return counter == null || counter < 0 || counter > MAX_PREKEY_ID ? -1 : counter;
     }
 
     /** Tatrak: the authenticated, checked stage waits as a preview for the user's consent. */
@@ -491,6 +568,7 @@ public class ImportBackupWorker extends Worker {
 
     // monocles keeps a file's url|size|width|height|runtime in fileParams (same format as
     // Conversations' file body) and may use the body for a caption; Conversations reads the body.
+    // Tatrak keeps the caption in the file's own row (Message.CAPTION).
     private void restoreFileBody(final ContentValues values) {
         final Integer type = values.getAsInteger(Message.TYPE);
         final String params = values.getAsString("fileParams");
@@ -504,12 +582,38 @@ public class ImportBackupWorker extends Worker {
         final String url = params.split("\\|", 2)[0];
         // shortcut: size-only params carry no link; a SIMS-only file (url just in payloads) stays lost
         if (eu.siacs.conversations.http.URL.tryParse(url) == null) return;
-        final String body = values.getAsString(Message.BODY);
-        if (!Strings.isNullOrEmpty(body) && !body.split("\\|", 2)[0].equals(url)) {
-            omitted(R.string.tatrak_backup_omit_caption);
-        }
+        final var replyTo = eu.siacs.conversations.entities.ReplyTo.fromString(values.getAsString(Message.REPLY_TO));
+        final String caption = caption(values.getAsString(Message.BODY), url, replyTo);
+        if (caption != null && !textCanBeAdded(values)) omitted(R.string.tatrak_backup_omit_caption);
+        else if (caption != null) values.put(Message.CAPTION, caption);
         values.put(Message.BODY, params);
         values.remove("fileParams");
+        // the quote fallback was in the replaced body
+        if (replyTo != null && replyTo.hasFallback()) {
+            values.put(Message.REPLY_TO, eu.siacs.conversations.entities.ReplyTo.toString(
+                    new eu.siacs.conversations.entities.ReplyTo(replyTo.id, replyTo.to, -1, -1)));
+        }
+    }
+
+    /**
+     * The caption in a monocles file message's body: what is left without the reply quote and the
+     * file's link (an OOB/SFS fallback is that link; an aesgcm:// link is the encrypted file's).
+     * A body that is a Conversations file body (url|size...) or only a link and a quote has none.
+     */
+    @VisibleForTesting
+    @Nullable
+    static String caption(@Nullable final String body, final String url,
+            @Nullable final eu.siacs.conversations.entities.ReplyTo replyTo) {
+        if (Strings.isNullOrEmpty(body) || body.split("\\|", 2)[0].equals(url)) return null;
+        // the attachment's link as a whole word only: as https:// in fileParams it may be the
+        // aesgcm:// link (with its key) in the body; any other link is caption text
+        String link = Pattern.quote(url);
+        if (url.startsWith("https://")) {
+            link = "(?:" + link + "|aesgcm://" + Pattern.quote(url.substring(8)) + "(?:#\\S*)?)";
+        }
+        final String text = (replyTo == null ? body : replyTo.stripFallback(body))
+                .replaceAll("(?<!\\S)" + link + "(?!\\S)", "").trim();
+        return text.isEmpty() ? null : text;
     }
 
     /**
@@ -690,11 +794,14 @@ public class ImportBackupWorker extends Worker {
                 ? new eu.siacs.conversations.entities.ReplyTo(id, reply.getTo(), r.start(), r.end())
                 : new eu.siacs.conversations.entities.ReplyTo(id, reply.getTo(), -1, -1);
         values.put(Message.REPLY_TO, eu.siacs.conversations.entities.ReplyTo.toString(replyTo));
-        // payloads that held only the reply and its fallback are fully carried over: not an omission
-        final boolean onlyReply = packet.getChildren().stream().allMatch(child ->
-                child instanceof im.conversations.android.xmpp.model.reply.Reply
-                        || (child instanceof im.conversations.android.xmpp.model.fallback.Fallback fallback
-                                && eu.siacs.conversations.xml.Namespace.REPLY.equals(fallback.getFor())));
+        // payloads that held only this reply and the one body range converted above are fully
+        // carried over: not an omission. More replies, a whole-body or a second range stay reported.
+        final var children = packet.getChildren();
+        final boolean onlyReply = replyTo.hasFallback() && children.size() == 2 && children.contains(reply)
+                && children.stream().anyMatch(child ->
+                        child instanceof im.conversations.android.xmpp.model.fallback.Fallback fallback
+                                && eu.siacs.conversations.xml.Namespace.REPLY.equals(fallback.getFor())
+                                && fallback.getChildren().size() == 1);
         if (onlyReply) values.remove("payloads");
     }
 
@@ -953,11 +1060,6 @@ public class ImportBackupWorker extends Worker {
             omitted(R.string.tatrak_backup_omit_disappearing);
             return;
         }
-        if (Message.TABLENAME.equals(table) && !Strings.isNullOrEmpty(contentValues.getAsString("retractId"))) {
-            // Tatrak deletes retractions for good
-            omitted(R.string.tatrak_backup_omit_retracted);
-            return;
-        }
         final Integer type = contentValues.getAsInteger(Message.TYPE);
         if (Message.TABLENAME.equals(table) && !sourceTatrak && type != null && type > Message.TYPE_RTP_SESSION) {
             // other apps' types (monocles: 7 = story) would take Tatrak's meaning of the same number (7 = deleted placeholder)
@@ -965,14 +1067,22 @@ public class ImportBackupWorker extends Worker {
             return;
         }
         if (Message.TABLENAME.equals(table)) {
-            restoreFileBody(contentValues);
-            restoreReplyTo(contentValues);
-            // monocles names the XEP-0421 occupant id column occupant_id
-            final String occupantId = contentValues.getAsString("occupant_id");
-            if (occupantId != null && contentValues.getAsString(Message.OCCUPANT_ID) == null) {
-                contentValues.put(Message.OCCUPANT_ID, occupantId);
-                contentValues.remove("occupant_id");
+            restoreEdits(contentValues);
+            // a message its sender retracted becomes Tatrak's placeholder, as a retraction received now does
+            if (!Strings.isNullOrEmpty(contentValues.getAsString("retractId"))) eraseRetracted(contentValues);
+            // an erased row keeps no caption, whatever a backup says (Message.eraseContent)
+            final Integer shown = contentValues.getAsInteger(Message.TYPE);
+            if (shown != null && (shown == Message.TYPE_RETRACTED || shown == Message.TYPE_HIDDEN)) {
+                contentValues.putNull(Message.CAPTION);
             }
+            restoreReplyTo(contentValues);
+            restoreFileBody(contentValues);
+            restoreSubject(contentValues);
+            // monocles names the XEP-0421 occupant id column occupant_id and usually writes the same
+            // value to occupantId too; its reader takes a non-null occupant_id over occupantId
+            final String occupantId = contentValues.getAsString("occupant_id");
+            if (occupantId != null) contentValues.put(Message.OCCUPANT_ID, occupantId);
+            contentValues.remove("occupant_id");
             restoreFilePath(contentValues);
         }
         for (final String name : new java.util.ArrayList<>(contentValues.keySet())) {
@@ -981,8 +1091,9 @@ public class ImportBackupWorker extends Worker {
                 contentValues.remove(name);
                 // NULL, 0 or an empty string is the column's default, so nothing is lost; count only real values.
                 // shortcut: a column where 0 is real data is under-reported; list such columns if one appears
-                // backups write every value as text, so a 0 arrives as "0"
-                if (value != null && !"0".equals(String.valueOf(value)) && !"".equals(String.valueOf(value))) {
+                // backups write every value as text, so a 0 arrives as "0"; a subject "0" is text
+                if (value != null && !"".equals(String.valueOf(value))
+                        && (!"0".equals(String.valueOf(value)) || "subject".equals(name))) {
                     omitted(R.string.tatrak_backup_omit_field, table, name);
                 }
             }
@@ -1017,6 +1128,7 @@ public class ImportBackupWorker extends Worker {
             // Tatrak: monocles' one axolotl_reg_id is its legacy device id too
             if (deviceId.isPresent() && omemoImport == OmemoImport.FULL) {
                 importReadyKeys = new Account.Keys(deviceId.get());
+                preKeyCounter = sourcePreKeyCounter(contentValues.getAsString(Account.KEYS));
             } else {
                 if (deviceId.isPresent()) omitted(R.string.tatrak_backup_omit_private);
                 importReadyKeys = new Account.Keys();
@@ -1051,14 +1163,142 @@ public class ImportBackupWorker extends Worker {
                     final var json = new org.json.JSONObject(attributes);
                     if (json.optInt("next_encryption", 0) > 7) {
                         json.remove("next_encryption");
-                        contentValues.put(Conversation.ATTRIBUTES, json.toString());
                         omitted(R.string.tatrak_backup_omit_outgoing);
                     }
+                    restoreMonoclesAttributes(json, contentValues.getAsLong(Conversation.CREATED));
+                    contentValues.put(Conversation.ATTRIBUTES, json.toString());
                 } catch (org.json.JSONException e) { throw new IOException("Invalid conversation attributes", e); }
             }
         }
         if (OMEMO_TABLE_LIST.contains(table) && !importOmemoRow(table, contentValues, account)) return;
         insert(db, table, contentValues);
+    }
+
+    /**
+     * monocles keeps the draft as next_message / next_message_timestamp and the cleared-history
+     * boundary as last_clear_history ("timestamp" or "timestamp:reference"); Tatrak's
+     * Conversation.Attributes reads draft {instant, message} and last_clear {timestamp, reference}.
+     */
+    private static void restoreMonoclesAttributes(final org.json.JSONObject json, @Nullable final Long created)
+            throws org.json.JSONException {
+        final String draft = json.optString("next_message", "");
+        final long draftTime = json.optLong("next_message_timestamp", 0);
+        json.remove("next_message");
+        json.remove("next_message_timestamp");
+        if (!draft.trim().isEmpty() && !json.has("draft")) {
+            // Draft.instant must not be null; an old draft without its time takes the chat's creation time
+            json.put("draft", new org.json.JSONObject().put("instant", draftTime > 0 ? draftTime : (created == null ? 0 : created))
+                    .put("message", draft.trim())); // Tatrak keeps drafts trimmed (Conversation.setNextMessage)
+        }
+        final String lastClear = json.optString("last_clear_history", "");
+        json.remove("last_clear_history");
+        if (!lastClear.isEmpty() && !json.has("last_clear")) {
+            // read like monocles' MamReference.fromAttribute: an unreadable value is no boundary
+            final String[] parts = lastClear.split(":"); // ":" and "::" give no parts at all
+            final Long timestamp = parts.length == 0 ? null : com.google.common.primitives.Longs.tryParse(parts[0]);
+            if (timestamp != null && timestamp > 0) {
+                final var reference = new org.json.JSONObject().put("timestamp", timestamp);
+                if (parts.length >= 2) reference.put("reference", parts[1]);
+                json.put("last_clear", reference);
+            }
+        }
+    }
+
+    /**
+     * monocles names the previous id of an edited message edited_id, Tatrak's Edit names it id.
+     * A retracted message keeps only the ids of its versions (Message.eraseContent).
+     */
+    private static void restoreEdits(final ContentValues values) {
+        final String edited = values.getAsString(Message.EDITED);
+        if (Strings.isNullOrEmpty(edited)) return;
+        if (!Strings.isNullOrEmpty(values.getAsString("retractId"))) {
+            values.put(Message.EDITED, Services.GSON.toJson(bareEdits(edited)));
+            return;
+        }
+        if (!edited.contains("\"edited_id\"")) return; // Tatrak's own format stays as written
+        try {
+            final var edits = new org.json.JSONArray(edited);
+            for (int i = 0; i < edits.length(); i++) {
+                final var edit = edits.optJSONObject(i);
+                if (edit == null) continue;
+                if (edit.has("edited_id") && !edit.has("id")) edit.put("id", edit.get("edited_id"));
+                edit.remove("edited_id");
+            }
+            values.put(Message.EDITED, edits.toString());
+        } catch (final org.json.JSONException e) {
+            // Edit.ofString reads unreadable edits as none
+        }
+    }
+
+    /**
+     * The versions of a retracted message as Message.eraseContent keeps them: id, server id and
+     * time, rebuilt from fields of the right type; any other entry or field is dropped.
+     */
+    private static List<eu.siacs.conversations.entities.Edit> bareEdits(final String edited) {
+        final var bare = new java.util.ArrayList<eu.siacs.conversations.entities.Edit>();
+        final org.json.JSONArray edits;
+        try {
+            edits = new org.json.JSONArray(edited);
+        } catch (final org.json.JSONException e) {
+            return bare;
+        }
+        for (int i = 0; i < edits.length(); i++) {
+            final var edit = edits.optJSONObject(i);
+            if (edit == null) continue;
+            final String id = edit.opt("id") instanceof String text ? text
+                    : edit.opt("edited_id") instanceof String text ? text : null;
+            final String serverMsgId = edit.opt("server_msg_id") instanceof String text ? text : null;
+            if (id == null && serverMsgId == null) continue;
+            final Object sentAt = edit.opt("sentAt");
+            bare.add(new eu.siacs.conversations.entities.Edit(id, serverMsgId,
+                    sentAt instanceof Integer || sentAt instanceof Long
+                            ? java.time.Instant.ofEpochMilli(((Number) sentAt).longValue()) : null,
+                    null, null, null));
+        }
+        return bare;
+    }
+
+    /** What Message.eraseContent keeps of a retracted message: nothing of its content. */
+    private static void eraseRetracted(final ContentValues values) {
+        values.put(Message.TYPE, Message.TYPE_RETRACTED);
+        values.put(Message.BODY, "");
+        values.putNull(Message.RELATIVE_FILE_PATH);
+        values.put(Message.DELETED, 0);
+        values.put(Message.OOB, 0);
+        values.putNull(Message.REACTIONS);
+        values.putNull(Message.REPLY_TO);
+        // monocles' content columns and the retraction mark itself: never imported, never reported
+        for (final String name : new String[] {"retractId", "payloads", "fileParams", "subject", "oobUri"}) {
+            values.remove(name);
+        }
+    }
+
+    /**
+     * monocles shows a message's subject above its text; Tatrak has no subject, so it becomes the
+     * first line of a text message. On any other message it stays for the omission count.
+     */
+    private static void restoreSubject(final ContentValues values) {
+        final String subject = values.getAsString("subject");
+        if (Strings.isNullOrEmpty(subject) || !textCanBeAdded(values)) return;
+        final Integer type = values.getAsInteger(Message.TYPE);
+        if (type == null || (type != Message.TYPE_TEXT && type != Message.TYPE_PRIVATE)) return;
+        final String body = Strings.nullToEmpty(values.getAsString(Message.BODY));
+        final String prefix = body.isEmpty() ? subject : subject + "\n";
+        values.put(Message.BODY, prefix + body);
+        values.remove("subject");
+        // the quote fallback moves with the text after it
+        final var replyTo = eu.siacs.conversations.entities.ReplyTo.fromString(values.getAsString(Message.REPLY_TO));
+        if (replyTo != null && replyTo.hasFallback()) {
+            final int shift = prefix.codePointCount(0, prefix.length());
+            values.put(Message.REPLY_TO, eu.siacs.conversations.entities.ReplyTo.toString(new eu.siacs.conversations.entities.ReplyTo(
+                    replyTo.id, replyTo.to, replyTo.fallbackStart + shift, replyTo.fallbackEnd + shift)));
+        }
+    }
+
+    // an OpenPGP body is ciphertext until decrypted: text added to it would break it
+    private static boolean textCanBeAdded(final ContentValues values) {
+        final Integer encryption = values.getAsInteger(Message.ENCRYPTION);
+        return encryption == null || (encryption != Message.ENCRYPTION_PGP && encryption != Message.ENCRYPTION_DECRYPTION_FAILED);
     }
 
     /**
@@ -1207,6 +1447,8 @@ public class ImportBackupWorker extends Worker {
         FILE_NOT_FOUND,
         // Tatrak: the in-memory password was lost with the process
         PASSWORD_MISSING,
+        // Tatrak: a Full OMEMO restore whose prekeys could be reused (restorePreKeyCounter)
+        UNSAFE_OMEMO_KEYS,
         GENERIC;
 
         public static Reason valueOfOrGeneric(final String value) {

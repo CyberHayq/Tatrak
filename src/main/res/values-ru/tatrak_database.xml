@@ -34,7 +34,7 @@
     <string name="tatrak_backup_omit_private">Собственный ключ OMEMO, ID устройства, сессия или предключ не перенесены (у этого устройства будет новый ключ)</string>
     <string name="tatrak_backup_omit_disappearing">Исчезающее сообщение не перенесено (Tatrak не умеет удалять его по таймеру)</string>
     <string name="tatrak_backup_omit_caption">Подпись к вложению не перенесена (файл сохранён)</string>
-    <string name="tatrak_backup_omit_retracted">Сообщение, удалённое отправителем, не перенесено</string>
+    <string name="tatrak_backup_unsafe_omemo_keys">Свой ключ OMEMO из этой резервной копии нельзя восстановить безопасно. Выберите для OMEMO «Только доверие к контактам» или «Ничего».</string>
     <string name="tatrak_backup_omit_type">Сообщение типа, которого нет в Tatrak (%1$d, например история monocles), не перенесено</string>
     <string name="tatrak_backup_omit_conflict">Строки с конфликтующими данными: %1$s</string>
     <string name="tatrak_backup_status_reading">Чтение бэкапа…</string>

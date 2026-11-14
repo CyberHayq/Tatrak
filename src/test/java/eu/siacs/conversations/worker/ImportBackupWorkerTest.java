@@ -334,8 +334,7 @@ public class ImportBackupWorkerTest {
                                                 conversation("c1"),
                                                 "{\"table\":\"messages\",\"values\":{\"uuid\":\"m1\",\"ephemeral_timer\":0,\"expire_at\":0}}",
                                                 "{\"table\":\"messages\",\"values\":{\"uuid\":\"m2\",\"ephemeral_timer\":60,\"expire_at\":0}}",
-                                                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m3\",\"ephemeral_timer\":0,\"expire_at\":1700000000000}}",
-                                                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m4\",\"retractId\":\"r1\"}}")
+                                                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m3\",\"ephemeral_timer\":0,\"expire_at\":1700000000000}}")
                                         + "]"));
         jsonReader.beginArray();
         ImportBackupWorker.importRows(
@@ -347,9 +346,6 @@ public class ImportBackupWorkerTest {
         assertTrue(worker.previewText(), worker.previewText().contains(
                 ApplicationProvider.getApplicationContext().getString(
                         eu.siacs.conversations.R.string.tatrak_backup_omit_disappearing) + ": 2\n"));
-        assertTrue(worker.previewText(), worker.previewText().contains(
-                ApplicationProvider.getApplicationContext().getString(
-                        eu.siacs.conversations.R.string.tatrak_backup_omit_retracted) + ": 1\n"));
     }
 
     @Test
@@ -422,7 +418,7 @@ public class ImportBackupWorkerTest {
 
     @Test
     public void monoclesFileParamsBecomeTheFileBody() throws IOException {
-        db.execSQL("create table messages (uuid text primary key, type integer, body text)");
+        db.execSQL("create table messages (uuid text primary key, type integer, body text, tatrak_caption text)");
         final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final String url = "https://up.example.com/a.jpg";
         final var jsonReader =
@@ -449,10 +445,12 @@ public class ImportBackupWorkerTest {
         assertEquals(url + "|1000|640|480", DatabaseUtils.stringForQuery(db, "select body from messages where uuid='m1'", null));
         assertEquals(url + "|1000", DatabaseUtils.stringForQuery(db, "select body from messages where uuid='m2'", null));
         assertEquals("hi", DatabaseUtils.stringForQuery(db, "select body from messages where uuid='m3'", null));
+        // the caption stays with its file
+        assertEquals("see this", DatabaseUtils.stringForQuery(db, "select tatrak_caption from messages where uuid='m2'", null));
+        assertEquals(3, DatabaseUtils.queryNumEntries(db, "messages"));
         final String preview = worker.previewText();
-        assertTrue(preview, preview.contains(
-                ApplicationProvider.getApplicationContext().getString(
-                        eu.siacs.conversations.R.string.tatrak_backup_omit_caption) + ": 1\n"));
+        assertFalse(preview, preview.contains(
+                ApplicationProvider.getApplicationContext().getString(eu.siacs.conversations.R.string.tatrak_backup_omit_caption)));
         assertTrue(preview, preview.contains("messages.fileParams: 1\n"));
     }
 
@@ -481,10 +479,183 @@ public class ImportBackupWorkerTest {
                 replyOnly.getAsString(eu.siacs.conversations.entities.Message.REPLY_TO)).id);
         assertFalse(replyOnly.containsKey("payloads"));
 
+        // a second reply, or a whole-body fallback, was not carried over: payloads stays reported
+        for (final String payloads : new String[] {
+                "<reply xmlns=\"urn:xmpp:reply:0\" id=\"a\"/><reply xmlns=\"urn:xmpp:reply:0\" id=\"b\"/>"
+                        + "<fallback xmlns=\"urn:xmpp:fallback:0\" for=\"urn:xmpp:reply:0\"><body start=\"0\" end=\"3\"/></fallback>",
+                "<reply xmlns=\"urn:xmpp:reply:0\" id=\"a\"/><fallback xmlns=\"urn:xmpp:fallback:0\" for=\"urn:xmpp:reply:0\"/>",
+                "<reply xmlns=\"urn:xmpp:reply:0\" id=\"a\"/><fallback xmlns=\"urn:xmpp:fallback:0\" for=\"urn:xmpp:reply:0\">"
+                        + "<body start=\"0\" end=\"3\"/><body start=\"5\" end=\"7\"/></fallback>"}) {
+            final var partial = new android.content.ContentValues();
+            partial.put("payloads", payloads);
+            ImportBackupWorker.restoreReplyTo(partial);
+            assertEquals("a", eu.siacs.conversations.entities.ReplyTo.fromString(
+                    partial.getAsString(eu.siacs.conversations.entities.Message.REPLY_TO)).id);
+            assertTrue(payloads, partial.containsKey("payloads"));
+        }
+
         final var broken = new android.content.ContentValues();
         broken.put("payloads", "<reply xmlns=");
         ImportBackupWorker.restoreReplyTo(broken);
         assertEquals(null, broken.getAsString(eu.siacs.conversations.entities.Message.REPLY_TO));
+    }
+
+    /** Imports [messages] (the values objects) after an account and a conversation into a full messages table. */
+    private ImportBackupWorker importMessages(final String... messages) throws IOException {
+        db.execSQL("create table messages (uuid text primary key, conversationUuid text, counterpart text,"
+                + " trueCounterpart text, type integer, status integer, timeSent integer, encryption integer,"
+                + " axolotl_fingerprint text, read integer, body text, relativeFilePath text, deleted integer,"
+                + " oob integer, edited text, reactions text, replyTo text, occupantId text, tatrak_caption text)");
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
+        final var rows = new java.util.ArrayList<String>(List.of(account("a1"), conversation("c1")));
+        for (final String values : messages) rows.add("{\"table\":\"messages\",\"values\":{" + values + "}}");
+        final var jsonReader = new JsonReader(new StringReader("[" + String.join(",", rows) + "]"));
+        jsonReader.beginArray();
+        ImportBackupWorker.importRows(supportDb, jsonReader, new ByteArrayInputStream(new byte[0]),
+                () -> worker.importRow(supportDb, jsonReader, Jid.of("tester@example.com"), PASSWORD));
+        return worker;
+    }
+
+    private String column(final String column, final String uuid) {
+        return DatabaseUtils.stringForQuery(db, "select " + column + " from messages where uuid = ?", new String[] {uuid});
+    }
+
+    @Test
+    public void occupantIdDuplicatesAreNotReportedAndOccupantIdWins() throws IOException {
+        final var worker = importMessages(
+                "\"uuid\":\"m1\",\"occupantId\":\"occ-1\",\"occupant_id\":\"occ-1\"",
+                "\"uuid\":\"m2\",\"occupantId\":\"old\",\"occupant_id\":\"new\"",
+                "\"uuid\":\"m3\",\"occupantId\":\"kept\",\"occupant_id\":null");
+        assertEquals("occ-1", column("occupantId", "m1"));
+        assertEquals("new", column("occupantId", "m2")); // monocles' reader takes a non-null occupant_id
+        assertEquals("kept", column("occupantId", "m3"));
+        assertFalse(worker.previewText(), worker.previewText().contains("occupant_id"));
+    }
+
+    @Test
+    public void subjectBecomesTheFirstLineOfATextMessage() throws IOException {
+        final var worker = importMessages(
+                "\"uuid\":\"m1\",\"type\":0,\"body\":\"hello\",\"subject\":\"Topic\"",
+                "\"uuid\":\"m2\",\"type\":0,\"body\":\"\",\"subject\":\"0\"",
+                // the quote fallback (0..6, \"> q\\n\" in code points) moves with the text
+                "\"uuid\":\"m3\",\"type\":0,\"body\":\"> q\\nanswer\",\"subject\":\"Re\",\"payloads\":\""
+                        + "<reply xmlns='urn:xmpp:reply:0' id='orig'/><fallback xmlns='urn:xmpp:fallback:0'"
+                        + " for='urn:xmpp:reply:0'><body start='0' end='4'/></fallback>\"",
+                // a subject cannot join an OpenPGP body or a file
+                "\"uuid\":\"m4\",\"type\":0,\"encryption\":1,\"body\":\"-----BEGIN\",\"subject\":\"secret topic\"",
+                "\"uuid\":\"m5\",\"type\":2,\"body\":\"https://up.example.com/a.pdf\",\"subject\":\"0\"");
+        assertEquals("Topic\nhello", column("body", "m1"));
+        assertEquals("0", column("body", "m2")); // a subject \"0\" is text, not a default
+        assertEquals("Re\n> q\nanswer", column("body", "m3"));
+        final var replyTo = eu.siacs.conversations.entities.ReplyTo.fromString(column("replyTo", "m3"));
+        assertEquals("Re\nanswer", replyTo.stripFallback(column("body", "m3")));
+        assertEquals("-----BEGIN", column("body", "m4"));
+        assertTrue(worker.previewText(), worker.previewText().contains("messages.subject: 2\n"));
+    }
+
+    @Test
+    public void monoclesEditIdsBecomeTatrakEditIds() throws IOException {
+        importMessages("\"uuid\":\"m1\",\"type\":0,\"body\":\"fixed\",\"edited\":\"[{\\\"edited_id\\\":\\\"r1\\\","
+                + "\\\"server_msg_id\\\":\\\"s1\\\"}]\"");
+        final var edits = eu.siacs.conversations.entities.Edit.ofString(column("edited", "m1"));
+        assertEquals(1, edits.size());
+        assertEquals("r1", edits.get(0).id());
+        assertEquals("s1", edits.get(0).serverMsgId());
+    }
+
+    @Test
+    public void captionStaysInTheFileRow() throws IOException {
+        final String url = "https://up.example.com/a.jpg";
+        final String file = "\"conversationUuid\":\"c1\",\"counterpart\":\"friend@example.com/phone\",\"type\":1,"
+                + "\"status\":0,\"timeSent\":1000,\"encryption\":5,\"axolotl_fingerprint\":\"05ab\",\"read\":1,"
+                + "\"relativeFilePath\":\"a.jpg\",\"oob\":1,\"fileParams\":\"" + url + "|1000\",";
+        final var worker = importMessages(
+                "\"uuid\":\"m1\"," + file + "\"body\":\"look at this\\n" + url + "\"",
+                // only the link and a reply quote: nothing to keep
+                "\"uuid\":\"m2\"," + file + "\"body\":\"> q\\n" + url + "\",\"payloads\":\""
+                        + "<reply xmlns='urn:xmpp:reply:0' id='orig'/><fallback xmlns='urn:xmpp:fallback:0'"
+                        + " for='urn:xmpp:reply:0'><body start='0' end='4'/></fallback>\"",
+                "\"uuid\":\"m3\"," + file.replace("\"encryption\":5", "\"encryption\":1") + "\"body\":\"pgp caption\"",
+                // a Tatrak backup's caption column comes back as it is
+                "\"uuid\":\"m4\",\"conversationUuid\":\"c1\",\"type\":1,\"body\":\"" + url + "|10\",\"tatrak_caption\":\"kept\"");
+        assertEquals(4, DatabaseUtils.queryNumEntries(db, "messages"));
+        assertEquals(url + "|1000", column("body", "m1"));
+        assertEquals("look at this", column("tatrak_caption", "m1"));
+        assertNull(column("tatrak_caption", "m2"));
+        assertNull(column("tatrak_caption", "m3")); // text added to OpenPGP would break it: reported
+        assertEquals("kept", column("tatrak_caption", "m4"));
+        // the quote was in the replaced body: the file keeps its reply without a range
+        final var replyTo = eu.siacs.conversations.entities.ReplyTo.fromString(column("replyTo", "m2"));
+        assertEquals("orig", replyTo.id);
+        assertFalse(replyTo.hasFallback());
+        assertTrue(worker.previewText(), worker.previewText().contains(ApplicationProvider.getApplicationContext()
+                .getString(eu.siacs.conversations.R.string.tatrak_backup_omit_caption) + ": 1\n"));
+    }
+
+    @Test
+    public void senderRetractedMessageBecomesTheErasedPlaceholder() throws IOException {
+        final var worker = importMessages("\"uuid\":\"m1\",\"conversationUuid\":\"c1\",\"type\":1,\"status\":0,"
+                + "\"timeSent\":1000,\"body\":\"secret\",\"subject\":\"secret subject\",\"tatrak_caption\":\"secret caption\",\"relativeFilePath\":\"a.jpg\","
+                + "\"fileParams\":\"https://up.example.com/a.jpg|10\",\"deleted\":1,\"oob\":1,\"retractId\":\"r1\","
+                + "\"reactions\":\"[]\",\"payloads\":\"<retract xmlns='urn:xmpp:message-retract:1'/>\","
+                + "\"edited\":\"[\\\"old secret\\\",{\\\"id\\\":\\\"e1\\\",\\\"sentAt\\\":5,\\\"body\\\":\\\"old secret\\\","
+                + "\\\"note\\\":\\\"secret too\\\"},{\\\"body\\\":\\\"secret without id\\\"},{\\\"edited_id\\\":\\\"e0\\\",\\\"sentAt\\\":\\\"x\\\"}]\"");
+        assertEquals(String.valueOf(eu.siacs.conversations.entities.Message.TYPE_RETRACTED), column("type", "m1"));
+        assertEquals("", column("body", "m1"));
+        assertNull(column("relativeFilePath", "m1"));
+        assertNull(column("tatrak_caption", "m1"));
+        assertNull(column("reactions", "m1"));
+        assertEquals("0", column("deleted", "m1"));
+        assertEquals("1000", column("timeSent", "m1"));
+        // rebuilt from the ids and times alone, as Message.eraseContent keeps them
+        assertFalse(column("edited", "m1"), column("edited", "m1").contains("secret"));
+        final var edits = eu.siacs.conversations.entities.Edit.ofString(column("edited", "m1"));
+        assertEquals(2, edits.size());
+        assertEquals("e1", edits.get(0).id());
+        assertEquals(5, edits.get(0).sentAt().toEpochMilli());
+        assertNull(edits.get(0).body());
+        assertEquals("e0", edits.get(1).id());
+        assertNull(edits.get(1).sentAt());
+        assertEquals("", worker.previewText()); // nothing of it is reported lost
+    }
+
+    @Test
+    public void monoclesDraftAndClearedHistoryBecomeTatrakAttributes() throws Exception {
+        db.execSQL("alter table conversations add column created integer");
+        db.execSQL("alter table conversations add column attributes text");
+        db.execSQL("create table messages (uuid text primary key)");
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
+        final var jsonReader = new JsonReader(new StringReader("[" + String.join(",", account("a1"),
+                "{\"table\":\"conversations\",\"values\":{\"uuid\":\"c1\",\"name\":\"chat\",\"created\":500,"
+                        + "\"attributes\":\"{\\\"next_message\\\":\\\" unsent \\\",\\\"next_message_timestamp\\\":\\\"1700\\\","
+                        + "\\\"last_clear_history\\\":\\\"1600:stanza-7\\\",\\\"muted_till\\\":\\\"0\\\"}\"}}",
+                "{\"table\":\"conversations\",\"values\":{\"uuid\":\"c2\",\"name\":\"chat\",\"created\":500,"
+                        + "\"attributes\":\"{\\\"next_message\\\":\\\"old\\\",\\\"last_clear_history\\\":1600}\"}}",
+                // unreadable boundaries: no boundary, and the import goes on
+                "{\"table\":\"conversations\",\"values\":{\"uuid\":\"c3\",\"name\":\"chat\","
+                        + "\"attributes\":\"{\\\"last_clear_history\\\":\\\":\\\"}\"}}",
+                "{\"table\":\"conversations\",\"values\":{\"uuid\":\"c4\",\"name\":\"chat\","
+                        + "\"attributes\":\"{\\\"last_clear_history\\\":\\\"::\\\"}\"}}") + "]"));
+        jsonReader.beginArray();
+        ImportBackupWorker.importRows(supportDb, jsonReader, new ByteArrayInputStream(new byte[0]),
+                () -> worker.importRow(supportDb, jsonReader, Jid.of("tester@example.com"), PASSWORD));
+        final var c1 = new org.json.JSONObject(DatabaseUtils.stringForQuery(db, "select attributes from conversations where uuid = 'c1'", null));
+        // read with the types Tatrak's Conversation.Attributes reads them with
+        final var draft = im.conversations.android.json.Services.GSON.fromJson(
+                c1.getJSONObject("draft").toString(), eu.siacs.conversations.entities.Conversation.Draft.class);
+        assertEquals("unsent", draft.message());
+        assertEquals(1700, draft.instant().toEpochMilli());
+        assertEquals(new eu.siacs.conversations.xmpp.mam.MamReference(1600, "stanza-7"), im.conversations.android.json.Services.GSON
+                .fromJson(c1.getJSONObject("last_clear").toString(), eu.siacs.conversations.xmpp.mam.MamReference.class));
+        assertFalse(c1.has("next_message"));
+        assertFalse(c1.has("last_clear_history"));
+        final var c2 = new org.json.JSONObject(DatabaseUtils.stringForQuery(db, "select attributes from conversations where uuid = 'c2'", null));
+        assertEquals(500, c2.getJSONObject("draft").getLong("instant")); // no draft time: the chat's creation
+        assertEquals(1600, c2.getJSONObject("last_clear").getLong("timestamp"));
+        assertFalse(c2.getJSONObject("last_clear").has("reference"));
+        for (final String uuid : new String[] {"c3", "c4"}) {
+            assertEquals("{}", DatabaseUtils.stringForQuery(db, "select attributes from conversations where uuid = ?", new String[] {uuid}));
+        }
     }
 
     private static String account(final String uuid) {
@@ -902,7 +1073,7 @@ public class ImportBackupWorkerTest {
 
     /** The tables a backup's rows land in, with the columns the fixtures use. */
     private void createBackupSchema() {
-        db.execSQL("drop table conversations");
+        db.execSQL("drop table if exists conversations");
         db.execSQL("create table conversations (uuid text primary key, name text, accountUuid text)");
         db.execSQL("create table messages (uuid text primary key, conversationUuid text, type integer, status integer,"
                 + " body text, encryption integer, axolotl_fingerprint text, tatrak_source_encryption integer,"
@@ -959,6 +1130,8 @@ public class ImportBackupWorkerTest {
                 DatabaseUtils.stringForQuery(db, "select keys from accounts", null));
         assertEquals(full ? com.google.common.base.Optional.of(4242) : com.google.common.base.Optional.absent(),
                 keys.getAxolotlRegistrationId());
+        // the backup's counter (7) is above its one prekey (1); without prekeys the counter stays 0
+        assertEquals(full ? 7 : 0, prekeyCounter());
         // the omission list names what this mode and source leave out
         // trust MAYBE and a missing fingerprint
         assertTrue(preview, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_bad_identity, 2)));
@@ -1024,6 +1197,88 @@ public class ImportBackupWorkerTest {
                 DatabaseUtils.stringForQuery(db, "select key from identities where fingerprint = ?",
                         new String[] {fingerprint("peer")})), 0);
         assertEquals(CONTACT_KEYS.get("peer"), peer);
+    }
+
+    private int prekeyCounter() throws org.json.JSONException {
+        final String keys = DatabaseUtils.stringForQuery(db, "select keys from accounts", null);
+        return keys == null ? 0 : new org.json.JSONObject(keys).optInt("axolotl_cur_prekey_id", 0);
+    }
+
+    /** A monocles backup whose legacy counter is [legacyCounter] and that holds one more prekey, [extraPrekey]. */
+    private int prekeyCounterAfterFullImport(final String legacyCounter, final int extraPrekey) throws Exception {
+        // a fresh stage for each import of a test
+        for (final String table : new String[] {"messages", "identities", "sessions", "prekeys", "signed_prekeys"}) {
+            db.execSQL("drop table if exists " + table);
+        }
+        db.execSQL("delete from accounts");
+        final var rows = new java.util.ArrayList<>(omemoBackup(true));
+        // monocles' axolotl_cur_prekey_id (7) counts its OMEMO2 prekeys, the legacy ones have their own counter
+        rows.set(0, rows.get(0).replace("\\\"axolotl_cur_prekey_id\\\":\\\"7\\\"",
+                "\\\"axolotl_cur_prekey_id\\\":\\\"7\\\",\\\"axolotl_cur_legacy_prekey_id\\\":\\\"" + legacyCounter + "\\\""));
+        rows.add(row("prekeys", "\"id\":\"" + extraPrekey + "\",\"key\":\"p\""));
+        importBackupFile(ImportBackupWorker.OmemoImport.FULL, backupFile("monocles chat", rows));
+        return prekeyCounter();
+    }
+
+    @Test
+    public void fullImportKeepsMonoclesLegacyPrekeyCounter() throws Exception {
+        // new prekeys are numbered from counter + 1: 151 and up never replace an imported one
+        assertEquals(150, prekeyCounterAfterFullImport("150", 102));
+    }
+
+    @Test
+    public void fullImportKeepsThePrekeyCounterAboveEveryImportedPrekey() throws Exception {
+        assertEquals(160, prekeyCounterAfterFullImport("150", 160));
+    }
+
+    /** The prekeys libsignal generates next from [counter], as AxolotlService asks for them. */
+    private static java.util.Set<Integer> nextPrekeyIds(final long counter) {
+        final var ids = new java.util.TreeSet<Integer>();
+        for (final var record : org.whispersystems.libsignal.util.KeyHelper.generatePreKeys((int) counter + 1, 100)) ids.add(record.getId());
+        return ids;
+    }
+
+    @Test
+    public void fullImportAcceptsACounterOneRefillBelowTheWrap() throws Exception {
+        final long counter = ImportBackupWorker.MAX_PREKEY_ID - 100;
+        assertEquals(counter, prekeyCounterAfterFullImport(String.valueOf(counter), 102));
+        final var next = nextPrekeyIds(counter);
+        assertEquals(Integer.valueOf((int) counter + 1), next.iterator().next());
+        assertFalse(next.contains(1));
+        assertFalse(next.contains(102));
+    }
+
+    @Test
+    public void fullImportRefusesACounterThatWouldWrapOntoImportedPrekeys() {
+        final long counter = ImportBackupWorker.MAX_PREKEY_ID - 99;
+        assertTrue(nextPrekeyIds(counter).contains(1)); // libsignal would replace the imported prekey 1
+        assertThrows(ImportBackupWorker.UnsafePreKeysException.class,
+                () -> prekeyCounterAfterFullImport(String.valueOf(counter), 102));
+    }
+
+    @Test
+    public void fullImportRefusesCountersAndIdsLibsignalCannotHave() {
+        for (final String counter : new String[] {String.valueOf(ImportBackupWorker.MAX_PREKEY_ID + 1),
+                "4294967297", "99999999999999999999", "-1", "abc"}) {
+            assertThrows(counter, ImportBackupWorker.UnsafePreKeysException.class,
+                    () -> prekeyCounterAfterFullImport(counter, 102));
+        }
+        assertThrows(ImportBackupWorker.UnsafePreKeysException.class,
+                () -> prekeyCounterAfterFullImport("150", (int) ImportBackupWorker.MAX_PREKEY_ID + 1));
+        assertThrows(ImportBackupWorker.UnsafePreKeysException.class, () -> prekeyCounterAfterFullImport("150", 0));
+    }
+
+    @Test
+    public void captionKeepsEveryLinkButTheAttachment() {
+        final String url = "https://up.example/a.jpg";
+        assertEquals("Compare https://up.example/a.jpg?variant=raw",
+                ImportBackupWorker.caption("Compare https://up.example/a.jpg?variant=raw\n" + url, url, null));
+        assertEquals("see aesgcm://other.example/b.png#k",
+                ImportBackupWorker.caption("see aesgcm://other.example/b.png#k\naesgcm://up.example/a.jpg#key", url, null));
+        assertEquals("mirror: https://up.example/a.jpg.bak",
+                ImportBackupWorker.caption("mirror: https://up.example/a.jpg.bak " + url, url, null));
+        assertNull(ImportBackupWorker.caption("aesgcm://up.example/a.jpg#key", url, null));
+        assertNull(ImportBackupWorker.caption(url + "|1000", url, null));
     }
 
     @Test

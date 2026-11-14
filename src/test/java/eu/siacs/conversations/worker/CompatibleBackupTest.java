@@ -34,11 +34,12 @@ public class CompatibleBackupTest {
     @Test
     public void columnsPerFormat() {
         final String[] columns = {
-            Message.REPLY_TO, Message.SHARED_STORAGE, Message.RETRACT_ATTEMPT, "tatrak_source_encryption", Message.BODY
+            Message.REPLY_TO, Message.SHARED_STORAGE, Message.RETRACT_ATTEMPT, "tatrak_source_encryption", Message.BODY,
+            Message.CAPTION
         };
-        final boolean[] tatrak = {true, true, true, true, true};
-        final boolean[] conversations = {false, true, false, false, true};
-        final boolean[] monocles = {false, false, false, false, true};
+        final boolean[] tatrak = {true, true, true, true, true, true};
+        final boolean[] conversations = {false, true, false, false, true, false};
+        final boolean[] monocles = {false, false, false, false, true, false};
         for (int i = 0; i < columns.length; i++) {
             assertEquals(columns[i], tatrak[i], ExportBackupWorker.exported(columns[i], TATRAK));
             assertEquals(columns[i], conversations[i], ExportBackupWorker.exported(columns[i], CONVERSATIONS));
@@ -119,6 +120,109 @@ public class CompatibleBackupTest {
         assertEquals(null, text[1]);
         assertEquals(null, ExportBackupWorker.monoclesFileParams(Message.TYPE_IMAGE, ""));
         assertEquals(null, ExportBackupWorker.monoclesFileParams(Message.TYPE_IMAGE, null));
+    }
+
+    /** The backup rows of one captioned image in [format], as messageExport writes them. */
+    private static com.google.gson.JsonArray captionedImage(final String format, final int status) throws Exception {
+        return captionedImage(format, status, Message.TYPE_IMAGE);
+    }
+
+    private static com.google.gson.JsonArray captionedImage(final String format, final int status, final int type) throws Exception {
+        final var db = android.database.sqlite.SQLiteDatabase.create(null);
+        try {
+            db.execSQL("create table messages (uuid text, conversationUuid text, counterpart text, type integer,"
+                    + " status integer, timeSent integer, encryption integer, axolotl_fingerprint text, read integer,"
+                    + " body text, relativeFilePath text, replyTo text, tatrak_caption text)");
+            db.execSQL("insert into messages values ('m1', 'c1', 'friend@example.com/phone', ?, ?, 1000, 5, '05ab', 1,"
+                    + " 'https://up.example.com/a.jpg|10|640|480', '/files/a.jpg', null, 'look at this')", new Object[] {type, status});
+            final var text = new java.io.StringWriter();
+            try (final var cursor = db.rawQuery("select * from messages", null);
+                    final var writer = new com.google.gson.stream.JsonWriter(text)) {
+                cursor.moveToFirst();
+                writer.beginArray();
+                ExportBackupWorker.writeMessage(cursor, format, new java.util.HashMap<>(), writer);
+                writer.endArray();
+            }
+            return com.google.gson.JsonParser.parseString(text.toString()).getAsJsonArray();
+        } finally {
+            db.close();
+        }
+    }
+
+    private static com.google.gson.JsonObject values(final com.google.gson.JsonArray rows, final int i) {
+        return rows.get(i).getAsJsonObject().getAsJsonObject("values");
+    }
+
+    @Test
+    public void tatrakBackupKeepsTheCaptionInItsColumn() throws Exception {
+        final var rows = captionedImage(TATRAK, Message.STATUS_RECEIVED);
+        assertEquals(1, rows.size());
+        assertEquals("look at this", values(rows, 0).get(Message.CAPTION).getAsString());
+        assertEquals("https://up.example.com/a.jpg|10|640|480", values(rows, 0).get(Message.BODY).getAsString());
+    }
+
+    @Test
+    public void monoclesBackupKeepsTheCaptionAsTheFileBody() throws Exception {
+        final var rows = captionedImage(MONOCLES, Message.STATUS_RECEIVED);
+        assertEquals(1, rows.size());
+        final var file = values(rows, 0);
+        assertEquals("look at this", file.get(Message.BODY).getAsString());
+        assertEquals("https://up.example.com/a.jpg|10|640|480", file.get("fileParams").getAsString());
+        assertFalse(file.has(Message.CAPTION));
+        // and Tatrak reads it back as the caption
+        assertEquals("look at this", ImportBackupWorker.caption(file.get(Message.BODY).getAsString(),
+                "https://up.example.com/a.jpg", null));
+    }
+
+    @Test
+    public void conversationsBackupGetsTheCaptionAsAHistoricalTextMessageAfterTheFile() throws Exception {
+        for (final int status : new int[] {Message.STATUS_RECEIVED, Message.STATUS_WAITING}) {
+            final var rows = captionedImage(CONVERSATIONS, status);
+            assertEquals(2, rows.size());
+            final var file = values(rows, 0);
+            final var caption = values(rows, 1);
+            assertEquals("https://up.example.com/a.jpg|10|640|480", file.get(Message.BODY).getAsString());
+            assertFalse(file.has(Message.CAPTION));
+            assertEquals("look at this", caption.get(Message.BODY).getAsString());
+            assertEquals(Message.TYPE_TEXT, caption.get(Message.TYPE).getAsInt());
+            assertEquals(1000 + ExportBackupWorker.CAPTION_DELAY_MS, caption.get(Message.TIME_SENT).getAsLong());
+            // never pending: a restore must not send it
+            assertEquals(status == Message.STATUS_RECEIVED ? Message.STATUS_RECEIVED : Message.STATUS_SEND,
+                    caption.get(Message.STATUS).getAsInt());
+            assertEquals("c1", caption.get(Message.CONVERSATION).getAsString());
+            assertEquals("friend@example.com/phone", caption.get(Message.COUNTERPART).getAsString());
+            assertEquals(5, caption.get(Message.ENCRYPTION).getAsInt());
+            assertEquals("05ab", caption.get(Message.FINGERPRINT).getAsString());
+            assertTrue(caption.get(Message.UUID).getAsString().length() > 2);
+            assertFalse(caption.has(Message.RELATIVE_FILE_PATH));
+            assertFalse(caption.has(Message.CAPTION));
+        }
+    }
+
+    /** A captioned attachment whose re-download was started and cancelled is stored as text. */
+    @Test
+    public void interruptedRedownloadKeepsItsCaptionInCompatibleBackups() throws Exception {
+        for (final int stored : new int[] {Message.TYPE_TEXT, Message.TYPE_PRIVATE}) {
+            final int file = stored == Message.TYPE_TEXT ? Message.TYPE_FILE : Message.TYPE_PRIVATE_FILE;
+            final var monocles = values(captionedImage(MONOCLES, Message.STATUS_RECEIVED, stored), 0);
+            assertEquals(file, monocles.get(Message.TYPE).getAsInt());
+            assertEquals("look at this", monocles.get(Message.BODY).getAsString());
+            assertEquals("https://up.example.com/a.jpg|10|640|480", monocles.get("fileParams").getAsString());
+            final var conversations = captionedImage(CONVERSATIONS, Message.STATUS_RECEIVED, stored);
+            assertEquals(2, conversations.size());
+            assertEquals(file, values(conversations, 0).get(Message.TYPE).getAsInt());
+            assertEquals("look at this", values(conversations, 1).get(Message.BODY).getAsString());
+            // Tatrak's own backup keeps the row as it is
+            assertEquals(stored, values(captionedImage(TATRAK, Message.STATUS_RECEIVED, stored), 0).get(Message.TYPE).getAsInt());
+        }
+        // text that is no attachment stays text
+        assertEquals(Message.TYPE_TEXT, ExportBackupWorker.attachmentType(Message.TYPE_TEXT, "look", "hello|there"));
+        assertEquals(Message.TYPE_TEXT, ExportBackupWorker.attachmentType(Message.TYPE_TEXT, null, "https://up.example.com/a.jpg|10"));
+        // a link followed by ordinary text is a text message, even with a (crafted) caption
+        assertEquals(Message.TYPE_TEXT, ExportBackupWorker.attachmentType(Message.TYPE_TEXT, "c", "https://example.org/page|important text"));
+        assertEquals(Message.TYPE_TEXT, ExportBackupWorker.attachmentType(Message.TYPE_TEXT, "c", "https://up.example.com/a.jpg|1|2|3|4|5"));
+        assertEquals(Message.TYPE_FILE, ExportBackupWorker.attachmentType(Message.TYPE_TEXT, "c", "https://up.example.com/a.jpg|1000|640|480"));
+        assertEquals(Message.TYPE_FILE, ExportBackupWorker.attachmentType(Message.TYPE_TEXT, "c", "https://up.example.com/a.jpg"));
     }
 
     @Test

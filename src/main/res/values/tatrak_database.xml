@@ -34,7 +34,7 @@
     <string name="tatrak_backup_omit_private">Own OMEMO key, device ID, session or prekey not imported (this device gets a new key)</string>
     <string name="tatrak_backup_omit_disappearing">Disappearing message not imported (Tatrak cannot delete it on time)</string>
     <string name="tatrak_backup_omit_caption">Attachment caption dropped (file kept)</string>
-    <string name="tatrak_backup_omit_retracted">Message deleted by its sender not imported</string>
+    <string name="tatrak_backup_unsafe_omemo_keys">This backup\'s own OMEMO key cannot be restored safely. Choose “Contacts\' trust only” or “Nothing” for OMEMO.</string>
     <string name="tatrak_backup_omit_type">Message of a type Tatrak does not know (%1$d, e.g. a monocles story) not imported</string>
     <string name="tatrak_backup_omit_conflict">Conflicting rows / %1$s</string>
     <string name="tatrak_backup_status_reading">Reading backup…</string>

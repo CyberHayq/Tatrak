@@ -420,6 +420,9 @@ public class ImportBackupActivity extends ActionBarActivity
                                             uri, false, ImportBackupWorker.omemoImport(data));
                                 }
                             }
+                            // Tatrak: the restore can be retried without the device's own OMEMO keys
+                            case UNSAFE_OMEMO_KEYS -> Snackbar.make(binding.coordinator,
+                                    R.string.tatrak_backup_unsafe_omemo_keys, Snackbar.LENGTH_LONG).show();
                             default -> onBackupRestoreFailed();
                         }
                     } else if (state == WorkInfo.State.SUCCEEDED) {

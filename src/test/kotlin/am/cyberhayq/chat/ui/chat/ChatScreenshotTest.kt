@@ -183,6 +183,13 @@ class ChatScreenshotTest {
     @Config(qualifiers = "+night")
     fun chatMediaDark() = capture("chat_media_dark", darkTheme = true) { mediaChat(it) }
 
+    /** Tatrak: captions (from monocles backups) under an image, a file and a voice message. */
+    @Test fun chatCaptions() = capture("chat_captions", darkTheme = false) { captionChat(it) }
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun chatCaptionsDark() = capture("chat_captions_dark", darkTheme = true) { captionChat(it) }
+
     @Test
     fun chatReplyPanel() =
         capture(
@@ -657,6 +664,39 @@ class ChatScreenshotTest {
             loaded = true,
             conversationUuid = "c3",
             header = ChatHeader("Davit", "typing…", subtitleActive = true, avatar = letterAvatar("Davit", 0xFFFAA774.toInt())),
+            items = items,
+            composer = ComposerInfo(hint = "Send encrypted message"),
+        )
+    }
+
+    private fun captionChat(s: Samples): ChatState {
+        // the caption is set apart from the text, as ChatSnapshot does
+        fun MessageItem.captioned(body: String, outgoing: Boolean) = copy(caption = s.text("x", outgoing, GroupPosition.SINGLE, body, "").text)
+        val items =
+            listOf(
+                    s.date("Today"),
+                    s.base("i1", false, GroupPosition.SINGLE, "11:00")
+                        .copy(kind = MessageKind.IMAGE, media = MediaInfo(1600, 1200, false))
+                        .captioned("Lake Sevan this morning, more at https://example.com/sevan", false),
+                    s.base("i2", true, GroupPosition.SINGLE, "11:02", DeliveryStatus.DELIVERED)
+                        .copy(kind = MessageKind.IMAGE, media = MediaInfo(720, 1280, false))
+                        .captioned("Mine", true),
+                    s.base("f1", false, GroupPosition.SINGLE, "11:05")
+                        .copy(kind = MessageKind.FILE, file = FileInfo("PDF document", "2.4 MB", FileState.LOCAL))
+                        .captioned("The contract, page 3 needs a signature", false),
+                    // an attachment whose file is gone keeps its caption
+                    s.base("f2", false, GroupPosition.SINGLE, "11:07")
+                        .copy(kind = MessageKind.INFO, text = AnnotatedString("File deleted"))
+                        .captioned("Old scan of the passport", false),
+                    s.base("voice-1", true, GroupPosition.SINGLE, "11:09", DeliveryStatus.READ)
+                        .copy(kind = MessageKind.AUDIO, audioDurationMs = 19_000)
+                        .captioned("Listen to the end", true),
+                )
+                .reversed()
+        return ChatState(
+            loaded = true,
+            conversationUuid = "c3",
+            header = ChatHeader("Davit", "online", avatar = letterAvatar("Davit", 0xFFFAA774.toInt())),
             items = items,
             composer = ComposerInfo(hint = "Send encrypted message"),
         )

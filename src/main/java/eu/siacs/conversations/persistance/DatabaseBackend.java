@@ -78,7 +78,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "history";
     // Tatrak: public so DatabaseStorage accepts every schema this build can write
-    public static final int DATABASE_VERSION = 59;
+    public static final int DATABASE_VERSION = 60; // Tatrak: 60 adds Message.CAPTION
 
     private static boolean requiresMessageIndexRebuild = false;
     private static DatabaseBackend instance = null;
@@ -583,6 +583,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
         // Tatrak: retained source protocol for imported, already decrypted history.
         db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_encryption INTEGER");
         db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_fingerprint TEXT");
+        db.execSQL("ALTER TABLE messages ADD COLUMN " + Message.CAPTION + " TEXT"); // Tatrak
         // Tatrak: the master key of encrypted media is made only here, with a new database; there
         // is no upgrade step, so a database that lacks it never gets a replacement key
         am.cyberhayq.chat.storage.media.MediaKeyTable.create(db);
@@ -1195,6 +1196,9 @@ public class DatabaseBackend extends SQLiteOpenHelper {
             db.execSQL("DROP TRIGGER IF EXISTS after_message_delete");
             db.execSQL(CREATE_MESSAGE_DELETE_TRIGGER);
             db.execSQL(COPY_PREEXISTING_ENTRIES);
+        }
+        if (oldVersion < 60 && newVersion >= 60) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN " + Message.CAPTION + " TEXT"); // Tatrak
         }
     }
 

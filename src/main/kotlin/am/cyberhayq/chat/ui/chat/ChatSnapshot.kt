@@ -209,6 +209,8 @@ data class MessageItem(
     val actions: MessageActions = MessageActions.NONE,
     /** XEP-0461: the answered message above the content. */
     val reply: ReplyHeader? = null,
+    /** Tatrak: text under the attachment (Message.CAPTION), whatever state the attachment is in. */
+    val caption: AnnotatedString? = null,
 ) : ChatItem {
     override val contentType: Int
         get() = kind.ordinal * 2 + if (isOutgoing) 1 else 0
@@ -341,6 +343,16 @@ object ChatSnapshot {
                 (conversation.mucOptions.occupantId() &&
                     conversation.mucOptions.participating() &&
                     message.serverMsgId != null))
+
+    /** The message items of [messages] as [build] makes them, without the header (it needs the running service). */
+    @androidx.annotation.VisibleForTesting
+    internal fun items(
+        context: Context,
+        service: XmppConnectionService,
+        conversation: Conversation,
+        params: SnapshotParams,
+        messages: List<Message>,
+    ): List<ChatItem> = Builder(context, service, conversation, params, FormattedTextCache()).items(messages)
 
     fun build(
         context: Context,
@@ -696,7 +708,12 @@ object ChatSnapshot {
                     actions = actions(message),
                     reply = replyHeader(message),
                 )
-            return content(message, base)
+            // Tatrak: after content(), so no attachment state (deleted, downloading, cancelled) hides it
+            val caption = message.caption
+            return content(message, base).let {
+                if (caption.isNullOrBlank() || message.type == Message.TYPE_RETRACTED || message.type == Message.TYPE_HIDDEN) it
+                else it.copy(caption = text(message, outgoing, caption))
+            }
         }
 
         /** The branch order of MessageAdapter.render, so every message lands in the same kind. */
@@ -764,7 +781,9 @@ object ChatSnapshot {
                 return when {
                     params.width > 0 && params.height > 0 ->
                         base.copy(
-                            kind = if (isSticker(message, params)) MessageKind.STICKER else MessageKind.IMAGE,
+                            kind =
+                                if (isSticker(message, params) && message.caption.isNullOrBlank()) MessageKind.STICKER
+                                else MessageKind.IMAGE,
                             media =
                                 MediaInfo(
                                     params.width,
@@ -890,8 +909,12 @@ object ChatSnapshot {
         private fun info(base: MessageItem, text: CharSequence) =
             base.copy(kind = MessageKind.INFO, text = AnnotatedString(text.toString()))
 
-        private fun text(message: Message, outgoing: Boolean): AnnotatedString {
-            val body = message.bodyWithoutReplyFallback ?: return EMPTY
+        private fun text(
+            message: Message,
+            outgoing: Boolean,
+            source: String? = message.bodyWithoutReplyFallback,
+        ): AnnotatedString {
+            val body = source ?: return EMPTY
             if (body.isBlank()) return EMPTY
             val palette = params.palette
             val isPrivate = message.isPrivateMessage

@@ -82,6 +82,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontStyle
@@ -411,7 +412,8 @@ fun Bubble(
     voice: StateFlow<VoicePlayback>,
     modifier: Modifier = Modifier,
 ) {
-    if (item.trustWarning == null && !item.retractUnverified && item.reactions.isEmpty() && item.reply == null) {
+    if (item.trustWarning == null && !item.retractUnverified && item.reactions.isEmpty() && item.reply == null &&
+        item.caption == null) {
         when (item.kind) {
             MessageKind.EMOJI -> return EmojiMessage(item, modifier)
             MessageKind.STICKER -> return StickerMessage(item, actions, modifier)
@@ -569,7 +571,7 @@ private fun BubbleContent(item: MessageItem, actions: ChatActions, voice: StateF
     val chatColors = TatrakTheme.chatColors
     val textColor = if (item.isOutgoing) chatColors.textOutgoing else chatColors.textIncoming
     val secondary = if (item.isOutgoing) chatColors.timeOutgoing else chatColors.timeIncoming
-    val showMetaHere = item.reactions.isEmpty()
+    val showMetaHere = item.reactions.isEmpty() && item.caption == null
     when (item.kind) {
         MessageKind.TEXT,
         MessageKind.EMOJI,
@@ -594,6 +596,28 @@ private fun BubbleContent(item: MessageItem, actions: ChatActions, voice: StateF
         MessageKind.CALL -> CallContent(item, textColor, secondary)
         MessageKind.STICKER_PACK -> StickerPackContent(item, textColor, secondary, showMetaHere)
     }
+    // Tatrak: the caption under the attachment, with the time after it
+    item.caption?.let { caption ->
+        val modifier =
+            if (item.kind == MessageKind.IMAGE) {
+                val width = item.media?.let { mediaSize(it.width, it.height).first } ?: MediaMaxWidth
+                Modifier.widthIn(max = width).padding(start = 7.dp, end = 6.dp, top = 4.dp, bottom = 3.dp)
+            } else {
+                Modifier.padding(top = 4.dp)
+            }
+        Caption(caption, item, textColor, item.reactions.isEmpty(), modifier)
+    }
+}
+
+/** Tatrak: the caption under a file, picture or voice message, with the time after it. */
+@Composable
+private fun Caption(caption: AnnotatedString, item: MessageItem, textColor: Color, showMeta: Boolean, modifier: Modifier) {
+    val accent = if (item.isOutgoing) ChatScreenTheme.colors.accentOut else ChatScreenTheme.colors.accentIn
+    TextWithMeta(
+        text = { onLayout -> MessageText(caption, BodyStyle.copy(color = textColor), accent, onTextLayout = onLayout) },
+        meta = { if (showMeta) Meta(item) },
+        modifier = modifier,
+    )
 }
 
 /**
