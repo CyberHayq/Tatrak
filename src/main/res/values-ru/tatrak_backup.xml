@@ -16,4 +16,11 @@
         <item quantity="many">Не удалось прочитать %d файлов, они не вошли в копию.</item>
         <item quantity="other">Не удалось прочитать %d файла, они не вошли в копию.</item>
     </plurals>
+    <string name="tatrak_restore_omemo">Шифрование OMEMO</string>
+    <string name="tatrak_restore_omemo_full">Всё: свой ключ и доверие к контактам</string>
+    <string name="tatrak_restore_omemo_full_summary">Это устройство продолжит работу как старое. Выбирайте, только если старое приложение больше не использует этот аккаунт, иначе они сломают друг другу шифрование.</string>
+    <string name="tatrak_restore_omemo_trust">Только доверие к контактам</string>
+    <string name="tatrak_restore_omemo_trust_summary">У этого устройства будет новый ключ; проверенные контакты останутся проверенными. Контакты увидят ваше новое устройство.</string>
+    <string name="tatrak_restore_omemo_none">Ничего</string>
+    <string name="tatrak_restore_omemo_none_summary">Новый ключ, и все ключи контактов придётся проверить заново.</string>
 </resources>

@@ -131,7 +131,7 @@ public class ImportBackupWorkerTest {
 
     /** A worker as importBackup sets it up for a normal import into [GENERATION], with its stage folder. */
     private ImportBackupWorker mediaWorker(final Application context) {
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         worker.stagedFilesDirectory = new java.io.File(context.getCacheDir(), "stage-" + UUID.randomUUID() + "/files");
         worker.targetGeneration = GENERATION;
         worker.targetKey = MEDIA_KEY;
@@ -169,7 +169,7 @@ public class ImportBackupWorkerTest {
 
     @Test
     public void workDataDoesNotContainThePassword() {
-        final Data data = ImportBackupWorker.data(PASSWORD, URI, true);
+        final Data data = ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL);
         for (final Object value : data.getKeyValueMap().values()) {
             assertFalse(String.valueOf(value).contains(PASSWORD));
         }
@@ -183,7 +183,7 @@ public class ImportBackupWorkerTest {
 
     @Test
     public void workerFailsWhenThePasswordIsGone() {
-        final Data data = ImportBackupWorker.data(PASSWORD, URI, false);
+        final Data data = ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.TRUST);
         ImportBackupWorker.takePassword(data); // as if the process had died since
         final ListenableWorker.Result result = worker(data).doWork();
         assertTrue(result instanceof ListenableWorker.Result.Failure);
@@ -192,15 +192,15 @@ public class ImportBackupWorkerTest {
                 ImportBackupWorker.Reason.PASSWORD_MISSING,
                 ImportBackupWorker.Reason.valueOfOrGeneric(output.getString("reason")));
         assertEquals(URI, ImportBackupWorker.uri(output));
-        assertFalse(ImportBackupWorker.includeOmemo(output));
+        assertEquals(ImportBackupWorker.OmemoImport.TRUST, ImportBackupWorker.omemoImport(output));
     }
 
     @Test
     public void unusedPasswordExpires() {
-        final Data data = ImportBackupWorker.data(PASSWORD, URI, true);
+        final Data data = ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL);
         final var lifetime = TimeUnit.MINUTES.toMillis(ImportBackupWorker.PASSWORD_LIFETIME_MINUTES);
         ShadowLooper.idleMainLooper(lifetime - 1000, TimeUnit.MILLISECONDS);
-        final Data other = ImportBackupWorker.data(PASSWORD, URI, true);
+        final Data other = ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL);
         ShadowLooper.idleMainLooper(1000, TimeUnit.MILLISECONDS);
         assertNull(ImportBackupWorker.takePassword(data));
         // a later request keeps its own full lifetime
@@ -258,7 +258,7 @@ public class ImportBackupWorkerTest {
 
     /** Runs the worker's own importRow over plain JSON rows. */
     private Data importRealRows(final String... rows) throws IOException {
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final var jsonReader = new JsonReader(new StringReader("[" + String.join(",", rows) + "]"));
         jsonReader.beginArray();
         ImportBackupWorker.importRows(
@@ -292,7 +292,7 @@ public class ImportBackupWorkerTest {
     @Test
     public void onlyRealValuesOfUnknownColumnsAreReported() throws IOException {
         db.execSQL("create table messages (uuid text primary key)");
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final var jsonReader =
                 new JsonReader(
                         new StringReader(
@@ -318,7 +318,7 @@ public class ImportBackupWorkerTest {
     @Test
     public void disappearingMessagesAreNotImported() throws IOException {
         db.execSQL("create table messages (uuid text primary key)");
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final var jsonReader =
                 new JsonReader(
                         new StringReader(
@@ -350,8 +350,7 @@ public class ImportBackupWorkerTest {
     @Test
     public void monoclesOwnMessageTypesAreNotImported() throws IOException {
         db.execSQL("create table messages (uuid text primary key, type integer, body text)");
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
-        worker.sourceMonocles = true;
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final var jsonReader =
                 new JsonReader(
                         new StringReader(
@@ -379,7 +378,7 @@ public class ImportBackupWorkerTest {
 
     private long importedTypeSeven(final boolean tatrakSource) throws IOException {
         db.execSQL("create table messages (uuid text primary key, type integer, body text)");
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         worker.sourceTatrak = tatrakSource;
         final var jsonReader = new JsonReader(new StringReader("[" + String.join(",",
                 account("a1"), conversation("c1"),
@@ -405,7 +404,7 @@ public class ImportBackupWorkerTest {
         db.execSQL("create table messages (uuid text primary key, type integer, body text)");
         final String original = "https://up.example.com/a.jpg|71908|1600|1200";
         final String params = ExportBackupWorker.monoclesFileParams(1, original);
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final var jsonReader = new JsonReader(new StringReader("[" + String.join(",",
                 account("a1"), conversation("c1"),
                 "{\"table\":\"messages\",\"values\":{\"uuid\":\"m1\",\"type\":1,\"body\":\""
@@ -419,7 +418,7 @@ public class ImportBackupWorkerTest {
     @Test
     public void monoclesFileParamsBecomeTheFileBody() throws IOException {
         db.execSQL("create table messages (uuid text primary key, type integer, body text)");
-        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, true));
+        final var worker = worker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
         final String url = "https://up.example.com/a.jpg";
         final var jsonReader =
                 new JsonReader(
@@ -751,5 +750,282 @@ public class ImportBackupWorkerTest {
         assertEquals(foreign, ImportBackupWorker.confinedPath(context, foreign, java.util.Set.of(GENERATION, OLD_GENERATION)));
         assertNull(ImportBackupWorker.confinedPath(context, attachments + "/tatrak_x.jpg", known));
         assertNull(ImportBackupWorker.confinedPath(context, attachments + "/tatrak_" + GENERATION + "_" + "ab".repeat(16) + ".jpg.pgp", known));
+    }
+
+    // Generated OMEMO fixtures: real legacy (libsignal) identity keys, in the order and shape the
+    // apps export them (values as text). Both formats carry legacy OMEMO 0.3 state; monocles adds
+    // its OMEMO2 (PQ) tables, its own OMEMO2 key and its contacts' OMEMO2 keys in `identities`.
+    private static final org.whispersystems.libsignal.IdentityKeyPair OWN_KEY =
+            org.whispersystems.libsignal.util.KeyHelper.generateIdentityKeyPair();
+    private static final java.util.Map<String, org.whispersystems.libsignal.IdentityKey> CONTACT_KEYS = new java.util.TreeMap<>();
+    static {
+        // mine: another own device; peer: legacy contact with a legacy message; silent: legacy
+        // contact without one; pq: OMEMO2 key (pinned, only a PQ message); shared: a key monocles
+        // used for both stacks (pinned and in a legacy message)
+        for (final String name : new String[] {"mine", "peer", "silent", "pq", "shared"}) {
+            CONTACT_KEYS.put(name, org.whispersystems.libsignal.util.KeyHelper.generateIdentityKeyPair().getPublicKey());
+        }
+    }
+
+    private static String fingerprint(final org.whispersystems.libsignal.IdentityKey key) {
+        return eu.siacs.conversations.utils.CryptoHelper.bytesToHex(key.serialize());
+    }
+
+    private static String fingerprint(final String contact) {
+        return fingerprint(CONTACT_KEYS.get(contact));
+    }
+
+    private static String base64(final byte[] bytes) {
+        return java.util.Base64.getEncoder().encodeToString(bytes);
+    }
+
+    private static String row(final String table, final String values) {
+        return "{\"table\":\"" + table + "\",\"values\":{\"account\":\"a1\"," + values + "}}";
+    }
+
+    private static String identity(final String name, final int own, final String fingerprint, final String trust, final String key) {
+        return row("identities", "\"name\":\"" + name + "\",\"ownkey\":\"" + own + "\",\"fingerprint\":\""
+                + fingerprint + "\",\"trust\":\"" + trust + "\",\"active\":\"1\",\"last_activation\":\"0\",\"key\":\"" + key + "\"");
+    }
+
+    private static String contact(final String contact, final String jid, final String trust) {
+        return identity(jid, 0, fingerprint(contact), trust, base64(CONTACT_KEYS.get(contact).serialize()));
+    }
+
+    private static String message(final String uuid, final int encryption, final String contact) {
+        return "{\"table\":\"messages\",\"values\":{\"uuid\":\"" + uuid + "\",\"conversationUuid\":\"c1\",\"type\":\"0\","
+                + "\"status\":\"0\",\"body\":\"hi\",\"encryption\":\"" + encryption + "\",\"axolotl_fingerprint\":"
+                + (contact == null ? "null" : "\"" + fingerprint(contact) + "\"") + "}}";
+    }
+
+    private static List<String> omemoBackup(final boolean monocles) {
+        final var rows = new java.util.ArrayList<String>();
+        rows.add("{\"table\":\"accounts\",\"values\":{\"uuid\":\"a1\",\"username\":\"tester\",\"server\":\"example.com\","
+                + "\"password\":\"" + PASSWORD + "\",\"keys\":\"{\\\"axolotl_reg_id\\\":\\\"4242\\\",\\\"axolotl_cur_prekey_id\\\":\\\"7\\\"}\"}}");
+        rows.add("{\"table\":\"conversations\",\"values\":{\"uuid\":\"c1\",\"name\":\"chat\",\"accountUuid\":\"a1\"}}");
+        // messages come before the keys in both exports
+        rows.add(message("m1", 5, "peer"));
+        rows.add(message("m2", 5, "shared"));
+        rows.add(message("m3", 5, "mine"));
+        rows.add(message("m4", monocles ? 8 : 0, monocles ? "pq" : null)); // a PQ message loses its fingerprint
+        rows.add(message("m5", 0, "silent")); // a fingerprint on a plain message proves nothing
+        if (monocles) {
+            rows.add(row("omemo2_prekeys", "\"id\":\"1\",\"key\":\"pq\""));
+            rows.add(row("omemo2_signed_prekeys", "\"id\":\"1\",\"key\":\"pq\""));
+            rows.add(row("omemo2_sessions", "\"name\":\"friend@example.com\",\"device_id\":\"9\",\"key\":\"pq\""));
+            rows.add(row("kyber_prekeys", "\"id\":\"1\",\"key\":\"pq\",\"is_last_resort\":\"1\""));
+        }
+        rows.add(identity("tester@example.com", 1, fingerprint(OWN_KEY.getPublicKey()), "VERIFIED", base64(OWN_KEY.serialize())));
+        rows.add(contact("mine", "tester@example.com", "TRUSTED"));
+        rows.add(contact("peer", "friend@example.com", "VERIFIED"));
+        rows.add(contact("silent", "other@example.com", "TRUSTED"));
+        rows.add(contact("pq", "friend@example.com", "TRUSTED"));
+        rows.add(contact("shared", "third@example.com", "VERIFIED"));
+        rows.add(identity("bob@example.com", 0, "05bad", "MAYBE", "k"));
+        rows.add(row("identities", "\"name\":\"nofp@example.com\",\"ownkey\":\"0\",\"fingerprint\":null,"
+                + "\"trust\":\"TRUSTED\",\"active\":\"1\",\"last_activation\":\"0\",\"key\":\"k\""));
+        if (monocles) {
+            rows.add(identity("tester@example.com\\u0000omemo2-own", 1, "05own2", "VERIFIED", "k"));
+            rows.add(row("omemo2_pq_identities", "\"name\":\"\\u0000omemo2-pq-own\",\"fingerprint\":\"self\",\"pq_key\":\"pq\""));
+            rows.add(row("omemo2_pq_identities", "\"name\":\"friend@example.com\",\"fingerprint\":\"" + fingerprint("pq") + "\",\"pq_key\":\"pq\""));
+            rows.add(row("omemo2_pq_identities", "\"name\":\"third@example.com\",\"fingerprint\":\"" + fingerprint("shared") + "\",\"pq_key\":\"pq\""));
+            // crafted: a pin of another account naming our own key must not reach it
+            rows.add(row("omemo2_pq_identities", "\"name\":\"tester@example.com\",\"fingerprint\":\""
+                    + fingerprint(OWN_KEY.getPublicKey()) + "\",\"pq_key\":\"pq\"").replace("\"a1\"", "\"a2\""));
+        }
+        rows.add(row("sessions", "\"name\":\"friend@example.com\",\"device_id\":\"7\",\"key\":\"s\""));
+        rows.add(row("prekeys", "\"id\":\"1\",\"key\":\"p\""));
+        rows.add(row("signed_prekeys", "\"id\":\"1\",\"key\":\"sp\""));
+        return rows;
+    }
+
+    /** An encrypted backup file as the apps write it: header, then AES-GCM over the gzipped JSON rows. */
+    private static byte[] backupFile(final String app, final List<String> rows) throws Exception {
+        final byte[] salt = new byte[16];
+        final var out = new ByteArrayOutputStream();
+        new eu.siacs.conversations.utils.BackupFileHeader(eu.siacs.conversations.utils.BackupFileHeader.LEGACY_VERSION,
+                app, Jid.of("tester@example.com"), 1L, IV, salt).write(new java.io.DataOutputStream(out));
+        final var gzip = new ByteArrayOutputStream();
+        try (final var gzipOut = new GZIPOutputStream(gzip)) {
+            gzipOut.write(("[" + String.join(",", rows) + "]").getBytes(StandardCharsets.UTF_8));
+        }
+        final byte[] plain = gzip.toByteArray();
+        final AEADBlockCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
+        cipher.init(true, new AEADParameters(new KeyParameter(ExportBackupWorker.getLegacyKey(PASSWORD, salt)), 128, IV));
+        final byte[] sealed = new byte[cipher.getOutputSize(plain.length)];
+        cipher.doFinal(sealed, cipher.processBytes(plain, 0, plain.length, sealed, 0));
+        out.write(sealed);
+        return out.toByteArray();
+    }
+
+    /** A worker that runs the production import up to the encrypted stage's preview file. */
+    private static final class StagingWorker extends ImportBackupWorker {
+        boolean previewWritten;
+
+        StagingWorker(final Data data) {
+            super(ApplicationProvider.getApplicationContext(), new WorkerParameters(UUID.randomUUID(), data, List.of(),
+                    new WorkerParameters.RuntimeExtras(), 0, 0, Runnable::run, null, null, null,
+                    (context, id, progress) -> com.google.common.util.concurrent.Futures.immediateVoidFuture(), null));
+        }
+
+        @Override
+        Result writePreview(final Jid jid) {
+            previewWritten = true;
+            return Result.success();
+        }
+    }
+
+    /** Imports [backup] through the production path and returns the worker. */
+    private StagingWorker importBackupFile(final ImportBackupWorker.OmemoImport mode, final byte[] backup) throws Exception {
+        createBackupSchema();
+        final var worker = new StagingWorker(ImportBackupWorker.data(PASSWORD, URI, mode));
+        worker.importBackup(supportDb, new ByteArrayInputStream(backup), backup.length, PASSWORD,
+                com.google.common.base.Stopwatch.createStarted());
+        return worker;
+    }
+
+    /** The tables a backup's rows land in, with the columns the fixtures use. */
+    private void createBackupSchema() {
+        db.execSQL("drop table conversations");
+        db.execSQL("create table conversations (uuid text primary key, name text, accountUuid text)");
+        db.execSQL("create table messages (uuid text primary key, conversationUuid text, type integer, status integer,"
+                + " body text, encryption integer, axolotl_fingerprint text, tatrak_source_encryption integer,"
+                + " tatrak_source_fingerprint text)");
+        db.execSQL("create table identities (account text, name text, ownkey integer, fingerprint text,"
+                + " certificate blob, trust text, active number, last_activation number, key text,"
+                + " unique (account, name, fingerprint) on conflict ignore)");
+        db.execSQL("create table sessions (account text, name text, device_id integer, key text)");
+        db.execSQL("create table prekeys (account text, id integer, key text)");
+        db.execSQL("create table signed_prekeys (account text, id integer, key text)");
+    }
+
+    private java.util.Set<String> importedIdentities() {
+        final var rows = new java.util.TreeSet<String>();
+        try (final var cursor = db.rawQuery("select fingerprint, trust, ownkey from identities", null)) {
+            while (cursor.moveToNext()) rows.add(cursor.getString(0) + ":" + cursor.getString(1) + ":" + cursor.getInt(2));
+        }
+        return rows;
+    }
+
+    private static String omission(final int label, final int count) {
+        return ApplicationProvider.getApplicationContext().getString(label) + ": " + count + "\n";
+    }
+
+    /** What every source and mode imports: the legacy rows the mode allows, never a PQ, unproven or invalid one. */
+    private void assertOmemoImport(final ImportBackupWorker.OmemoImport mode, final boolean monocles) throws Exception {
+        assertOmemoImport(mode, monocles, monocles ? "monocles chat" : "Conversations");
+    }
+
+    /** [app] is the header's app name: not authenticated, so the rows alone decide. */
+    private void assertOmemoImport(final ImportBackupWorker.OmemoImport mode, final boolean monocles, final String app)
+            throws Exception {
+        final var worker = importBackupFile(mode, backupFile(app, omemoBackup(monocles)));
+        assertTrue(worker.previewWritten);
+        final String preview = worker.previewText();
+        final boolean full = mode == ImportBackupWorker.OmemoImport.FULL;
+        final boolean none = mode == ImportBackupWorker.OmemoImport.NONE;
+        final var expected = new java.util.TreeSet<String>();
+        if (full) expected.add(fingerprint(OWN_KEY.getPublicKey()) + ":VERIFIED:1");
+        if (!none) {
+            expected.add(fingerprint("mine") + ":TRUSTED:0");
+            expected.add(fingerprint("peer") + ":VERIFIED:0");
+            expected.add(fingerprint("shared") + ":VERIFIED:0");
+            if (!monocles) { // no provenance filter for Conversations and Tatrak backups
+                expected.add(fingerprint("silent") + ":TRUSTED:0");
+                expected.add(fingerprint("pq") + ":TRUSTED:0");
+            }
+        }
+        assertEquals(expected, importedIdentities());
+        for (final String table : new String[] {"sessions", "prekeys", "signed_prekeys"}) {
+            assertEquals(table, full ? 1 : 0, DatabaseUtils.queryNumEntries(db, table));
+        }
+        final var keys = eu.siacs.conversations.entities.Account.Keys.parse(
+                DatabaseUtils.stringForQuery(db, "select keys from accounts", null));
+        assertEquals(full ? com.google.common.base.Optional.of(4242) : com.google.common.base.Optional.absent(),
+                keys.getAxolotlRegistrationId());
+        // the omission list names what this mode and source leave out
+        // trust MAYBE and a missing fingerprint
+        assertTrue(preview, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_bad_identity, 2)));
+        // own identity, the three key tables and the device id
+        assertEquals(preview, !full, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_private, 5)));
+        assertEquals(preview, none, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_contact_trust, 5)));
+        // silent and pq; NONE left every contact key out already
+        assertEquals(preview, monocles && !none,
+                preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_unproven_contact, 2)));
+        // four PQ table rows, four pins and the OMEMO2 own key
+        assertEquals(preview, monocles, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_pq_keys, 9)));
+        assertFalse(preview, preview.contains("Unsupported table"));
+    }
+
+    @Test
+    public void monoclesBackupFullImportsOnlyProvenLegacyOmemo() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.FULL, true);
+    }
+
+    @Test
+    public void monoclesBackupTrustImportsOnlyProvenContactKeys() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.TRUST, true);
+    }
+
+    @Test
+    public void monoclesBackupNoneImportsNoOmemo() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.NONE, true);
+    }
+
+    @Test
+    public void conversationsBackupFullImportsAllOmemo() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.FULL, false);
+    }
+
+    @Test
+    public void conversationsBackupTrustImportsOnlyContactTrust() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.TRUST, false);
+    }
+
+    @Test
+    public void conversationsBackupNoneImportsNoOmemo() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.NONE, false);
+    }
+
+    @Test
+    public void monoclesBackupRelabelledAsConversationsIsStillFiltered() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.FULL, true, "Conversations");
+    }
+
+    @Test
+    public void conversationsBackupRelabelledAsMonoclesKeepsItsContactKeys() throws Exception {
+        assertOmemoImport(ImportBackupWorker.OmemoImport.TRUST, false, "monocles chat");
+    }
+
+    @Test
+    public void importedLegacyKeysStillLoad() throws Exception {
+        importBackupFile(ImportBackupWorker.OmemoImport.FULL, backupFile("monocles chat", omemoBackup(true)));
+        // the crafted foreign pin naming our own key reached nothing: the own key pair is there and loads
+        final var own = new org.whispersystems.libsignal.IdentityKeyPair(java.util.Base64.getDecoder().decode(
+                DatabaseUtils.stringForQuery(db, "select key from identities where ownkey = 1", null)));
+        assertEquals(OWN_KEY.getPublicKey(), own.getPublicKey());
+        final var peer = new org.whispersystems.libsignal.IdentityKey(java.util.Base64.getDecoder().decode(
+                DatabaseUtils.stringForQuery(db, "select key from identities where fingerprint = ?",
+                        new String[] {fingerprint("peer")})), 0);
+        assertEquals(CONTACT_KEYS.get("peer"), peer);
+    }
+
+    @Test
+    public void tamperedBackupWritesNoPreview() throws Exception {
+        final byte[] backup = backupFile("monocles chat", omemoBackup(true));
+        backup[backup.length - 1] ^= 1;
+        final var worker = new StagingWorker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
+        createBackupSchema();
+        assertThrows(IOException.class, () -> worker.importBackup(supportDb, new ByteArrayInputStream(backup),
+                backup.length, PASSWORD, com.google.common.base.Stopwatch.createStarted()));
+        assertFalse(worker.previewWritten);
+        assertEquals(0, DatabaseUtils.queryNumEntries(db, "identities"));
+    }
+
+    @Test
+    public void unknownOmemoModeFallsBackToTheDialogDefault() {
+        assertEquals(ImportBackupWorker.OmemoImport.FULL, ImportBackupWorker.omemoImport(Data.EMPTY));
+        assertEquals(ImportBackupWorker.OmemoImport.NONE, ImportBackupWorker.omemoImport(
+                ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.NONE)));
     }
 }

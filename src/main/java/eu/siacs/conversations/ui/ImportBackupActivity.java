@@ -55,8 +55,8 @@ public class ImportBackupActivity extends ActionBarActivity
 
     private LiveData<Boolean> inProgressImport;
     private Uri currentRestoreDialog;
-    // Tatrak: the dialog's include-OMEMO choice, kept across recreation
-    private boolean currentRestoreIncludeOmemo = true;
+    // Tatrak: the dialog's OMEMO choice, kept across recreation
+    private ImportBackupWorker.OmemoImport currentRestoreOmemo = ImportBackupWorker.OmemoImport.FULL;
     private UUID currentWorkRequest;
 
     private final ActivityResultLauncher<String[]> requestPermissions =
@@ -106,8 +106,8 @@ public class ImportBackupActivity extends ActionBarActivity
             if (currentRestoreDialog != null) {
                 this.currentRestoreDialog = Uri.parse(currentRestoreDialog);
             }
-            this.currentRestoreIncludeOmemo =
-                    savedInstanceState.getBoolean("current-restore-include-omemo", true);
+            this.currentRestoreOmemo = ImportBackupWorker.OmemoImport.of(
+                    savedInstanceState.getString("current-restore-omemo"));
         }
         monitorWorkRequest(this.currentWorkRequest);
 
@@ -115,7 +115,7 @@ public class ImportBackupActivity extends ActionBarActivity
         this.binding.list.setAdapter(this.backupFileAdapter);
         this.backupFileAdapter.setOnItemClickedListener(this);
         if (this.currentRestoreDialog != null) {
-            openBackupFileFromUri(this.currentRestoreDialog, false, this.currentRestoreIncludeOmemo);
+            openBackupFileFromUri(this.currentRestoreDialog, false, this.currentRestoreOmemo);
         }
     }
 
@@ -136,7 +136,7 @@ public class ImportBackupActivity extends ActionBarActivity
         }
         if (this.currentRestoreDialog != null) {
             bundle.putString("current-restore-dialog", this.currentRestoreDialog.toString());
-            bundle.putBoolean("current-restore-include-omemo", this.currentRestoreIncludeOmemo);
+            bundle.putString("current-restore-omemo", this.currentRestoreOmemo.name());
         }
         super.onSaveInstanceState(bundle);
     }
@@ -218,16 +218,16 @@ public class ImportBackupActivity extends ActionBarActivity
 
     @Override
     public void onClick(final BackupFile backupFile) {
-        showEnterPasswordDialog(backupFile, false, true);
+        showEnterPasswordDialog(backupFile, false, ImportBackupWorker.OmemoImport.FULL);
     }
 
     private void openBackupFileFromUri(final Uri uri, final boolean finishOnCancel) {
-        openBackupFileFromUri(uri, finishOnCancel, true);
+        openBackupFileFromUri(uri, finishOnCancel, ImportBackupWorker.OmemoImport.FULL);
     }
 
-    // Tatrak: includeOmemo restores the checkbox when the dialog asks for a lost password again
+    // Tatrak: omemoImport restores the choice when the dialog asks for a lost password again
     private void openBackupFileFromUri(
-            final Uri uri, final boolean finishOnCancel, final boolean includeOmemo) {
+            final Uri uri, final boolean finishOnCancel, final ImportBackupWorker.OmemoImport omemoImport) {
         final var backupFileFuture = BackupFile.readAsync(this, uri);
         Futures.addCallback(
                 backupFileFuture,
@@ -248,7 +248,7 @@ public class ImportBackupActivity extends ActionBarActivity
                                 return;
                             }
                         }
-                        showEnterPasswordDialog(backupFile, finishOnCancel, includeOmemo);
+                        showEnterPasswordDialog(backupFile, finishOnCancel, omemoImport);
                     }
 
                     @Override
@@ -282,7 +282,7 @@ public class ImportBackupActivity extends ActionBarActivity
     }
 
     private void showEnterPasswordDialog(
-            final BackupFile backupFile, final boolean finishOnCancel, final boolean includeOmemo) {
+            final BackupFile backupFile, final boolean finishOnCancel, final ImportBackupWorker.OmemoImport omemoImport) {
         this.currentRestoreDialog = backupFile.getUri();
         final DialogEnterPasswordBinding enterPasswordBinding =
                 DataBindingUtil.inflate(
@@ -293,10 +293,10 @@ public class ImportBackupActivity extends ActionBarActivity
                         R.string.enter_password_to_restore,
                         backupFile.getHeader().getJid().toString()));
         final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
-        this.currentRestoreIncludeOmemo = includeOmemo;
-        enterPasswordBinding.includeKeys.setChecked(includeOmemo);
-        enterPasswordBinding.includeKeys.setOnCheckedChangeListener(
-                (button, checked) -> this.currentRestoreIncludeOmemo = checked);
+        this.currentRestoreOmemo = omemoImport;
+        enterPasswordBinding.omemoImport.check(omemoButton(omemoImport));
+        enterPasswordBinding.omemoImport.setOnCheckedChangeListener(
+                (group, checked) -> this.currentRestoreOmemo = omemoImport(checked));
         builder.setView(enterPasswordBinding.getRoot());
         builder.setTitle(R.string.enter_password);
         builder.setNegativeButton(
@@ -336,15 +336,31 @@ public class ImportBackupActivity extends ActionBarActivity
             return;
         }
 
-        importBackup(backupFile, password, enterPasswordBinding.includeKeys.isChecked());
+        importBackup(backupFile, password,
+                omemoImport(enterPasswordBinding.omemoImport.getCheckedRadioButtonId()));
         // Tatrak: the dialog is done; a recreated activity must not show it again over the import
         this.currentRestoreDialog = null;
         d.dismiss();
     }
 
+    // Tatrak: the dialog's radio buttons for the worker's OMEMO modes
+    private static int omemoButton(final ImportBackupWorker.OmemoImport omemoImport) {
+        return switch (omemoImport) {
+            case FULL -> R.id.omemo_full;
+            case TRUST -> R.id.omemo_trust;
+            case NONE -> R.id.omemo_none;
+        };
+    }
+
+    private static ImportBackupWorker.OmemoImport omemoImport(final int button) {
+        if (button == R.id.omemo_trust) return ImportBackupWorker.OmemoImport.TRUST;
+        if (button == R.id.omemo_none) return ImportBackupWorker.OmemoImport.NONE;
+        return ImportBackupWorker.OmemoImport.FULL;
+    }
+
     private void importBackup(
-            final BackupFile backupFile, final String password, final boolean includeOmemo) {
-        final var data = ImportBackupWorker.data(password, backupFile.getUri(), includeOmemo);
+            final BackupFile backupFile, final String password, final ImportBackupWorker.OmemoImport omemoImport) {
+        final var data = ImportBackupWorker.data(password, backupFile.getUri(), omemoImport);
         final OneTimeWorkRequest importBackupWorkRequest;
         // Tatrak: drop the in-memory password if the request never gets enqueued
         try {
@@ -394,7 +410,7 @@ public class ImportBackupActivity extends ActionBarActivity
                                 final var uri = ImportBackupWorker.uri(data);
                                 if (uri != null) {
                                     openBackupFileFromUri(
-                                            uri, false, ImportBackupWorker.includeOmemo(data));
+                                            uri, false, ImportBackupWorker.omemoImport(data));
                                 }
                             }
                             default -> onBackupRestoreFailed();

@@ -93,7 +93,7 @@ public class StorageInstrumentation extends Instrumentation {
                 }
                 final byte[] original = Files.readAllBytes(fixture.toPath());
                 var preview = runImport(context, eu.siacs.conversations.worker.ImportBackupWorker.data(
-                        password, android.net.Uri.fromFile(fixture), true));
+                        password, android.net.Uri.fromFile(fixture), eu.siacs.conversations.worker.ImportBackupWorker.OmemoImport.FULL));
                 check(preview.getState() == androidx.work.WorkInfo.State.SUCCEEDED, "v" + version + " authenticated preview: " + preview.getOutputData());
                 String stage = eu.siacs.conversations.worker.ImportBackupWorker.previewId(preview.getOutputData());
                 check(stage != null, "owned staging created");
@@ -111,10 +111,10 @@ public class StorageInstrumentation extends Instrumentation {
                 final byte[] corrupt = original.clone(); corrupt[corrupt.length - 1] ^= 1;
                 Files.write(fixture.toPath(), corrupt);
                 check(runImport(context, eu.siacs.conversations.worker.ImportBackupWorker.data(password,
-                        android.net.Uri.fromFile(fixture), true)).getState() == androidx.work.WorkInfo.State.FAILED, "bad GCM tag rejected");
+                        android.net.Uri.fromFile(fixture), eu.siacs.conversations.worker.ImportBackupWorker.OmemoImport.FULL)).getState() == androidx.work.WorkInfo.State.FAILED, "bad GCM tag rejected");
                 Files.write(fixture.toPath(), original);
                 preview = runImport(context, eu.siacs.conversations.worker.ImportBackupWorker.data(password,
-                        android.net.Uri.fromFile(fixture), true));
+                        android.net.Uri.fromFile(fixture), eu.siacs.conversations.worker.ImportBackupWorker.OmemoImport.FULL));
                 stage = eu.siacs.conversations.worker.ImportBackupWorker.previewId(preview.getOutputData());
                 check(stage != null, "second preview created");
                 // Commit uses the authenticated stage even when the external URI changes afterwards.
@@ -131,7 +131,7 @@ public class StorageInstrumentation extends Instrumentation {
                 check(eu.siacs.conversations.worker.ExportBackupWorker.hasImportedPq(DatabaseBackend.getInstance(context)), "legacy export detects PQ loss");
                 Files.write(fixture.toPath(), original);
                 final var duplicate = runImport(context, eu.siacs.conversations.worker.ImportBackupWorker.data(password,
-                        android.net.Uri.fromFile(fixture), true));
+                        android.net.Uri.fromFile(fixture), eu.siacs.conversations.worker.ImportBackupWorker.OmemoImport.FULL));
                 check(duplicate.getState() == androidx.work.WorkInfo.State.FAILED
                         && "ACCOUNT_ALREADY_EXISTS".equals(duplicate.getOutputData().getString("reason")), "same account rejected");
                 if (version == 4) checkExport(context, account, jid, password, message, media);
@@ -189,7 +189,7 @@ public class StorageInstrumentation extends Instrumentation {
             final var db = DatabaseBackend.getInstance(context).getWritableDatabase();
             db.delete("accounts", "uuid=?", new String[] {account});
             final var preview = runImport(context, eu.siacs.conversations.worker.ImportBackupWorker.data(password,
-                    android.net.Uri.fromFile(backup), true));
+                    android.net.Uri.fromFile(backup), eu.siacs.conversations.worker.ImportBackupWorker.OmemoImport.FULL));
             check(preview.getState() == androidx.work.WorkInfo.State.SUCCEEDED, "native backup authenticated");
             final String stage = eu.siacs.conversations.worker.ImportBackupWorker.previewId(preview.getOutputData());
             check(stage != null && runImport(context, eu.siacs.conversations.worker.ImportBackupWorker.commitData(stage)).getState()
@@ -548,7 +548,7 @@ public class StorageInstrumentation extends Instrumentation {
                 }
             }
             final var preview = runImport(context, eu.siacs.conversations.worker.ImportBackupWorker.data(password,
-                    android.net.Uri.fromFile(backup), true));
+                    android.net.Uri.fromFile(backup), eu.siacs.conversations.worker.ImportBackupWorker.OmemoImport.FULL));
             final String stage = eu.siacs.conversations.worker.ImportBackupWorker.previewId(preview.getOutputData());
             check(stage != null && DatabaseStorage.state() == DatabaseStorage.State.RECOVERY_REQUIRED, "recovery preview keeps old selection");
             check(Arrays.equals(oldSelector, Files.readAllBytes(new File(root, "active").toPath())), "preview keeps active pointer");

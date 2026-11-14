@@ -88,7 +88,7 @@ public class ImportBackupWorker extends Worker {
     // Tatrak: a password whose worker never starts (cancelled, enqueue failed) is dropped after this
     @VisibleForTesting static final long PASSWORD_LIFETIME_MINUTES = 10;
     private static final String DATA_KEY_URI = "uri";
-    private static final String DATA_KEY_INCLUDE_OMEMO = "omemo";
+    private static final String DATA_KEY_OMEMO_IMPORT = "tatrak-omemo-import";
     private static final String DATA_KEY_SKIPPED_ROWS = "skipped-rows";
 
     private static final Collection<String> OMEMO_TABLE_LIST =
@@ -97,6 +97,32 @@ public class ImportBackupWorker extends Worker {
                     SQLiteAxolotlStore.SIGNED_PREKEY_TABLENAME,
                     SQLiteAxolotlStore.SESSION_TABLENAME,
                     SQLiteAxolotlStore.IDENTITIES_TABLENAME);
+
+    // Tatrak: monocles' post-quantum OMEMO2 state, never imported. Its legacy OMEMO 0.3 state
+    // keeps the plain names above; only `identities` is shared by both.
+    private static final Collection<String> PQ_TABLE_LIST =
+            Arrays.asList(
+                    "omemo2_prekeys",
+                    "omemo2_signed_prekeys",
+                    "omemo2_sessions",
+                    "kyber_prekeys",
+                    "kyber_last_resort_sessions",
+                    "omemo2_pq_identities");
+
+    /** Tatrak: the OMEMO state a restore brings, chosen in the password dialog. */
+    public enum OmemoImport {
+        /** own key, device id, sessions, prekeys and contacts' trust: continues as the old device */
+        FULL,
+        /** contacts' keys and their trust only; this device gets a new own key */
+        TRUST,
+        /** nothing: a new own key and every contact key unverified */
+        NONE;
+
+        public static OmemoImport of(@Nullable final String name) {
+            for (final OmemoImport mode : values()) if (mode.name().equals(name)) return mode;
+            return FULL; // the dialog's default
+        }
+    }
 
     private static final List<String> TABLE_ALLOW_LIST =
             new ImmutableList.Builder<String>()
@@ -110,14 +136,16 @@ public class ImportBackupWorker extends Worker {
 
     private final String password;
     private final Uri uri;
-    private final boolean includeOmemo;
+    private final OmemoImport omemoImport;
     // Tatrak: rows (other than accounts) skipped because they could not be inserted, per table
     private final Map<String, Integer> skippedRows = new HashMap<>();
     private final java.util.SortedMap<String, Integer> omissions = new java.util.TreeMap<>();
     private Map<String, java.util.Set<String>> columns = new HashMap<>();
     private String importAccount;
     private String previewId;
-    @VisibleForTesting boolean sourceMonocles;
+    // Tatrak: the backup carried monocles' PQ state, so its contact keys need a legacy OMEMO message
+    // (dropUnprovenContactKeys). Taken from the authenticated rows: the header's app name is not.
+    private boolean sawPqState;
     // Tatrak: only a Tatrak backup may carry Tatrak's message types (7, 8); other apps number theirs differently
     @VisibleForTesting boolean sourceTatrak;
     // Tatrak: media rows (monocles' `files` format): backup path -> final attachment file, and the
@@ -139,7 +167,7 @@ public class ImportBackupWorker extends Worker {
         final var inputData = workerParams.getInputData();
         this.password = takePassword(inputData);
         this.uri = Uri.parse(inputData.getString(DATA_KEY_URI));
-        this.includeOmemo = inputData.getBoolean(DATA_KEY_INCLUDE_OMEMO, true);
+        this.omemoImport = omemoImport(inputData);
     }
 
     @NonNull
@@ -158,7 +186,7 @@ public class ImportBackupWorker extends Worker {
                     new Data.Builder()
                             .putString("reason", Reason.PASSWORD_MISSING.toString())
                             .putString(DATA_KEY_URI, uri.toString())
-                            .putBoolean(DATA_KEY_INCLUDE_OMEMO, includeOmemo)
+                            .putString(DATA_KEY_OMEMO_IMPORT, omemoImport.name())
                             .build());
         }
         setForegroundAsync(getForegroundInfo());
@@ -235,7 +263,8 @@ public class ImportBackupWorker extends Worker {
         }
     }
 
-    private Result importBackup(
+    @VisibleForTesting
+    Result importBackup(
             final SupportSQLiteDatabase db,
             final InputStream inputStream,
             final long fileSize,
@@ -250,7 +279,6 @@ public class ImportBackupWorker extends Worker {
         // our own backups: header version TATRAK_VERSION or app name "Tatrak"
         sourceTatrak = backupFileHeader.getVersion() == BackupFileHeader.TATRAK_VERSION
                 || backupFileHeader.getApp().toLowerCase(java.util.Locale.ROOT).contains("tatrak");
-        sourceMonocles = backupFileHeader.getApp().toLowerCase(java.util.Locale.ROOT).contains("monocles");
         final var accounts = DatabaseStorage.isReady()
                 ? DatabaseBackend.getInstance(getApplicationContext()).getAccountAddresses()
                 : java.util.List.<Jid>of();
@@ -314,6 +342,7 @@ public class ImportBackupWorker extends Worker {
         countCursor.close();
         // Tatrak: the authenticated destination stays isolated until explicit foreground consent.
         if (importAccount == null) throw new IOException("Backup has no account");
+        if (sawPqState) dropUnprovenContactKeys(db); // Tatrak: before the ownership checks and the preview
         try (final Cursor c = db.query("PRAGMA foreign_key_check")) {
             if (c.moveToFirst()) throw new IOException("Invalid account references in backup");
         }
@@ -330,6 +359,12 @@ public class ImportBackupWorker extends Worker {
         try (final Cursor c = db.query("SELECT 1 FROM messages WHERE conversationUuid IS NULL LIMIT 1")) {
             if (c.moveToFirst()) throw new IOException("Missing message ownership");
         }
+        return writePreview(jid);
+    }
+
+    /** Tatrak: the authenticated, checked stage waits as a preview for the user's consent. */
+    @VisibleForTesting
+    Result writePreview(final Jid jid) throws IOException {
         final var stage = DatabaseStorage.importGeneration(getApplicationContext(), previewId);
         DatabaseStorage.validatePair(stage);
         final var report = new org.json.JSONObject();
@@ -383,6 +418,71 @@ public class ImportBackupWorker extends Worker {
         if (generation == null || key == null) throw new IOException("Incomplete media key");
         am.cyberhayq.chat.storage.media.MediaKeyTable.addImported(db, generation, key);
         knownGenerations.add(generation);
+    }
+
+    /**
+     * Tatrak: monocles keeps its contacts' OMEMO2 identity keys in the legacy `identities` table,
+     * marked by nothing that survives in every version. A contact key is kept only when a legacy
+     * OMEMO message of this backup was encrypted with it; OMEMO2 messages (8-10) lost their
+     * fingerprint above. Own keys (ownkey = 1) are never touched here.
+     */
+    private void dropUnprovenContactKeys(final SupportSQLiteDatabase db) {
+        final String where = " FROM " + SQLiteAxolotlStore.IDENTITIES_TABLENAME + " WHERE "
+                + SQLiteAxolotlStore.OWN + " = 0 AND " + SQLiteAxolotlStore.ACCOUNT + " = ? AND "
+                + SQLiteAxolotlStore.FINGERPRINT + " NOT IN (SELECT " + Message.FINGERPRINT + " FROM "
+                + Message.TABLENAME + " WHERE " + Message.ENCRYPTION + " = " + Message.ENCRYPTION_AXOLOTL
+                + " AND " + Message.FINGERPRINT + " IS NOT NULL)";
+        final Object[] arguments = {importAccount};
+        final int count;
+        try (final Cursor cursor = db.query("SELECT count(*)" + where, arguments)) {
+            count = cursor.moveToFirst() ? cursor.getInt(0) : 0;
+        }
+        if (count == 0) return;
+        db.execSQL("DELETE" + where, arguments);
+        omissions.merge(getApplicationContext().getString(R.string.tatrak_backup_omit_unproven_contact), count, Integer::sum);
+    }
+
+    /**
+     * Tatrak: whether a row of a legacy OMEMO table is imported in the chosen mode; what is left
+     * out is counted. Sessions and prekeys belong to the own key; an own key is imported only
+     * under the account's bare JID, so monocles' OMEMO2 own key (`<jid>\0omemo2-own`) never is.
+     */
+    private boolean importOmemoRow(final String table, final ContentValues values, final Jid account) {
+        if (!SQLiteAxolotlStore.IDENTITIES_TABLENAME.equals(table)) {
+            if (omemoImport == OmemoImport.FULL) return true;
+            omitted(R.string.tatrak_backup_omit_private);
+            return false;
+        }
+        final String name = values.getAsString(SQLiteAxolotlStore.NAME);
+        final Integer own = values.getAsInteger(SQLiteAxolotlStore.OWN);
+        if (name != null && name.indexOf('\0') >= 0) {
+            // a NUL never occurs in a JID: monocles' names for its OMEMO2 keys
+            sawPqState = true;
+            omitted(R.string.tatrak_backup_omit_pq_keys);
+            return false;
+        }
+        if (name == null || own == null || (own != 0 && own != 1)
+                || Strings.isNullOrEmpty(values.getAsString(SQLiteAxolotlStore.FINGERPRINT))
+                || !validTrust(values.getAsString(SQLiteAxolotlStore.TRUST))) {
+            omitted(R.string.tatrak_backup_omit_bad_identity);
+            return false;
+        }
+        if (own == 1) {
+            if (omemoImport == OmemoImport.FULL && name.equals(account.asBareJid().toString())) return true;
+            omitted(R.string.tatrak_backup_omit_private);
+            return false;
+        }
+        if (omemoImport != OmemoImport.NONE) return true;
+        omitted(R.string.tatrak_backup_omit_contact_trust);
+        return false;
+    }
+
+    // FingerprintStatus.fromCursor fails on a missing trust and reads an unknown one as UNTRUSTED
+    private static boolean validTrust(@Nullable final String trust) {
+        for (final var value : eu.siacs.conversations.crypto.axolotl.FingerprintStatus.Trust.values()) {
+            if (value.name().equals(trust)) return true;
+        }
+        return false;
     }
 
     private void omitted(int label, Object... arguments) {
@@ -796,6 +896,14 @@ public class ImportBackupWorker extends Worker {
             jsonReader.endObject();
             return;
         }
+        if (PQ_TABLE_LIST.contains(table)) { // Tatrak
+            jsonReader.skipValue(); // remaining member name (values)
+            jsonReader.skipValue();
+            jsonReader.endObject();
+            sawPqState = true;
+            omitted(R.string.tatrak_backup_omit_pq_keys);
+            return;
+        }
         if (!TABLE_ALLOW_LIST.contains(table)) {
             jsonReader.skipValue(); // remaining member name (values)
             jsonReader.skipValue();
@@ -891,13 +999,14 @@ public class ImportBackupWorker extends Worker {
             } else {
                 throw new IOException("jid or password in table did not match backup");
             }
-            if (sourceMonocles) omitted(R.string.tatrak_backup_omit_account_crypto);
             final var keys = Account.Keys.parse(contentValues.getAsString(Account.KEYS));
             final var deviceId = keys.getAxolotlRegistrationId();
             final Account.Keys importReadyKeys;
-            if (deviceId.isPresent() && this.includeOmemo && !sourceMonocles) {
+            // Tatrak: monocles' one axolotl_reg_id is its legacy device id too
+            if (deviceId.isPresent() && omemoImport == OmemoImport.FULL) {
                 importReadyKeys = new Account.Keys(deviceId.get());
             } else {
+                if (deviceId.isPresent()) omitted(R.string.tatrak_backup_omit_private);
                 importReadyKeys = new Account.Keys();
             }
             contentValues.put(Account.KEYS, Services.GSON.toJson(importReadyKeys));
@@ -936,25 +1045,8 @@ public class ImportBackupWorker extends Worker {
                 } catch (org.json.JSONException e) { throw new IOException("Invalid conversation attributes", e); }
             }
         }
-        if (sourceMonocles && OMEMO_TABLE_LIST.contains(table)) {
-            // Current monocles identities share PQ trust; importing those as legacy is unsafe.
-            omitted(R.string.tatrak_backup_omit_monocles_keys);
-            return;
-        }
-        if (this.includeOmemo) {
-            insert(db, table, contentValues);
-        } else {
-            if (OMEMO_TABLE_LIST.contains(table)) {
-                if (SQLiteAxolotlStore.IDENTITIES_TABLENAME.equals(table)
-                        && Integer.valueOf(0).equals(contentValues.getAsInteger(SQLiteAxolotlStore.OWN))) {
-                    insert(db, table, contentValues);
-                } else {
-                    omitted(R.string.tatrak_backup_omit_private, table);
-                }
-            } else {
-                insert(db, table, contentValues);
-            }
-        }
+        if (OMEMO_TABLE_LIST.contains(table) && !importOmemoRow(table, contentValues, account)) return;
+        insert(db, table, contentValues);
     }
 
     /**
@@ -1064,7 +1156,7 @@ public class ImportBackupWorker extends Worker {
                 .notify(NOTIFICATION_ID + 2, builder.build());
     }
 
-    public static Data data(final String password, final Uri uri, final boolean includeOmemo) {
+    public static Data data(final String password, final Uri uri, final OmemoImport omemoImport) {
         final String passwordKey = UUID.randomUUID().toString();
         PASSWORDS.put(passwordKey, password);
         new Handler(Looper.getMainLooper())
@@ -1074,7 +1166,7 @@ public class ImportBackupWorker extends Worker {
         return new Data.Builder()
                 .putString(DATA_KEY_PASSWORD_KEY, passwordKey)
                 .putString(DATA_KEY_URI, uri.toString())
-                .putBoolean(DATA_KEY_INCLUDE_OMEMO, includeOmemo)
+                .putString(DATA_KEY_OMEMO_IMPORT, omemoImport.name())
                 .build();
     }
 
@@ -1089,8 +1181,8 @@ public class ImportBackupWorker extends Worker {
         return uri == null ? null : Uri.parse(uri);
     }
 
-    public static boolean includeOmemo(final Data outputData) {
-        return outputData.getBoolean(DATA_KEY_INCLUDE_OMEMO, true);
+    public static OmemoImport omemoImport(final Data data) {
+        return OmemoImport.of(data.getString(DATA_KEY_OMEMO_IMPORT));
     }
 
     private static Result failure(final Reason reason) {

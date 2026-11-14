@@ -20,4 +20,11 @@
         <item quantity="one">%d file could not be read and was left out.</item>
         <item quantity="other">%d files could not be read and were left out.</item>
     </plurals>
+    <string name="tatrak_restore_omemo">OMEMO encryption</string>
+    <string name="tatrak_restore_omemo_full">Everything: own key and contacts\' trust</string>
+    <string name="tatrak_restore_omemo_full_summary">This device continues as the old one. Choose it only if the old app no longer runs this account, otherwise the two break each other\'s encryption.</string>
+    <string name="tatrak_restore_omemo_trust">Contacts\' trust only</string>
+    <string name="tatrak_restore_omemo_trust_summary">This device gets a new key; contacts you verified stay verified. Contacts see a new device of yours.</string>
+    <string name="tatrak_restore_omemo_none">Nothing</string>
+    <string name="tatrak_restore_omemo_none_summary">A new key, and every contact key has to be verified again.</string>
 </resources>
