@@ -17,7 +17,7 @@ sources:
 # Context
 
 Tatrak must keep receiving upstream Conversations fixes, especially security and
-protocol fixes (see [why Conversations](/decisions/base-conversations.md)). Upstream is
+protocol fixes (see [why Conversations](base-conversations.md)). Upstream is
 the git remote `upstream` (`https://codeberg.org/iNPUTmice/Conversations.git`,
 branch `upstream/master`); fork work happens on branch `main`.
 
@@ -27,7 +27,7 @@ branch `upstream/master`); fork work happens on branch `main`.
    `src/main/kotlin/am/cyberhayq/chat/` (`ui/state`, `ui/chatlist`, `ui/theme`, and later
    `ui/chat`). Only bridge fragments that need package-private access live in
    `src/main/kotlin/eu/siacs/conversations/ui/` (see
-   [UI bridge](/decisions/ui-bridge-fragments.md)).
+   [UI bridge](ui-bridge-fragments.md)).
 2. **Prefixed resources.** New resources use the `tatrak_` prefix in separate files:
    `values/tatrak_strings.xml`, `values-ru/tatrak_strings.xml`, `values/tatrak_dimens.xml`,
    `drawable/tatrak_ic_*.xml`. Upstream resource files are not edited for new strings.
@@ -39,7 +39,7 @@ branch `upstream/master`); fork work happens on branch `main`.
    `applicationId` changes to `am.cyberhayq.chat`, so upstream code and `R` references
    compile unchanged.[^build-gradle]
 5. **Security code is never edited** to ease a merge or a feature; see
-   [security stays untouched](/decisions/security-untouched.md).
+   [security stays untouched](security-untouched.md).
 6. **Knowledge bundle** lives in `knowledge/`, a directory upstream does not have.
 
 # Commits

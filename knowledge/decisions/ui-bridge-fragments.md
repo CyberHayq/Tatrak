@@ -31,10 +31,10 @@ single-activity Compose app would touch a lot of upstream code.
 
 Keep `ConversationsActivity` and swap only the fragments it hosts:
 
-- `main_fragment` hosts [`ChatListFragment`](/architecture/chat-list.md) instead of
+- `main_fragment` hosts [`ChatListFragment`](../architecture/chat-list.md) instead of
   `ConversationsOverviewFragment`; the activity's `instanceof` checks were switched to
   `ChatListFragment`.[^activity]
-- The conversation pane will host the Compose [`ChatFragment`](/architecture/chat-screen.md),
+- The conversation pane will host the Compose [`ChatFragment`](../architecture/chat-screen.md),
   with the legacy `ConversationFragment` kept as a "classic view" fallback.
 - Each new fragment extends `XmppFragment` and wraps a `ComposeView`
   (`ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed`).[^chat-list-fragment]
@@ -64,7 +64,7 @@ to the working tree on 2026-10-29 while this concept was written; its wiring int
   and `android:fitsSystemWindows` was removed from `main_fragment` in
   `activity_conversations.xml`; every hosted fragment must handle insets itself.
 - The bridge keeps the upstream diff small; see the
-  [upstream merge policy](/decisions/upstream-merge-policy.md).
+  [upstream merge policy](upstream-merge-policy.md).
 
 [^activity]: ConversationsActivity
 [^chat-list-fragment]: ChatListFragment

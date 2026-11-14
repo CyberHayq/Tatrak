@@ -16,14 +16,14 @@ sources:
 
 **Attachments (2026-11-08):** the owner chose to encrypt attachments (phase 3) before the
 password mode. The design, and a source-checked comparison with Signal, SimpleX, Threema, Briar
-and Wire that corrects the T7 column below, are in [attachment encryption](/protocol/attachment-encryption.md).
+and Wire that corrects the T7 column below, are in [attachment encryption](attachment-encryption.md).
 
 **Source reconciliation (2026-11-07):** review against fetched origin/main e60b094a3 records implemented requirements, obsolete proposal wording and remaining gaps. Earlier source and approval statements below are historical; no new runtime validation is supplied.
 
 
 **Implementation update (2026-11-02):** the owner subsequently authorized implementation.
 The working tree now implements passive SQLCipher encryption for history and UnifiedPush;
-[current implementation, validation and limits](/build/local-db-encryption.md) supersede
+[current implementation, validation and limits](../build/local-db-encryption.md) supersede
 this document's earlier proposal-only/current-plaintext wording. The design/review material
 below is retained as decision history, not a claim that all release gates passed.
 
@@ -323,7 +323,7 @@ Real SQLCipher JNI and the Keystore need instrumented Android tests; Robolectric
   BouncyCastle (`ExportBackupWorker`). A plain Keystore AES-GCM key can replace Tink, so Tink
   is not needed.
 - **Security-code approval:** key storage and `persistance/DatabaseBackend` lie outside
-  `ui/`, so the owner has to agree ([security untouched](/decisions/security-untouched.md)).
+  `ui/`, so the owner has to agree ([security untouched](../decisions/security-untouched.md)).
 - **Migration:** the existing plaintext database is moved with `sqlcipher_export` (monocles
   `DatabaseBackend.buildAttachSql`), with recovery if the process dies mid-way.
 - **Losing the Keystore key loses the database.** A Keystore reset or a vendor bug leaves the

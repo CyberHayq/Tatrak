@@ -40,22 +40,22 @@ Fork **Conversations**.
 - **Divergence.** monocles is Conversations → Cheogram → monocles, and its README also
   credits features taken from blabber.im.[^monocles-readme] Three layers of divergence
   make tracking upstream security and protocol fixes much harder. See the
-  [upstream merge policy](/decisions/upstream-merge-policy.md).
+  [upstream merge policy](upstream-merge-policy.md).
 - **UI weight.** The chat screen layout `fragment_conversation.xml` has 921 non-empty
   lines in monocles vs. 209 in Conversations.[^monocles-layout][^conv-layout] The UI is
   being rewritten in Compose anyway, so monocles' UI work would be discarded.
 - **Security baseline.** Conversations' crypto passed a good audit and is kept as is
-  (see [security stays untouched](/decisions/security-untouched.md)). monocles adds its
+  (see [security stays untouched](security-untouched.md)). monocles adds its
   own post-quantum OMEMO variant (`urn:monocles:omemo-pq:1`) that is not interoperable
   with OMEMO 0.8+.[^monocles-doap]
 - **Protocol gap is small and portable.** monocles advertises 112 XEPs vs. 72 for
   Conversations.[^monocles-doap][^conv-doap] The features that matter for a
   Telegram-like UX (XEP-0461 replies, XEP-0424 retraction, XEP-0447 file sharing used for
-  stickers) can be ported later; see [XEP support](/protocol/xep-support.md).
+  stickers) can be ported later; see [XEP support](../protocol/xep-support.md).
 
 # Consequences
 
-- Stage 5 of the [roadmap](/project/roadmap.md) ports selected protocol features from
+- Stage 5 of the [roadmap](../project/roadmap.md) ports selected protocol features from
   monocles.
 - **Licensing caveat (open question).** monocles as a whole is distributed under
   AGPL-3.0-only because it bundles libsignal; code taken from Conversations, blabber.im

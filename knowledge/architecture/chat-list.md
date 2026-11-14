@@ -35,7 +35,7 @@ sources:
 | File | Role |
 |------|------|
 | `src/main/kotlin/eu/siacs/conversations/ui/ChatListFragment.kt` | `XmppFragment` + `ChatListActions`; hosts a `ComposeView`; forwards `refresh()` / `onBackendConnected()` to `viewModel.invalidate(service)` |
-| `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatListViewModel.kt` | Owns the [SnapshotSource](/architecture/snapshot-source.md) |
+| `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatListViewModel.kt` | Owns the [SnapshotSource](snapshot-source.md) |
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatListState.kt` | `ChatListItem`, `AccountHeader`, `ChatListState`, `OutgoingStatus`, `ChatListSnapshot.build` |
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatListScreen.kt` | `ChatListScreen` scaffold: top bars (normal / search / archive / selection), folder tabs + pager, drawer, mute and delete dialogs, snackbar |
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatRows.kt` | `SwipeableChatRow`, `ChatRow`, `ArchiveRow`, avatars with online/selected marks, unread badges |
@@ -45,7 +45,7 @@ sources:
 | `src/main/kotlin/am/cyberhayq/chat/ui/theme/Theme.kt` | `TatrakTheme` |
 
 Why the fragment lives in `eu.siacs.conversations.ui`: see the
-[UI bridge decision](/decisions/ui-bridge-fragments.md).
+[UI bridge decision](../decisions/ui-bridge-fragments.md).
 
 # Snapshot model
 
@@ -116,7 +116,7 @@ while it is being swiped.
 `ChatListScreenshotTest` (Robolectric, `sdk = [35]`, `w411dp-h891dp-xxhdpi`,
 `@ConscryptMode(OFF)`) records `chat_list_light.png`, `chat_list_dark.png` and
 `chat_list_empty.png`, `chat_list_selection.png` and `chat_list_archive.png` into `build/outputs/roborazzi/`.[^test] See
-[build setup](/build/build-setup.md).
+[build setup](../build/build-setup.md).
 
 [^state]: ChatListState.kt
 [^screen]: ChatListScreen.kt

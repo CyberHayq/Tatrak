@@ -42,7 +42,7 @@ owner's agreement.[^plan]
 decides whether the user must first trust new OMEMO keys before sending.[^conversation-fragment]
 Its body is extracted **verbatim** into `ui/util/TrustKeysGate.java`
 (`static @Nullable Intent intentIfTrustNeeded(Activity, Conversation)`), so the legacy
-screen and the new [chat screen](/architecture/chat-screen.md) share one implementation.
+screen and the new [chat screen](../architecture/chat-screen.md) share one implementation.
 `ConversationFragment.trustKeysIfNeeded` then only starts the returned intent. The diff
 of this extraction is shown to the owner separately.[^plan]
 
@@ -80,11 +80,11 @@ recovery and staged backup compatibility work outside the original UI-only bound
 permits the required storage, startup, backup and historical-display changes and the pinned
 SQLCipher/SQLite dependencies. It does not authorize changes to OMEMO/OpenPGP wire engines,
 TLS/SASL, XMPP stanza parsing or outgoing PQ sessions. See the
-[implementation runbook](/build/local-db-encryption.md) for tested and untested behavior.
+[implementation runbook](../build/local-db-encryption.md) for tested and untested behavior.
 
 ## Owner-authorized attachment-encryption exception (2026-11-08)
 
-For phase 3 ([attachment encryption](/protocol/attachment-encryption.md), design stage) the owner
+For phase 3 ([attachment encryption](../protocol/attachment-encryption.md), design stage) the owner
 allowed I/O-only changes in `http/`, `xmpp/jingle/`, `xmpp/manager/AvatarManager.java`,
 `crypto/PgpEngine.java` and `crypto/PgpDecryptionService.java`: only where a file is opened for
 reading or writing, or its length is read, so that these classes go through the encrypted

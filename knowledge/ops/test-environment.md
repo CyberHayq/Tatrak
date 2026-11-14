@@ -12,7 +12,7 @@ sources:
 ---
 
 Everything needed lives in the repository (`tools/test-server/`) and in the SDK from the
-[build setup](/build/build-setup.md); nothing depends on temporary folders.
+[build setup](../build/build-setup.md); nothing depends on temporary folders.
 
 # Emulators
 

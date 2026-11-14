@@ -23,18 +23,18 @@ sources:
 - monocles chat advertises **112** XEPs.[^monocles-doap]
 - 71 XEPs are in both; 41 only in monocles; 1 (XEP-0455) only in Conversations.
 - Tatrak inherits everything Conversations supports and does not change protocol
-  code (see [security stays untouched](/decisions/security-untouched.md)).
-- Stage 5 of the [roadmap](/project/roadmap.md) ports three features from monocles:
+  code (see [security stays untouched](../decisions/security-untouched.md)).
+- Stage 5 of the [roadmap](../project/roadmap.md) ports three features from monocles:
 
 | XEP | Feature | Why |
 |-----|---------|-----|
-| [XEP-0461](https://xmpp.org/extensions/xep-0461.html) | Message Replies | Telegram-style replies. Done: swipe-to-reply sends `<reply>` plus the quote as fallback ([chat screen](/architecture/chat-screen.md)). |
+| [XEP-0461](https://xmpp.org/extensions/xep-0461.html) | Message Replies | Telegram-style replies. Done: swipe-to-reply sends `<reply>` plus the quote as fallback ([chat screen](../architecture/chat-screen.md)). |
 | [XEP-0424](https://xmpp.org/extensions/xep-0424.html) | Message Retraction | "Delete for everyone". Done. |
 | [XEP-0447](https://xmpp.org/extensions/xep-0447.html) | Stateless File Sharing | Not needed for stickers after all: they travel as ordinary webp files (works under OMEMO); an SFS element could later mark them in unencrypted chats. |
 
 monocles also handles inline stickers received via XEP-0231 Bits of Binary
 (`MessageParser`)[^monocles-parser]; whether Tatrak needs this is open. Porting is subject
-to the licensing caveat in [base on Conversations](/decisions/base-conversations.md).
+to the licensing caveat in [base on Conversations](../decisions/base-conversations.md).
 
 Not to be ported: monocles' post-quantum OMEMO variant (`urn:monocles:omemo-pq:1`), which
 is not interoperable with OMEMO 0.8+ and would change security code.
@@ -147,7 +147,7 @@ declared. Plan: **Port** (stage 5), Inherited (already in Conversations), Not pl
 | [XEP-0440](https://xmpp.org/extensions/xep-0440.html) | complete 0.4.0 | complete 1.0.0 | Inherited |
 | [XEP-0444](https://xmpp.org/extensions/xep-0444.html) | complete 0.2.1 | partial 0.2.1 — Reaction restrictions (urn:xmpp:reactions:0:restrictions, added in 0.2.0) are not honoured | Inherited |
 | [XEP-0446](https://xmpp.org/extensions/xep-0446.html) | — | complete 0.2.0 | Not planned yet |
-| [XEP-0447](https://xmpp.org/extensions/xep-0447.html) | — | partial 0.3.1 — Sending and receiving, several files per message, URL data sources only. Sent unencrypted or inside the PQ OMEMO2 SCE envelope; never with body-only encryption, which would expose the file keys | Not used: stickers work without it (see [chat screen](/architecture/chat-screen.md)) |
+| [XEP-0447](https://xmpp.org/extensions/xep-0447.html) | — | partial 0.3.1 — Sending and receiving, several files per message, URL data sources only. Sent unencrypted or inside the PQ OMEMO2 SCE envelope; never with body-only encryption, which would expose the file keys | Not used: stickers work without it (see [chat screen](../architecture/chat-screen.md)) |
 | [XEP-0454](https://xmpp.org/extensions/xep-0454.html) | complete 0.1.0 | complete 0.1.0 | Inherited |
 | [XEP-0455](https://xmpp.org/extensions/xep-0455.html) | complete 0.3.0 | — | Inherited |
 | [XEP-0461](https://xmpp.org/extensions/xep-0461.html) | — | complete 0.2.1 | **Done** (stage 5): written fresh; `replyTo` column (DB 56) with id, author and XEP-0428 fallback range; the body keeps the quote (OMEMO encrypts it as is), hidden on display; parent looked up in the same conversation only |

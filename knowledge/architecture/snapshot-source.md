@@ -55,13 +55,13 @@ lambda publishes a snapshot with cached avatars only first, then, if any avatar 
 missing, a second snapshot that loads avatars from disk.[^chat-list-vm]
 `ChatListSnapshot.build` calls `service.populateWithOrderedConversations(...)` and maps
 each `Conversation` to a `ChatListItem`.[^chat-list-state] See
-[chat list](/architecture/chat-list.md).
+[chat list](chat-list.md).
 
 # Usage: chat screen (planned)
 
 The chat screen's `ChatViewModel` / `ChatSnapshot.build()` follows the same pattern,
 with `conversation.populateWithMessages(copy)` as the thread-safe copy and message text
-formatted in the background. See [chat screen](/architecture/chat-screen.md).
+formatted in the background. See [chat screen](chat-screen.md).
 
 # Invariants
 

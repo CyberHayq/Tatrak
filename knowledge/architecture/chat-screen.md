@@ -19,7 +19,7 @@ sources:
 
 # Status
 
-Stage 3 of the [roadmap](/project/roadmap.md): implemented and wired into
+Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
 `ConversationsActivity`, verified by screenshot tests only (no device yet).[^plan]
 
 - Code: `src/main/kotlin/am/cyberhayq/chat/ui/chat/` (`ChatSnapshot`, `ChatViewModel`,
@@ -125,7 +125,7 @@ Stage 3 of the [roadmap](/project/roadmap.md): implemented and wired into
 
 ## Data
 
-- `ChatViewModel` + `ChatSnapshot.build()` on the [SnapshotSource](/architecture/snapshot-source.md)
+- `ChatViewModel` + `ChatSnapshot.build()` on the [SnapshotSource](snapshot-source.md)
   pattern; `conversation.populateWithMessages(copy)` is the thread-safe copy.
 - Immutable `MessageItem` models: key, direction, group position (first/middle/last),
   sender name/colour, `AnnotatedString` text, kind (text, emoji, image, video, audio,
@@ -159,7 +159,7 @@ Stage 3 of the [roadmap](/project/roadmap.md): implemented and wired into
 - Text send follows the legacy sequence exactly: trust check →
   `new Message(conversation, body, conversation.getNextEncryption())` →
   `Message.configurePrivateMessage` → `xmppConnectionService.sendMessage`. See
-  [security stays untouched](/decisions/security-untouched.md).
+  [security stays untouched](../decisions/security-untouched.md).
 - Attachments through the service's existing `attach*ToConversation` methods
   (encryption stays inside the service).
 - Gallery, file and camera picks wait in a preview strip that replaces the text field until Send
@@ -190,7 +190,7 @@ Stage 3 of the [roadmap](/project/roadmap.md): implemented and wired into
   background thread when the chat list is created. Debug builds are 3–4× slower than release, so
   judge smoothness on the `benchmark` build.
 - Swipe to reply sends an XEP-0393 quote for now; XEP-0461 replies come in stage 5
-  ([XEP support](/protocol/xep-support.md)).
+  ([XEP support](../protocol/xep-support.md)).
 - Mentions in groups (2026-11-13, `Mentions.kt`): a tap on a sender's avatar runs the group
   branch of the classic `onContactPictureClicked` (participation check, "has left" toast) and
   inserts the nick with a pure port of `highlightInConference` ("nick: " at the start, ", nick"
@@ -274,7 +274,7 @@ panel and recording block it entirely with `BlockSwipeBack(active)`.
 A "Classic view" menu entry opens the legacy `ConversationFragment` for everything not
 ported (calls, encryption selection, blocking, invites, moderation, edit history, PGP).
 PGP conversations always open in the classic view. Hosting follows the
-[UI bridge decision](/decisions/ui-bridge-fragments.md) via the planned
+[UI bridge decision](../decisions/ui-bridge-fragments.md) via the planned
 `ConversationHost` interface.
 
 ## Trust check

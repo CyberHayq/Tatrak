@@ -18,7 +18,7 @@ generated: { by: claude-code/claude-opus-5-5, at: 2026-10-31T21:00:00Z }
 `ANDROID_HOME` in the shell points to `/opt/android-sdk` (pacman `android-sdk` 26.1.1, owned by
 root, no platforms or licences). `local.properties` takes precedence for Gradle, so it does not
 matter for builds; the emulator, however, reads `ANDROID_HOME` (see the
-[test environment runbook](/ops/test-environment.md)).
+[test environment runbook](../ops/test-environment.md)).
 
 Alternative without Studio: AUR `android-platform` (37) and `android-sdk-build-tools` into
 `/opt/android-sdk`. That package ships build-tools **37.0.0**, while the Android Gradle Plugin
