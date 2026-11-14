@@ -1,2 +1,0 @@
-* Aggiunta 'Nota personale' ai suggerimenti di ricerca
-* Correzioni minori

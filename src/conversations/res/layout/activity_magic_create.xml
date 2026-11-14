@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <layout xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Tatrak: restyled in XML only; the theme overlay gives the text field its Tatrak style -->
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:fitsSystemWindows="true"
-        android:orientation="vertical">
+        android:orientation="vertical"
+        android:theme="@style/ThemeOverlay.Tatrak.Onboarding">
 
         <com.google.android.material.appbar.AppBarLayout
             android:id="@+id/app_bar_layout"
@@ -37,9 +39,8 @@
                     android:layout_alignParentBottom="true"
                     android:minHeight="256dp"
                     android:orientation="vertical"
-                    android:paddingLeft="16dp"
-                    android:paddingRight="16dp"
-                    android:paddingBottom="10dp">
+                    android:paddingHorizontal="20dp"
+                    android:paddingBottom="16dp">
 
                     <Space
                         android:layout_width="match_parent"
@@ -48,18 +49,21 @@
 
                     <TextView
                         android:id="@+id/title"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:gravity="center"
                         android:text="@string/pick_your_username"
-                        android:textAppearance="?textAppearanceTitleLarge" />
+                        android:textAppearance="@style/TextAppearance.Tatrak.Onboarding.Title" />
 
                     <TextView
                         android:id="@+id/instructions"
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_marginVertical="8dp"
+                        android:layout_marginTop="8dp"
+                        android:layout_marginBottom="24dp"
+                        android:gravity="center"
                         android:text="@string/magic_create_text"
-                        android:textAppearance="?textAppearanceBodyMedium" />
+                        android:textAppearance="@style/TextAppearance.Tatrak.Onboarding.Body" />
 
                     <com.google.android.material.textfield.TextInputLayout
                         android:id="@+id/username_layout"
@@ -79,17 +83,18 @@
                         android:id="@+id/full_jid"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
+                        android:layout_marginHorizontal="16dp"
                         android:layout_marginVertical="8dp"
                         android:text="@string/your_full_jid_will_be"
-                        android:textAppearance="?textAppearanceLabelSmall"
+                        android:textAppearance="?textAppearanceBodySmall"
+                        android:textColor="?attr/colorOnSurfaceVariant"
                         android:visibility="invisible" />
 
                     <Button
                         android:id="@+id/create_account"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
+                        style="@style/Widget.Tatrak.Onboarding.PrimaryButton"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="end"
                         android:text="@string/next" />
                 </LinearLayout>
 
@@ -100,11 +105,11 @@
                     android:layout_alignParentStart="true">
 
                     <ImageView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_width="@dimen/tatrak_onboarding_logo"
+                        android:layout_height="@dimen/tatrak_onboarding_logo"
                         android:layout_centerHorizontal="true"
                         android:layout_centerVertical="true"
-                        android:padding="8dp"
+                        android:importantForAccessibility="no"
                         android:src="@drawable/main_logo" />
                 </RelativeLayout>
             </RelativeLayout>

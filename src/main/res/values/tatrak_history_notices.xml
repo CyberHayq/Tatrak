@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <bool name="tatrak_history_notices">false</bool>
+    <string name="tatrak_history_notices">History loading notices</string>
+    <string name="tatrak_history_notices_summary">Show "Fetching history from server" and "No more history on server" at the top of a chat.</string>
+</resources>

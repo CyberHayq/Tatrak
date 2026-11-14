@@ -1,2 +1,0 @@
-* pequenas correções de erros
-* pequenas modificações no fluxo interior do Quicksy

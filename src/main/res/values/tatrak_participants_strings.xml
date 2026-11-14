@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- chat list preview of a voice message: "audio, 0:12" -->
+    <string name="tatrak_preview_with_duration">%1$s, %2$s</string>
+</resources>

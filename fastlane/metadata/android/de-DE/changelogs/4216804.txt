@@ -1,3 +1,0 @@
-* Einladungs-URIs für IRC-Kanäle korrigiert
-* Rotes Warnsymbol wird in den Konferenzdetails nicht konformer MUCs angezeigt
-* Verbindungs- und Wiederholungsverhalten im Flugmodus und bei VPNs korrigiert

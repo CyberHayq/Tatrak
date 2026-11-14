@@ -1,3 +1,0 @@
-* Corrigir mensagens sendo reenviadas quando SASL2 é usado
-* Corrigir vídeo preto entre alguns dispositivos
-* Corrigir travamento quando senhas estão vazias

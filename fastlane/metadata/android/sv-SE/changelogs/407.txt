@@ -1,3 +1,0 @@
-* Visa samtalsknapp för frånkopplade kontakter om de tidigare meddelat stöd
-* Tillbaka-knappen avslutar inte längre samtalet när samtalet ansluts
-* Buggfixar

@@ -41,10 +41,22 @@ public class AppSettings {
     public static final String SEND_CHAT_STATES = "chat_states";
     public static final String ENTITY_TIME = "entity_time";
     public static final String THEME = "theme";
+    public static final String ACCENT = "tatrak_accent";
+    public static final String WALLPAPER = "tatrak_wallpaper";
+    public static final String WALLPAPER_DIM = "tatrak_wallpaper_dim";
+    // Tatrak: the old on/off switch, only read as the default of BACKUP_FORMAT
+    private static final String BACKUP_CONVERSATIONS_COMPATIBLE = "tatrak_backup_conversations_compatible";
+    public static final String BACKUP_FORMAT = "tatrak_backup_format";
+    public static final String BACKUP_FORMAT_TATRAK = "tatrak";
+    public static final String BACKUP_FORMAT_CONVERSATIONS = "conversations";
+    public static final String BACKUP_FORMAT_MONOCLES = "monocles";
+    public static final String BACKUP_MEDIA = "tatrak_backup_media";
     public static final String DYNAMIC_COLORS = "dynamic_colors";
     public static final String SHOW_DYNAMIC_TAGS = "show_dynamic_tags";
     public static final String OMEMO = "omemo";
     public static final String ALLOW_SCREENSHOTS = "allow_screenshots";
+    public static final String HISTORY_NOTICES = "tatrak_history_notices";
+    public static final String HIDE_NOTIFICATION_TEXT = "tatrak_hide_notification_text";
     public static final String RINGTONE = "call_ringtone";
     public static final String DISPLAY_ENTER_KEY = "display_enter_key";
     public static final String ENTER_IS_SEND = "enter_is_send";
@@ -75,7 +87,6 @@ public class AppSettings {
     public static final String AUTO_ACCEPT_FILE_SIZE = "auto_accept_file_size";
     public static final String VIDEO_COMPRESSION = "video_compression";
     public static final String AUTO_SEND_RECORDING = "auto_send_recording";
-    public static final String USE_SHARED_STORAGE = "use_shared_storage";
     public static final String QUICK_ACTION = "quick_action_button";
 
     private static final String ACCEPT_INVITES_FROM_STRANGERS = "accept_invites_from_strangers";
@@ -136,6 +147,30 @@ public class AppSettings {
 
     public boolean isTrustSystemCAStore() {
         return getBooleanPreference(TRUST_SYSTEM_CA_STORE, R.bool.trust_system_ca_store);
+    }
+
+    public boolean isBackupMedia() {
+        return getBooleanPreference(BACKUP_MEDIA, R.bool.tatrak_backup_media);
+    }
+
+    /** Tatrak: the backup format; a user who only had the old Conversations switch keeps its choice. */
+    public String getBackupFormat() {
+        final SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
+        final String format = preferences.getString(BACKUP_FORMAT, null);
+        if (format != null) {
+            return format;
+        }
+        return preferences.getBoolean(BACKUP_CONVERSATIONS_COMPATIBLE, false)
+                ? BACKUP_FORMAT_CONVERSATIONS
+                : BACKUP_FORMAT_TATRAK;
+    }
+
+    public boolean isHistoryNotices() {
+        return getBooleanPreference(HISTORY_NOTICES, R.bool.tatrak_history_notices);
+    }
+
+    public boolean isHideNotificationText() {
+        return getBooleanPreference(HIDE_NOTIFICATION_TEXT, R.bool.tatrak_hide_notification_text);
     }
 
     public boolean isAllowScreenshots() {
@@ -208,10 +243,6 @@ public class AppSettings {
                 AppSettings.AWAY_WHEN_SCREEN_IS_OFF, R.bool.away_when_screen_off);
     }
 
-    public boolean isUseSharedStorage() {
-        return getBooleanPreference(USE_SHARED_STORAGE, R.bool.use_shared_storage);
-    }
-
     public boolean isUseTor() {
         return QuickConversationsService.isConversations()
                 && getBooleanPreference(USE_TOR, R.bool.use_tor);
@@ -250,8 +281,41 @@ public class AppSettings {
                 || getBooleanPreference(KEEP_FOREGROUND_SERVICE, R.bool.enable_foreground_service);
     }
 
+    public String getAccent() {
+        return PreferenceManager.getDefaultSharedPreferences(context).getString(ACCENT, null);
+    }
+
+    public void setAccent(final String accent) {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putString(ACCENT, accent).apply();
+    }
+
+    public void setTheme(final String theme) {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putString(THEME, theme).apply();
+    }
+
+    public void setDynamicColors(final boolean dynamicColors) {
+        PreferenceManager.getDefaultSharedPreferences(context)
+                .edit()
+                .putBoolean(DYNAMIC_COLORS, dynamicColors)
+                .apply();
+    }
+
+    public String getWallpaper() {
+        return PreferenceManager.getDefaultSharedPreferences(context).getString(WALLPAPER, null);
+    }
+
+    public void setWallpaper(final String wallpaper) {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putString(WALLPAPER, wallpaper).apply();
+    }
+
+    public void setWallpaperDim(final int percent) {
+        PreferenceManager.getDefaultSharedPreferences(context).edit().putInt(WALLPAPER_DIM, percent).apply();
+    }
+
     public boolean isDynamicColorsDesired() {
-        return getBooleanPreference(AppSettings.DYNAMIC_COLORS, R.bool.dynamic_colors);
+        // Tatrak: a stored "on" (e.g. restored from a backup) means nothing where the system has no dynamic colours
+        return com.google.android.material.color.DynamicColors.isDynamicColorAvailable()
+                && getBooleanPreference(AppSettings.DYNAMIC_COLORS, R.bool.dynamic_colors);
     }
 
     public int getDesiredNightMode() {

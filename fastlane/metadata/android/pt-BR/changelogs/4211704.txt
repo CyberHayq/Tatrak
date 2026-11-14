@@ -1,3 +1,0 @@
-* Oferecer valores de aceitação de arquivo automático mais altos
-* Oferecer mais informações em 'Informação do servidor'
-* Várias correções de erros

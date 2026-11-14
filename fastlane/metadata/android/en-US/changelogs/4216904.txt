@@ -1,1 +1,0 @@
-* Fix log in to Prosody 0.12

@@ -1,2 +1,0 @@
-* Support des paramètres de notification par conversation
-* Utilisation d'opus pour les messages vocaux sur Android 10

@@ -12,9 +12,11 @@ public final class Config {
 
     public static final boolean QUICK_LOG = false;
 
-    public static final Jid BUG_REPORTS = Jid.of("bugs@conversations.im");
-    public static final Uri HELP = Uri.parse("https://help.conversations.im");
-    public static final String MAGIC_CREATE_DOMAIN = "conversations.im";
+    // Tatrak: no crash-report address or help site of our own; null turns both features off
+    public static final Jid BUG_REPORTS = null;
+    public static final Uri HELP = null;
+    // Tatrak: no built-in account server; users bring an account, register on a server or use an invite
+    public static final String MAGIC_CREATE_DOMAIN = null;
     public static final Jid QUICKSY_DOMAIN = Jid.of("quicksy.im");
 
     public static final String CHANNEL_DISCOVERY = "https://search.jabber.network";

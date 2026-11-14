@@ -3,8 +3,9 @@ package eu.siacs.conversations.persistance;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteOpenHelper;
+// Tatrak: encrypted local storage; protocol APIs are unchanged.
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
 import android.util.Log;
 import androidx.annotation.Nullable;
 import com.google.common.base.Optional;
@@ -30,8 +31,20 @@ public class UnifiedPushDatabase extends SQLiteOpenHelper {
     }
 
     private UnifiedPushDatabase(@Nullable Context context) {
-        super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        this(context, am.cyberhayq.chat.storage.DatabaseStorage.pushPath(context),
+                am.cyberhayq.chat.storage.DatabaseStorage.password(context));
     }
+
+    private UnifiedPushDatabase(Context context, String path, byte[] password) {
+        super(context, path, password, null, DATABASE_VERSION, 0,
+                am.cyberhayq.chat.storage.DatabaseStorage.PRESERVE, null, false);
+    }
+
+    public static UnifiedPushDatabase isolated(Context context, String path, byte[] password) {
+        return new UnifiedPushDatabase(context, path, password);
+    }
+
+    @Override public void onConfigure(SQLiteDatabase db) { db.execSQL("PRAGMA temp_store=MEMORY"); }
 
     @Override
     public void onCreate(final SQLiteDatabase sqLiteDatabase) {

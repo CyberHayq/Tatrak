@@ -1,1 +1,0 @@
-* Quicksy : reçoit automatiquement le SMS de vérification

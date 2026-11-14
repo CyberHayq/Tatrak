@@ -1,1 +1,0 @@
-* Arranxo do problema reintroducido na versión anterior (fallo ao acceder)

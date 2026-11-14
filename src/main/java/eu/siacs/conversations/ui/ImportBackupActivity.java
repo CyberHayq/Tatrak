@@ -55,6 +55,8 @@ public class ImportBackupActivity extends ActionBarActivity
 
     private LiveData<Boolean> inProgressImport;
     private Uri currentRestoreDialog;
+    // Tatrak: the dialog's include-OMEMO choice, kept across recreation
+    private boolean currentRestoreIncludeOmemo = true;
     private UUID currentWorkRequest;
 
     private final ActivityResultLauncher<String[]> requestPermissions =
@@ -87,6 +89,13 @@ public class ImportBackupActivity extends ActionBarActivity
 
         this.inProgressImport.observe(
                 this, inProgress -> setLoadingState(Boolean.TRUE.equals(inProgress)));
+        // Tatrak: status line under the spinner (reading percentage, then saving)
+        imports.observe(this, infos -> {
+            final var running = Iterables.tryFind(infos, i -> !i.getState().isFinished());
+            final String status = running.isPresent()
+                    ? ImportBackupWorker.status(this, running.get().getProgress()) : null;
+            binding.tatrakRestoreStatus.setText(status == null ? getString(R.string.restoring_backup) : status);
+        });
 
         if (savedInstanceState != null) {
             final var currentWorkRequest = savedInstanceState.getString("current-work-request");
@@ -97,6 +106,8 @@ public class ImportBackupActivity extends ActionBarActivity
             if (currentRestoreDialog != null) {
                 this.currentRestoreDialog = Uri.parse(currentRestoreDialog);
             }
+            this.currentRestoreIncludeOmemo =
+                    savedInstanceState.getBoolean("current-restore-include-omemo", true);
         }
         monitorWorkRequest(this.currentWorkRequest);
 
@@ -104,7 +115,7 @@ public class ImportBackupActivity extends ActionBarActivity
         this.binding.list.setAdapter(this.backupFileAdapter);
         this.backupFileAdapter.setOnItemClickedListener(this);
         if (this.currentRestoreDialog != null) {
-            openBackupFileFromUri(this.currentRestoreDialog, false);
+            openBackupFileFromUri(this.currentRestoreDialog, false, this.currentRestoreIncludeOmemo);
         }
     }
 
@@ -125,6 +136,7 @@ public class ImportBackupActivity extends ActionBarActivity
         }
         if (this.currentRestoreDialog != null) {
             bundle.putString("current-restore-dialog", this.currentRestoreDialog.toString());
+            bundle.putBoolean("current-restore-include-omemo", this.currentRestoreIncludeOmemo);
         }
         super.onSaveInstanceState(bundle);
     }
@@ -206,10 +218,16 @@ public class ImportBackupActivity extends ActionBarActivity
 
     @Override
     public void onClick(final BackupFile backupFile) {
-        showEnterPasswordDialog(backupFile, false);
+        showEnterPasswordDialog(backupFile, false, true);
     }
 
     private void openBackupFileFromUri(final Uri uri, final boolean finishOnCancel) {
+        openBackupFileFromUri(uri, finishOnCancel, true);
+    }
+
+    // Tatrak: includeOmemo restores the checkbox when the dialog asks for a lost password again
+    private void openBackupFileFromUri(
+            final Uri uri, final boolean finishOnCancel, final boolean includeOmemo) {
         final var backupFileFuture = BackupFile.readAsync(this, uri);
         Futures.addCallback(
                 backupFileFuture,
@@ -230,7 +248,7 @@ public class ImportBackupActivity extends ActionBarActivity
                                 return;
                             }
                         }
-                        showEnterPasswordDialog(backupFile, finishOnCancel);
+                        showEnterPasswordDialog(backupFile, finishOnCancel, includeOmemo);
                     }
 
                     @Override
@@ -264,7 +282,7 @@ public class ImportBackupActivity extends ActionBarActivity
     }
 
     private void showEnterPasswordDialog(
-            final BackupFile backupFile, final boolean finishOnCancel) {
+            final BackupFile backupFile, final boolean finishOnCancel, final boolean includeOmemo) {
         this.currentRestoreDialog = backupFile.getUri();
         final DialogEnterPasswordBinding enterPasswordBinding =
                 DataBindingUtil.inflate(
@@ -275,6 +293,10 @@ public class ImportBackupActivity extends ActionBarActivity
                         R.string.enter_password_to_restore,
                         backupFile.getHeader().getJid().toString()));
         final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
+        this.currentRestoreIncludeOmemo = includeOmemo;
+        enterPasswordBinding.includeKeys.setChecked(includeOmemo);
+        enterPasswordBinding.includeKeys.setOnCheckedChangeListener(
+                (button, checked) -> this.currentRestoreIncludeOmemo = checked);
         builder.setView(enterPasswordBinding.getRoot());
         builder.setTitle(R.string.enter_password);
         builder.setNegativeButton(
@@ -315,26 +337,32 @@ public class ImportBackupActivity extends ActionBarActivity
         }
 
         importBackup(backupFile, password, enterPasswordBinding.includeKeys.isChecked());
+        // Tatrak: the dialog is done; a recreated activity must not show it again over the import
+        this.currentRestoreDialog = null;
         d.dismiss();
     }
 
     private void importBackup(
             final BackupFile backupFile, final String password, final boolean includeOmemo) {
-        final OneTimeWorkRequest importBackupWorkRequest =
-                new OneTimeWorkRequest.Builder(ImportBackupWorker.class)
-                        .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
-                        .setInputData(
-                                ImportBackupWorker.data(
-                                        password, backupFile.getUri(), includeOmemo))
-                        .addTag(ImportBackupWorker.TAG_IMPORT_BACKUP)
-                        .build();
+        final var data = ImportBackupWorker.data(password, backupFile.getUri(), includeOmemo);
+        final OneTimeWorkRequest importBackupWorkRequest;
+        // Tatrak: drop the in-memory password if the request never gets enqueued
+        try {
+            importBackupWorkRequest =
+                    new OneTimeWorkRequest.Builder(ImportBackupWorker.class)
+                            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)
+                            .setInputData(data)
+                            .addTag(ImportBackupWorker.TAG_IMPORT_BACKUP)
+                            .build();
+            WorkManager.getInstance(this).enqueue(importBackupWorkRequest);
+        } catch (final RuntimeException e) {
+            ImportBackupWorker.takePassword(data);
+            throw e;
+        }
 
         final var id = importBackupWorkRequest.getId();
         this.currentWorkRequest = id;
         monitorWorkRequest(id);
-
-        final var workManager = WorkManager.getInstance(this);
-        workManager.enqueue(importBackupWorkRequest);
     }
 
     private void monitorWorkRequest(final UUID uuid) {
@@ -347,7 +375,10 @@ public class ImportBackupActivity extends ActionBarActivity
                 this,
                 workInfo -> {
                     final var state = workInfo.getState();
-                    if (state.isFinished()) {
+                    final int skippedRows = ImportBackupWorker.skippedRows(workInfo.getOutputData());
+                    // Tatrak: retain the work id until the partial-restore warning is acknowledged
+                    if (state.isFinished()
+                            && !(state == WorkInfo.State.SUCCEEDED && skippedRows > 0)) {
                         this.currentWorkRequest = null;
                     }
                     if (state == WorkInfo.State.FAILED) {
@@ -358,12 +389,64 @@ public class ImportBackupActivity extends ActionBarActivity
                         switch (reason) {
                             case DECRYPTION_FAILED -> onBackupDecryptionFailed();
                             case ACCOUNT_ALREADY_EXISTS -> onAccountAlreadySetup();
+                            // Tatrak: the password only lived in memory; ask for it again
+                            case PASSWORD_MISSING -> {
+                                final var uri = ImportBackupWorker.uri(data);
+                                if (uri != null) {
+                                    openBackupFileFromUri(
+                                            uri, false, ImportBackupWorker.includeOmemo(data));
+                                }
+                            }
                             default -> onBackupRestoreFailed();
                         }
                     } else if (state == WorkInfo.State.SUCCEEDED) {
-                        onBackupRestored();
+                        final String preview = ImportBackupWorker.previewId(workInfo.getOutputData());
+                        if (preview != null) {
+                            this.currentWorkRequest = uuid;
+                            showImportPreview(preview);
+                        } else if (skippedRows > 0) {
+                            new MaterialAlertDialogBuilder(this)
+                                    .setTitle(R.string.tatrak_backup_partial_title)
+                                    .setMessage(
+                                            getString(
+                                                    R.string.tatrak_backup_partial_summary,
+                                                    skippedRows))
+                                    .setPositiveButton(
+                                            R.string.ok, (dialog, which) -> onBackupRestored())
+                                    .setCancelable(false)
+                                    .show();
+                        } else {
+                            onBackupRestored();
+                        }
                     }
                 });
+    }
+
+    // Tatrak: authenticated encrypted staging is the source of this consent, not a mutable URI.
+    private void showImportPreview(final String id) {
+        setLoadingState(false);
+        final String omissions;
+        try { omissions = ImportBackupWorker.previewDetails(this, id); }
+        catch (RuntimeException e) { onBackupRestoreFailed(); return; }
+        new MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.tatrak_backup_preview_title)
+                .setMessage(omissions.isEmpty() ? getString(R.string.tatrak_backup_preview_clean)
+                        : getString(R.string.tatrak_backup_preview_omissions, omissions))
+                .setNegativeButton(R.string.cancel, (dialog, which) -> {
+                    this.currentWorkRequest = null;
+                    java.util.concurrent.ForkJoinPool.commonPool().execute(() -> {
+                        try { am.cyberhayq.chat.storage.DatabaseStorage.discardImport(this, id); }
+                        catch (Exception ignored) { }
+                    });
+                })
+                .setPositiveButton(R.string.tatrak_backup_accept, (dialog, which) -> {
+                    final var request = new OneTimeWorkRequest.Builder(ImportBackupWorker.class)
+                            .setInputData(ImportBackupWorker.commitData(id))
+                            .addTag(ImportBackupWorker.TAG_IMPORT_BACKUP).build();
+                    WorkManager.getInstance(this).enqueue(request);
+                    this.currentWorkRequest = request.getId();
+                    monitorWorkRequest(request.getId());
+                }).setCancelable(false).show();
     }
 
     private void setLoadingState(final boolean loadingState) {
@@ -382,6 +465,7 @@ public class ImportBackupActivity extends ActionBarActivity
     }
 
     private void onBackupRestored() {
+        this.currentWorkRequest = null;
         final var intent = new Intent(this, ConversationActivity.class);
         intent.addFlags(
                 Intent.FLAG_ACTIVITY_CLEAR_TOP

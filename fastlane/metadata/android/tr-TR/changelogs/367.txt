@@ -1,2 +1,0 @@
-* Bazı Android 10 cihazlarındaki avatar seçimi düzeltildi
-* Daha büyük dosyalar için dosya aktarımı düzeltildi

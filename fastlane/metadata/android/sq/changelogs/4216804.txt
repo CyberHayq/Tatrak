@@ -1,3 +1,0 @@
-* Ndreqje URI ftesash për kanale IRC
-* Shfaqje ikone të kuqe sinjalizimi te hollësi konference MUC-esh jo të përputhshëm
-* Ndreqje lidhjeje dhe sjellje riprovimi rreth mënyrës aeroplan dhe VPN-rash

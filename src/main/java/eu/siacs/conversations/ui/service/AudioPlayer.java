@@ -44,6 +44,8 @@ public class AudioPlayer
     private static final int REFRESH_INTERVAL = 250;
     private static final Object LOCK = new Object();
     private static MediaPlayer player = null;
+    // Tatrak: the store reader of the playing file, to tell a failed read from the end
+    private static am.cyberhayq.chat.storage.media.MediaFile media = null;
     private static Message currentlyPlayingMessage = null;
     private static PowerManager.WakeLock wakeLock;
     private final MessageAdapter messageAdapter;
@@ -69,6 +71,7 @@ public class AudioPlayer
         synchronized (AudioPlayer.LOCK) {
             if (AudioPlayer.player != null) {
                 AudioPlayer.player.setOnCompletionListener(this);
+                AudioPlayer.player.setOnErrorListener(this::onError); // Tatrak
                 if (AudioPlayer.player.isPlaying() && sensorManager != null) {
                     sensorManager.registerListener(
                             this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
@@ -202,13 +205,16 @@ public class AudioPlayer
 
     private boolean play(ViewHolder viewHolder, Message message, boolean earpiece) {
         AudioPlayer.player = new MediaPlayer();
+        AudioPlayer.media = null;
         try {
             AudioPlayer.currentlyPlayingMessage = message;
             AudioPlayer.player.setAudioStreamType(
                     earpiece ? AudioManager.STREAM_VOICE_CALL : AudioManager.STREAM_MUSIC);
-            AudioPlayer.player.setDataSource(
-                    messageAdapter.getFileBackend().getFile(message).getAbsolutePath());
+            // Tatrak: through the media store
+            AudioPlayer.media = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().open(messageAdapter.getFileBackend().getFile(message));
+            AudioPlayer.player.setDataSource(AudioPlayer.media.dataSource());
             AudioPlayer.player.setOnCompletionListener(this);
+            AudioPlayer.player.setOnErrorListener(this::onError);
             AudioPlayer.player.prepare();
             AudioPlayer.player.start();
             messageAdapter.flagScreenOn();
@@ -221,6 +227,7 @@ public class AudioPlayer
                     this, proximitySensor, SensorManager.SENSOR_DELAY_NORMAL);
             return true;
         } catch (final Exception e) {
+            if (AudioPlayer.media != null) AudioPlayer.media.close(); // Tatrak
             messageAdapter.flagScreenOff();
             releaseProximityWakeLock();
             AudioPlayer.currentlyPlayingMessage = null;
@@ -284,7 +291,21 @@ public class AudioPlayer
 
     @Override
     public void onCompletion(android.media.MediaPlayer mediaPlayer) {
+        // Tatrak: a read that failed its check ends playback as unavailable, not as finished
+        finish(mediaPlayer, mediaPlayer == AudioPlayer.player && AudioPlayer.media != null && AudioPlayer.media.getFailed());
+    }
+
+    // Tatrak: an error while playing stops and says so (unhandled, it would look like the end)
+    private boolean onError(final android.media.MediaPlayer mediaPlayer, final int what, final int extra) {
+        finish(mediaPlayer, true);
+        return true;
+    }
+
+    private void finish(final android.media.MediaPlayer mediaPlayer, final boolean failed) {
         synchronized (AudioPlayer.LOCK) {
+            if (failed) {
+                android.widget.Toast.makeText(messageAdapter.getContext(), R.string.tatrak_viewer_load_failed, android.widget.Toast.LENGTH_SHORT).show();
+            }
             this.stopRefresher(false);
             if (AudioPlayer.player == mediaPlayer) {
                 AudioPlayer.currentlyPlayingMessage = null;

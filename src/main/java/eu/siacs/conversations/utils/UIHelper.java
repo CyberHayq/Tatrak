@@ -195,8 +195,13 @@ public class UIHelper {
                 default:
                     return new Pair<>("", false);
             }
+        } else if (message.getType() == Message.TYPE_RETRACTED || message.getType() == Message.TYPE_HIDDEN) {
+            return new Pair<>(context.getString(R.string.tatrak_message_deleted), true);
         } else if (message.isFileOrImage() && message.isDeleted()) {
             return new Pair<>(context.getString(R.string.file_deleted), true);
+        } else if (message.getEncryption() == Message.ENCRYPTION_IMPORTED_PQ_UNAVAILABLE
+                || message.getEncryption() == Message.ENCRYPTION_IMPORTED_PQ_FAILED) {
+            return new Pair<>(context.getString(R.string.tatrak_backup_pq_unavailable), true);
         } else if (message.getEncryption() == Message.ENCRYPTION_PGP) {
             return new Pair<>(context.getString(R.string.pgp_message), true);
         } else if (message.getEncryption() == Message.ENCRYPTION_DECRYPTION_FAILED) {

@@ -1,2 +1,0 @@
-* Mindre buggfixar
-* Återställt möjligheten att ringa ut via JMP och andra tjänster (Playstore-version)

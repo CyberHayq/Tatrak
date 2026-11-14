@@ -40,6 +40,7 @@ import eu.siacs.conversations.R;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.persistance.FileBackend;
 import eu.siacs.conversations.ui.ConversationsActivity;
+import eu.siacs.conversations.ui.ShareWithActivity;
 import eu.siacs.conversations.ui.XmppActivity;
 import java.util.Arrays;
 import java.util.Collection;
@@ -50,6 +51,16 @@ public class ShareUtil {
             Arrays.asList("xmpp", "mailto", "tel");
 
     public static void share(final XmppActivity activity, final Message message) {
+        share(activity, message, false);
+    }
+
+    // Tatrak: "Forward" opens the in-app chat picker (ShareWithActivity) instead of the system chooser
+    public static void forward(final XmppActivity activity, final Message message) {
+        share(activity, message, true);
+    }
+
+    private static void share(
+            final XmppActivity activity, final Message message, final boolean inApp) {
         final var intent = new Intent();
         intent.setAction(Intent.ACTION_SEND);
         if (message.isGeoUri()) {
@@ -63,12 +74,13 @@ public class ShareUtil {
                     message.getStatus() == Message.STATUS_RECEIVED);
         } else {
             final var file = activity.xmppConnectionService.getFileBackend().getFile(message);
-            final var uri =
-                    FileBackend.getUriForFile(activity, file)
-                            .buildUpon()
-                            .appendQueryParameter("uuid", message.getUuid())
-                            .build();
+            // Tatrak: getUriForFile throws for a file outside file_paths.xml; catch it here
             try {
+                final var uri =
+                        FileBackend.getUriForFile(activity, file)
+                                .buildUpon()
+                                .appendQueryParameter("uuid", message.getUuid())
+                                .build();
                 intent.putExtra(Intent.EXTRA_STREAM, uri);
             } catch (final SecurityException e) {
                 Toast.makeText(
@@ -83,6 +95,10 @@ public class ShareUtil {
             intent.setType(ViewUtil.nullToWildcard(message.getMimeType()));
         }
         try {
+            if (inApp) {
+                activity.startActivity(intent.setClass(activity, ShareWithActivity.class));
+                return;
+            }
             activity.startActivity(
                     Intent.createChooser(intent, activity.getText(R.string.share_with)));
         } catch (final ActivityNotFoundException e) {
@@ -94,7 +110,7 @@ public class ShareUtil {
     }
 
     public static void copyToClipboard(final XmppActivity activity, final Message message) {
-        if (activity.copyTextToClipboard(message.getBody(), R.string.message)
+        if (activity.copyTextToClipboard(message.getBodyWithoutReplyFallback(), R.string.message)
                 && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
             Toast.makeText(activity, R.string.message_copied_to_clipboard, Toast.LENGTH_SHORT)
                     .show();

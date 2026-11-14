@@ -1,2 +1,0 @@
-* Åtgärdat sökfunktion på Android 5 och tidigare versioner
-* Optimerat appens minnesanvändning

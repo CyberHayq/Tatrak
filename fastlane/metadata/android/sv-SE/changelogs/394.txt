@@ -1,2 +1,0 @@
-* Åtgärdat meddelanden som inte dyker upp under vissa förhållanden
-* Åtgärdat kompatibilitetsproblem och krascher relaterade till röst-/video-samtal

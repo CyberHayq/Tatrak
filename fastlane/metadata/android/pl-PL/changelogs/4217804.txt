@@ -1,2 +1,0 @@
-* Dodanie „Notatki dla siebie” w sugestiach wyszukiwania
-* Drobne poprawki błędów

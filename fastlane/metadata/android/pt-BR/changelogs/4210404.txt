@@ -1,3 +1,0 @@
-* Corrigir chamadas de Áudio/Vídeo no Android 8
-* Corrigir condições de corrida na nova integração de chamada
-* Corrigir compressão de vídeo permanecendo

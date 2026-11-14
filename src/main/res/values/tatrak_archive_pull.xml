@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_archive_pull">Swipe down to see archive</string>
+    <string name="tatrak_archive_release">Release to see archive</string>
+    <string name="tatrak_archive_hide">Hide above list</string>
+    <string name="tatrak_archive_pin">Pin in chat list</string>
+    <string name="tatrak_drawer_close">Close menu</string>
+</resources>

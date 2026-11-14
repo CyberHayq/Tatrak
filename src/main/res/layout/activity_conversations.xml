@@ -2,8 +2,8 @@
 <layout xmlns:android="http://schemas.android.com/apk/res/android">
 
 
-        <FrameLayout
-            android:fitsSystemWindows="true"
+        <!-- Tatrak: draw the outgoing fragment behind the entering chat during transitions. -->
+        <androidx.fragment.app.FragmentContainerView
             android:id="@+id/main_fragment"
             android:layout_width="match_parent"
             android:layout_height="match_parent" />

@@ -1,2 +1,0 @@
-* Corrigir chamada sendo removida do mudo quando dispositivos de saída são trocados
-* Excluir todos os dispositivos Umidigi da integração de chamada

@@ -1,2 +1,0 @@
-* Adicionar a habilidade de escolher o local do backup
-* Mais URIs (tel:, mailto:) clicáveis

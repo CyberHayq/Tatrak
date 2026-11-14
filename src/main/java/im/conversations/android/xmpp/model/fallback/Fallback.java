@@ -13,6 +13,11 @@ public class Fallback extends Extension {
         super(Fallback.class);
     }
 
+    public Fallback(final String forNamespace) {
+        this();
+        this.setAttribute("for", forNamespace);
+    }
+
     public String getFor() {
         return this.getAttribute("for");
     }
@@ -49,7 +54,7 @@ public class Fallback extends Extension {
         boolean isEntire(final LocalizedContent content);
     }
 
-    private record StartEndRange(int start, int end) implements Range {
+    public record StartEndRange(int start, int end) implements Range {
         @Override
         public boolean isEntire(final LocalizedContent content) {
             return start == 0 && end >= content.content.length() - 1;

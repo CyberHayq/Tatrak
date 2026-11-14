@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_save_warning">The saved copy is not encrypted: other apps and cloud backup can read it.</string>
+    <string name="tatrak_voice_plain_warning">On this device a voice message is kept unencrypted while it is recorded and is encrypted right after.</string>
+    <string name="tatrak_voice_record">Record</string>
+    <string name="tatrak_voice_plain_mark">Recording is not encrypted yet</string>
+</resources>

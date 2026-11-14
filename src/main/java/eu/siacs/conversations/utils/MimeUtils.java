@@ -573,7 +573,7 @@ public final class MimeUtils {
 
     public static String guessMimeTypeFromUriAndMime(
             final Context context, final Uri uri, final String mime) {
-        Log.d(Config.LOGTAG, "guessMimeTypeFromUriAndMime(" + uri + "," + mime + ")");
+        Log.d(Config.LOGTAG, "guessMimeTypeFromUriAndMime(" + mime + ")"); // Tatrak: no stored file name in the log (it carries the generation id)
         final String mimeFromUri = guessMimeTypeFromUri(context, uri);
         Log.d(Config.LOGTAG, "mimeFromUri:" + mimeFromUri);
         if (PATH_PRECEDENCE_MIME_TYPE.contains(mimeFromUri)) {

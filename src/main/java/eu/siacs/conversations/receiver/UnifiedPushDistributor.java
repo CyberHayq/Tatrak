@@ -96,6 +96,17 @@ public class UnifiedPushDistributor extends BroadcastReceiver {
         final Parcelable messenger = intent.getParcelableExtra("messenger");
         final String instance = intent.getStringExtra("token");
         final List<String> features = intent.getStringArrayListExtra("features");
+        // Tatrak: resolve the authenticated caller first; report a bounded failure during storage setup.
+        if (!am.cyberhayq.chat.storage.DatabaseStorage.isReady()) {
+            am.cyberhayq.chat.storage.DatabaseStorage.notifyRequired(context);
+            if (ACTION_REGISTER.equals(action)) {
+                final Intent failed = new Intent(ACTION_REGISTRATION_FAILED).setPackage(application)
+                        .putExtra("token", instance).putExtra(EXTRA_MESSAGE, "Open Tatrak to finish local storage setup");
+                if (messenger instanceof Messenger m) sendRegistrationFailed(m, "Open Tatrak to finish local storage setup");
+                else context.sendBroadcast(failed);
+            }
+            return;
+        }
         switch (Strings.nullToEmpty(action)) {
             case ACTION_REGISTER -> register(context, application, instance, features, messenger);
             case ACTION_UNREGISTER -> unregister(context, instance);

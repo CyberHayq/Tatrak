@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!--
+        Tatrak: XML-only restyle of the onboarding and account screens (welcome, pick server,
+        magic create, invite, edit account, import backup). Colours come from theme attributes only,
+        so the Tatrak neutrals, every accent preset and the Slate and Sea style apply as on the
+        other screens. Values follow the Compose setup screen (SetupModeScreen).
+    -->
+
+    <!-- Set as android:theme on a layout root: default text field and card styles for that layout. -->
+    <style name="ThemeOverlay.Tatrak.Onboarding" parent="">
+        <item name="textInputStyle">@style/Widget.Tatrak.Onboarding.TextField</item>
+        <item name="materialCardViewStyle">@style/Widget.Tatrak.Onboarding.Card</item>
+    </style>
+
+    <!-- Full-width accent button with rounded corners. -->
+    <style name="Widget.Tatrak.Onboarding.PrimaryButton" parent="Widget.Material3.Button">
+        <item name="android:minHeight">52dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.Tatrak.Onboarding.Button</item>
+    </style>
+
+    <!-- Secondary action under the primary button: accent text, same height and shape. -->
+    <style name="Widget.Tatrak.Onboarding.SecondaryButton" parent="Widget.Material3.Button.TextButton">
+        <item name="android:minHeight">48dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="cornerRadius">12dp</item>
+        <item name="android:textAppearance">@style/TextAppearance.Tatrak.Onboarding.Button</item>
+    </style>
+
+    <style name="Widget.Tatrak.Onboarding.TextField" parent="Widget.Material3.TextInputLayout.OutlinedBox">
+        <item name="boxCornerRadiusTopStart">12dp</item>
+        <item name="boxCornerRadiusTopEnd">12dp</item>
+        <item name="boxCornerRadiusBottomStart">12dp</item>
+        <item name="boxCornerRadiusBottomEnd">12dp</item>
+    </style>
+
+    <!-- Flat grouped section on the neutral surface, like the setup screen's cards. -->
+    <style name="Widget.Tatrak.Onboarding.Card" parent="Widget.Material3.CardView.Filled">
+        <item name="cardBackgroundColor">?attr/colorSurfaceVariant</item>
+        <item name="cardCornerRadius">16dp</item>
+        <item name="cardElevation">0dp</item>
+        <item name="strokeWidth">0dp</item>
+    </style>
+
+    <style name="TextAppearance.Tatrak.Onboarding.Title" parent="TextAppearance.Material3.HeadlineSmall">
+        <item name="android:textSize">26sp</item>
+        <item name="fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:textColor">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="TextAppearance.Tatrak.Onboarding.Body" parent="TextAppearance.Material3.BodyLarge">
+        <item name="android:textSize">15sp</item>
+        <item name="android:textColor">?attr/colorOnSurfaceVariant</item>
+    </style>
+
+    <style name="TextAppearance.Tatrak.Onboarding.Button" parent="TextAppearance.Material3.LabelLarge">
+        <item name="android:textSize">16sp</item>
+        <item name="fontFamily">sans-serif-medium</item>
+        <item name="android:fontFamily">sans-serif-medium</item>
+        <item name="android:letterSpacing">0</item>
+        <item name="android:textAllCaps">false</item>
+    </style>
+    <dimen name="tatrak_onboarding_logo">120dp</dimen>
+</resources>

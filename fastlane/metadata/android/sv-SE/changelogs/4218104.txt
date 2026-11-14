@@ -1,2 +1,0 @@
-* Åtgärdade tillgängligheten kring att lägga till bilagor
-* Åtgärdade mindre problem med användargränssnittet

@@ -41,6 +41,7 @@ import eu.siacs.conversations.utils.UIHelper;
 import eu.siacs.conversations.xmpp.Jid;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import im.conversations.android.model.Bookmark;
+import java.io.File;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -65,8 +66,17 @@ public class AvatarService {
     private static final String PREFIX_ACCOUNT = "account";
     private static final String PREFIX_GENERIC = "generic";
 
+    // Tatrak: 256 entries (shared by all sizes) were fewer than the chats of a long list, so every
+    // list refresh evicted and redrew all avatars; bound by memory instead
     private final Cache<String, AvatarWithSurface> cache =
-            CacheBuilder.newBuilder().maximumSize(256).build();
+            CacheBuilder.newBuilder()
+                    .maximumWeight(32L * 1024 * 1024)
+                    .<String, AvatarWithSurface>weigher(
+                            (key, avatar) ->
+                                    avatar.bitmap == null
+                                            ? 1
+                                            : avatar.bitmap.getAllocationByteCount())
+                    .build();
     private final Set<Integer> sizes = new HashSet<>();
     private final Multimap<String, String> conversationDependentKeys = ArrayListMultimap.create();
 
@@ -708,8 +718,9 @@ public class AvatarService {
         }
 
         if (user.getAvatar() != null) {
-            Uri uri = mXmppConnectionService.getFileBackend().getAvatarUri(user.getAvatar());
-            if (drawTile(canvas, uri, left, top, right, bottom)) {
+            // Tatrak: the avatar file, decoded through the media store (FileBackend.cropCenter)
+            final File file = mXmppConnectionService.getFileBackend().getAvatarFile(user.getAvatar());
+            if (drawTile(canvas, file, left, top, right, bottom)) {
                 return;
             }
         }
@@ -732,11 +743,9 @@ public class AvatarService {
             final int bottom) {
         String avatar = account.getAvatar();
         if (avatar != null) {
-            Uri uri = mXmppConnectionService.getFileBackend().getAvatarUri(avatar);
-            if (uri != null) {
-                if (drawTile(canvas, uri, left, top, right, bottom)) {
-                    return;
-                }
+            final File file = mXmppConnectionService.getFileBackend().getAvatarFile(avatar);
+            if (drawTile(canvas, file, left, top, right, bottom)) {
+                return;
             }
         }
         var character = getFirstLetter(account);
@@ -772,16 +781,16 @@ public class AvatarService {
 
     private boolean drawTile(
             final Canvas canvas,
-            final Uri uri,
+            final File file,
             final int left,
             final int top,
             final int right,
             final int bottom) {
-        if (uri != null) {
+        if (file != null) {
             Bitmap bitmap =
                     mXmppConnectionService
                             .getFileBackend()
-                            .cropCenter(uri, bottom - top, right - left);
+                            .cropCenter(file, bottom - top, right - left);
             if (bitmap != null) {
                 drawTile(canvas, bitmap, left, top, right, bottom);
                 return true;

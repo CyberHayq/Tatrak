@@ -1,12 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
-    <SwitchPreferenceCompat
-        android:defaultValue="@bool/use_shared_storage"
-        android:icon="@drawable/ic_save_24dp"
-        android:key="use_shared_storage"
-        android:summary="@string/pref_save_to_gallery_summary"
-        android:title="@string/pref_save_to_gallery" />
+    <!-- Tatrak: "store in shared folders" removed; every attachment is encrypted in the app -->
     <PreferenceCategory android:title="@string/pref_category_receiving">
         <ListPreference
             android:defaultValue="@integer/auto_accept_filesize"

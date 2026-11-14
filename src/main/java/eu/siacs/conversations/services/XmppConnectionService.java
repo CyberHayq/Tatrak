@@ -237,6 +237,14 @@ public class XmppConnectionService extends Service {
     private final MessageGenerator mMessageGenerator = new MessageGenerator(this);
     public OnContactStatusChanged onContactStatusChanged =
             (contact, online) -> {
+                final var connection = contact.getAccount().getXmppConnection();
+                if (online && connection != null) {
+                    // Tatrak: a cached "last seen" is stale once the contact has been online
+                    connection
+                            .getManager(
+                                    eu.siacs.conversations.xmpp.manager.LastActivityManager.class)
+                            .forget(contact);
+                }
                 final var conversation = find(contact);
                 if (conversation == null) {
                     return;
@@ -447,6 +455,15 @@ public class XmppConnectionService extends Service {
 
     @Override
     public int onStartCommand(final Intent intent, int flags, int startId) {
+        if (this.databaseBackend == null) {
+            // A foreground start can race initial storage admission; satisfy Android's deadline.
+            if (Compatibility.twentySix()) {
+                mNotificationService.initializeChannels();
+                toggleForegroundService();
+            }
+            stopSelf();
+            return START_NOT_STICKY;
+        }
         final String action = Strings.nullToEmpty(intent == null ? null : intent.getAction());
         final boolean needsForegroundService =
                 intent != null
@@ -672,7 +689,7 @@ public class XmppConnectionService extends Service {
             case Intent.ACTION_SEND:
                 final Uri uri = intent == null ? null : intent.getData();
                 if (uri != null) {
-                    Log.d(Config.LOGTAG, "received uri permission for " + uri);
+                    Log.d(Config.LOGTAG, "received uri permission"); // Tatrak: no stored file name in the log (it carries the generation id)
                 }
                 return START_STICKY;
             case ACTION_TEMPORARILY_DISABLE:
@@ -1056,6 +1073,12 @@ public class XmppConnectionService extends Service {
     @SuppressLint("TrulyRandom")
     @Override
     public void onCreate() {
+        // Tatrak: startup migration is isolated from XMPP and all service writers.
+        if (!am.cyberhayq.chat.storage.DatabaseStorage.isReady()) {
+            am.cyberhayq.chat.storage.DatabaseStorage.notifyRequired(this);
+            stopSelf();
+            return;
+        }
         LibIdnXmppStringprep.setup();
         if (Compatibility.twentySix()) {
             mNotificationService.initializeChannels();
@@ -1525,7 +1548,7 @@ public class XmppConnectionService extends Service {
                     @Override
                     public void onSuccess(final Set<String> available) {
                         if (available.isEmpty()) {
-                            if (account.httpUploadAvailable(file.length())
+                            if (account.httpUploadAvailable(am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(file)) // Tatrak: plaintext length
                                     || message.getConversation().getMode()
                                             == Conversation.MODE_MULTI) {
                                 mHttpConnectionManager.createNewUploadConnection(message, delay);
@@ -1636,7 +1659,7 @@ public class XmppConnectionService extends Service {
                 case Message.ENCRYPTION_NONE:
                     if (message.needsUploading()) {
                         if (account.httpUploadAvailable(
-                                        fileBackend.getFile(message, false).length())
+                                        am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(fileBackend.getFile(message, false))) // Tatrak: plaintext length
                                 || conversation.getMode() == Conversation.MODE_MULTI
                                 || message.fixCounterpart()) {
                             this.sendFileMessage(message, delay, forceP2P);
@@ -1651,7 +1674,7 @@ public class XmppConnectionService extends Service {
                 case Message.ENCRYPTION_DECRYPTED:
                     if (message.needsUploading()) {
                         if (account.httpUploadAvailable(
-                                        fileBackend.getFile(message, false).length())
+                                        am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(fileBackend.getFile(message, false))) // Tatrak: plaintext length
                                 || conversation.getMode() == Conversation.MODE_MULTI
                                 || message.fixCounterpart()) {
                             this.sendFileMessage(message, delay, forceP2P);
@@ -1666,7 +1689,7 @@ public class XmppConnectionService extends Service {
                     message.setFingerprint(account.getAxolotlService().getOwnFingerprint());
                     if (message.needsUploading()) {
                         if (account.httpUploadAvailable(
-                                        fileBackend.getFile(message, false).length())
+                                        am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(fileBackend.getFile(message, false))) // Tatrak: plaintext length
                                 || conversation.getMode() == Conversation.MODE_MULTI
                                 || message.fixCounterpart()) {
                             this.sendFileMessage(message, delay, forceP2P);
@@ -1962,14 +1985,14 @@ public class XmppConnectionService extends Service {
     private void markFileDeleted(final File file) {
         synchronized (FILENAMES_TO_IGNORE_DELETION) {
             if (FILENAMES_TO_IGNORE_DELETION.remove(file.getAbsolutePath())) {
-                Log.d(Config.LOGTAG, "ignored deletion of " + file.getAbsolutePath());
+                Log.d(Config.LOGTAG, "ignored deletion of a file"); // Tatrak: no stored file name in the log (it carries the generation id)
                 return;
             }
         }
         final var uuids = databaseBackend.markFileAsDeleted(file);
         Log.d(
                 Config.LOGTAG,
-                "deleted file " + file.getAbsolutePath() + ", database hits=" + uuids.size());
+                "deleted a file, database hits=" + uuids.size()); // Tatrak: no stored file name in the log
         markUuidsAsDeletedFiles(uuids);
     }
 
@@ -2502,6 +2525,8 @@ public class XmppConnectionService extends Service {
 
     public void deleteAccount(final Account account) {
         final boolean connected = account.getStatus() == Account.State.ONLINE;
+        // Tatrak: the account's conversations, to delete their messages and files below
+        final var removed = new ArrayList<Conversation>();
         synchronized (this.conversations) {
             if (connected) {
                 account.getAxolotlService().deleteOmemoIdentity();
@@ -2516,6 +2541,7 @@ public class XmppConnectionService extends Service {
                         }
                     }
                     conversations.remove(conversation);
+                    removed.add(conversation);
                     mNotificationService.clear(conversation);
                 }
             }
@@ -2529,9 +2555,17 @@ public class XmppConnectionService extends Service {
                     });
             mDatabaseWriterExecutor.execute(
                     () -> {
+                        // Tatrak: on account removal delete
+                        // the files no other message uses (as clearing a history does) and compact
+                        final var files = new ArrayList<DatabaseBackend.FilePathInfo>();
+                        for (final Conversation conversation : removed) {
+                            files.addAll(databaseBackend.deleteMessagesInConversation(conversation));
+                        }
                         if (databaseBackend.deleteAccount(account)) {
                             Log.d(Config.LOGTAG, "deleted account from database");
                         }
+                        FILE_ATTACHMENT_EXECUTOR.execute(() -> deleteFiles(files));
+                        databaseBackend.vacuum();
                     });
             this.accounts.remove(account);
             if (CallIntegration.hasSystemFeature(this)) {
@@ -3118,7 +3152,7 @@ public class XmppConnectionService extends Service {
 
     @Override
     public IBinder onBind(Intent intent) {
-        return mBinder;
+        return databaseBackend == null ? null : mBinder;
     }
 
     public void updateMessage(Message message) {
@@ -3821,7 +3855,7 @@ public class XmppConnectionService extends Service {
                 }
                 if (file.delete()) {
                     final var num = count.getAndIncrement();
-                    Log.d(Config.LOGTAG, "deleted file #" + num + " " + file.getAbsolutePath());
+                    Log.d(Config.LOGTAG, "deleted file #" + num); // Tatrak: no stored file name in the log (it carries the generation id)
                 }
             }
         }

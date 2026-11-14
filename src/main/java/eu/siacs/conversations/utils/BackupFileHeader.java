@@ -9,8 +9,15 @@ import java.time.Instant;
 
 public class BackupFileHeader {
 
-    private static final int VERSION = 2;
+    // Tatrak: version 4 derives the key with Argon2id (as monocles chat); version 2 (PBKDF2, 1024
+    // iterations) is still read so older backups import
+    public static final int VERSION = 4;
+    public static final int LEGACY_VERSION = 2;
+    // Tatrak: Argon2id like 4; other apps refuse it instead of misreading Tatrak-only rows, and it
+    // stays above any plausible monocles version
+    public static final int TATRAK_VERSION = 1001;
 
+    private final int version;
     private final String app;
     private final Jid jid;
     private final long timestamp;
@@ -36,6 +43,12 @@ public class BackupFileHeader {
     }
 
     public BackupFileHeader(String app, Jid jid, long timestamp, byte[] iv, byte[] salt) {
+        this(VERSION, app, jid, timestamp, iv, salt);
+    }
+
+    public BackupFileHeader(
+            int version, String app, Jid jid, long timestamp, byte[] iv, byte[] salt) {
+        this.version = version;
         this.app = app;
         this.jid = jid;
         this.timestamp = timestamp;
@@ -44,7 +57,7 @@ public class BackupFileHeader {
     }
 
     public void write(DataOutputStream dataOutputStream) throws IOException {
-        dataOutputStream.writeInt(VERSION);
+        dataOutputStream.writeInt(version);
         dataOutputStream.writeUTF(app);
         dataOutputStream.writeUTF(jid.asBareJid().toString());
         dataOutputStream.writeLong(timestamp);
@@ -61,17 +74,21 @@ public class BackupFileHeader {
         inputStream.readFully(iv);
         final byte[] salt = new byte[16];
         inputStream.readFully(salt);
-        if (version < VERSION) {
+        if (version < LEGACY_VERSION) {
             throw new OutdatedBackupFileVersion();
         }
-        if (version != VERSION) {
+        if (version != LEGACY_VERSION && version != VERSION && version != TATRAK_VERSION) {
             throw new IllegalArgumentException(
                     "Backup File version was "
                             + version
                             + " but app only supports version "
                             + VERSION);
         }
-        return new BackupFileHeader(app, Jid.of(jid), timestamp, iv, salt);
+        return new BackupFileHeader(version, app, Jid.of(jid), timestamp, iv, salt);
+    }
+
+    public int getVersion() {
+        return version;
     }
 
     public byte[] getSalt() {

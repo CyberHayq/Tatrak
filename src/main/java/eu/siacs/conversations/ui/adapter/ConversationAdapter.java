@@ -78,7 +78,7 @@ public class ConversationAdapter
                             com.google.android.material.R.attr.colorSurface));
         }
 
-        final Message message = conversation.getLatestMessage();
+        final Message message = conversation.getLatestVisibleMessage(); // Tatrak: skip "deleted for me"
         final int status = message.getStatus();
         final int unreadCount = conversation.unreadCount();
         final boolean isRead = conversation.isRead();
@@ -238,7 +238,7 @@ public class ConversationAdapter
         if (draft != null) {
             timestamp = draft.instant().toEpochMilli();
         } else {
-            timestamp = conversation.getLatestMessage().getTimeSent();
+            timestamp = conversation.getLatestVisibleMessage().getTimeSent();
         }
         viewHolder.binding.pinnedOnTop.setVisibility(
                 conversation.isPinnedOnTop() ? View.VISIBLE : View.GONE);

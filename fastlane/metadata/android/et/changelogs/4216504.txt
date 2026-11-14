@@ -1,2 +1,0 @@
-* Veaparandus olukorrale, kus edastusserveri kasutamine on kliendis määratud, kuid serveris mitte ja kõned jäid ühendamata
-* Mõned ribalaiuse optimeerimised

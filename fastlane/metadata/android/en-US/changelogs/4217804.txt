@@ -1,2 +1,0 @@
-* Add 'Note to self' as search suggestion
-* Minor bug fixes

@@ -1,1 +1,0 @@
-* Corretta regressione (crash alla connessione) introdotta nella versione precedente

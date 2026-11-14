@@ -1,2 +1,0 @@
-* Mostrar estados da mensagem como ícones
-* Introduzir configuração 'Fonte grande' para as bolhas de mensagens

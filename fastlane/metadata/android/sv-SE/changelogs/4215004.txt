@@ -1,2 +1,0 @@
-* Ladda upp och visa högupplösta profilbilder på servrar som har stöd för det
-* Stöd för 'XEP-0425: Moderated Message Retraction' i publika gruppchattar

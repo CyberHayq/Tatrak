@@ -255,6 +255,9 @@ public final class CryptoHelper {
 
     public static @StringRes int encryptionTypeToText(final int encryption) {
         return switch (encryption) {
+            case Message.ENCRYPTION_IMPORTED_PQ,
+                    Message.ENCRYPTION_IMPORTED_PQ_UNAVAILABLE,
+                    Message.ENCRYPTION_IMPORTED_PQ_FAILED -> R.string.tatrak_backup_pq_history;
             case Message.ENCRYPTION_OTR -> R.string.encryption_choice_otr;
             case Message.ENCRYPTION_AXOLOTL,
                     Message.ENCRYPTION_AXOLOTL_NOT_FOR_THIS_DEVICE,

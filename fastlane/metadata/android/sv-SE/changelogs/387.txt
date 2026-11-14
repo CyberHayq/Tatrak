@@ -1,2 +1,0 @@
-* Omarbetat inloggning med certifikatgränssnitt
-* Lagt till möjlighet att fästa chattar överst (lägga till som favoriter)

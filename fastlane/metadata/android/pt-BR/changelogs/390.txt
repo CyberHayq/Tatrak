@@ -1,1 +1,0 @@
-* Oferecer para gravar uma mensagem de voz quando o destinatário estiver ocupado

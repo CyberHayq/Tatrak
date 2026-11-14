@@ -77,6 +77,11 @@ public class BackupSettingsFragment extends XmppPreferenceFragment {
                     "The preference resource file is missing some preferences");
         }
         final var appSettings = new AppSettings(requireContext());
+        // Tatrak: no XML default, so a stored old Conversations switch still decides until now
+        final ListPreference backupFormat = findPreference(AppSettings.BACKUP_FORMAT);
+        if (backupFormat != null) {
+            backupFormat.setValue(appSettings.getBackupFormat());
+        }
         backupLocation.setSummary(
                 getString(
                         R.string.pref_create_backup_summary,
@@ -181,6 +186,12 @@ public class BackupSettingsFragment extends XmppPreferenceFragment {
     }
 
     private void startOneOffBackup() {
+        if (AppSettings.BACKUP_FORMAT_CONVERSATIONS.equals(new AppSettings(requireContext()).getBackupFormat())
+                && ExportBackupWorker.hasImportedPq(eu.siacs.conversations.persistance.DatabaseBackend.getInstance(requireContext()))) {
+            new MaterialAlertDialogBuilder(requireActivity()).setMessage(R.string.tatrak_backup_compatible_pq)
+                    .setPositiveButton(R.string.ok, null).show();
+            return;
+        }
         final OneTimeWorkRequest exportBackupWorkRequest =
                 new OneTimeWorkRequest.Builder(ExportBackupWorker.class)
                         .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)

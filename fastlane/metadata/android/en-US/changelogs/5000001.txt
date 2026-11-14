@@ -1,0 +1,1 @@
+First release, based on Conversations 2.21.0. Messages and media are encrypted on the device: the history in an SQLCipher database, attachments, voice messages, avatars, wallpapers and stickers in encrypted files. New interface with chat folders, archive and multi-select; replies, delete for everyone and sticker packs. OMEMO and OpenPGP are unchanged.

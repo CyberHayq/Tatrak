@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tatrak: the in-app photo and video viewer (MediaViewerActivity) -->
+<resources>
+    <string name="tatrak_viewer_counter">%1$d of %2$d</string>
+    <string name="tatrak_viewer_play">Play</string>
+    <string name="tatrak_viewer_pause">Pause</string>
+    <string name="tatrak_viewer_load_failed">Could not open the file</string>
+</resources>

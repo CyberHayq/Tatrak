@@ -1,1 +1,0 @@
-* Combinar as accións relativas ao código QR (mostrar, convidar, escanear) nun único menú

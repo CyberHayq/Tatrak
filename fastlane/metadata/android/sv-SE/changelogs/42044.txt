@@ -1,3 +1,0 @@
-* Åtgärdat meddelanden som skickas om när man använder SASL2
-* Åtgärdat svart video mellan vissa enheter
-* Åtgärdat krasch med tomma lösenord

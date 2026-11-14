@@ -1,29 +1,29 @@
 package eu.siacs.conversations.ui;
 
+import am.cyberhayq.chat.storage.media.VoiceStream;
+import am.cyberhayq.chat.ui.storage.MediaPrompts;
 import android.app.Activity;
 import android.content.Intent;
-import android.media.MediaRecorder;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.FileObserver;
 import android.os.Handler;
 import android.util.Log;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.Toast;
+import androidx.appcompat.app.AlertDialog;
+import androidx.core.view.ViewCompat;
+import androidx.core.widget.TextViewCompat;
 import androidx.databinding.DataBindingUtil;
 import com.google.common.base.Stopwatch;
 import eu.siacs.conversations.AppSettings;
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.databinding.ActivityRecordingBinding;
-import eu.siacs.conversations.persistance.FileBackend;
 import eu.siacs.conversations.utils.TimeFrameUtils;
 import java.io.File;
 import java.lang.ref.WeakReference;
-import java.util.Objects;
-import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 public class RecordingActivity extends BaseActivity implements View.OnClickListener {
@@ -32,10 +32,10 @@ public class RecordingActivity extends BaseActivity implements View.OnClickListe
 
     private ActivityRecordingBinding binding;
 
-    private MediaRecorder mRecorder;
+    // Tatrak: VoiceStream records into the media store (a plain file only where a pipe failed)
+    private VoiceStream.Session mRecorder;
+    private AlertDialog voiceWarning;
     private Stopwatch stopwatch;
-
-    private final CountDownLatch outputFileWrittenLatch = new CountDownLatch(1);
 
     private final Handler mHandler = new Handler();
     private final Runnable mTickExecutor =
@@ -48,8 +48,6 @@ public class RecordingActivity extends BaseActivity implements View.OnClickListe
             };
 
     private boolean autoSendRecording = false;
-    private File mOutputFile;
-    private FileObserver mFileObserver;
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
@@ -102,7 +100,25 @@ public class RecordingActivity extends BaseActivity implements View.OnClickListe
     @Override
     public void onStart() {
         super.onStart();
-        if (!startRecording()) {
+        record();
+    }
+
+    // Tatrak: a recording through a plain file is announced once, also right after a failed pipe
+    // start; "Record" starts it, "Cancel" closes the screen
+    private void record() {
+        if (!MediaPrompts.voiceWarningDue(this) && startRecording()) {
+            return;
+        }
+        if (MediaPrompts.voiceWarningDue(this)) {
+            voiceWarning =
+                    MediaPrompts.warnPlainVoice(
+                            this,
+                            this::record,
+                            () -> {
+                                setResult(RESULT_CANCELED);
+                                finish();
+                            });
+        } else {
             this.binding.shareButton.setEnabled(false);
             this.binding.timer.setTextAppearance(
                     com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
@@ -118,146 +134,84 @@ public class RecordingActivity extends BaseActivity implements View.OnClickListe
             mHandler.removeCallbacks(mTickExecutor);
             stopRecording(false);
         }
-        if (mFileObserver != null) {
-            mFileObserver.stopWatching();
+        if (voiceWarning != null) {
+            voiceWarning.dismiss(); // asked again by onStart
+            voiceWarning = null;
         }
     }
 
     private boolean startRecording() {
-        mRecorder = new MediaRecorder();
-        stopwatch = Stopwatch.createUnstarted();
-        try {
-            mRecorder.setAudioSource(MediaRecorder.AudioSource.MIC);
-        } catch (final RuntimeException e) {
-            Log.e(Config.LOGTAG, "could not set audio source", e);
+        mRecorder = VoiceStream.start(this);
+        if (mRecorder == null) {
             return false;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            mRecorder.setPrivacySensitive(true);
+        stopwatch = Stopwatch.createStarted();
+        if (mRecorder.getPlainFile()) {
+            this.binding.timer.setCompoundDrawablesRelativeWithIntrinsicBounds(
+                    R.drawable.ic_lock_open_outline_24dp, 0, 0, 0);
+            TextViewCompat.setCompoundDrawableTintList(
+                    this.binding.timer, this.binding.timer.getTextColors());
+            ViewCompat.setStateDescription(
+                    this.binding.timer, getString(R.string.tatrak_voice_plain_mark));
         }
-        final int outputFormat;
-        if (Config.USE_OPUS_VOICE_MESSAGES && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            outputFormat = MediaRecorder.OutputFormat.OGG;
-            mRecorder.setOutputFormat(outputFormat);
-            mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.OPUS);
-            mRecorder.setAudioEncodingBitRate(32_000);
-        } else {
-            outputFormat = MediaRecorder.OutputFormat.MPEG_4;
-            mRecorder.setOutputFormat(outputFormat);
-            // Changing these three settings for AAC sensitive devices for Android<=13 might
-            // lead to sporadically truncated (cut-off) voice messages.
-            mRecorder.setAudioEncoder(MediaRecorder.AudioEncoder.HE_AAC);
-            mRecorder.setAudioSamplingRate(24_000);
-            mRecorder.setAudioEncodingBitRate(28_000);
-        }
-        setupOutputFile(outputFormat);
-        mRecorder.setOutputFile(mOutputFile.getAbsolutePath());
-
-        try {
-            mRecorder.prepare();
-            mRecorder.start();
-            stopwatch.start();
-            mHandler.postDelayed(mTickExecutor, 100);
-            Log.d(Config.LOGTAG, "started recording to " + mOutputFile.getAbsolutePath());
-            return true;
-        } catch (Exception e) {
-            Log.e(Config.LOGTAG, "prepare() failed ", e);
-            return false;
-        }
+        mHandler.postDelayed(mTickExecutor, 100);
+        return true;
     }
 
     protected void stopRecording(final boolean saveFile) {
-        try {
-            mRecorder.stop();
-            mRecorder.release();
-            if (stopwatch.isRunning()) {
-                stopwatch.stop();
-            }
-        } catch (final Exception e) {
-            Log.d(Config.LOGTAG, "could not save recording", e);
-            if (saveFile) {
-                Toast.makeText(this, R.string.unable_to_save_recording, Toast.LENGTH_SHORT).show();
-                return;
-            }
-        } finally {
-            mRecorder = null;
+        final var recorder = mRecorder;
+        mRecorder = null;
+        if (recorder == null) {
+            return;
         }
-        if (!saveFile && mOutputFile != null) {
-            if (mOutputFile.delete()) {
-                Log.d(Config.LOGTAG, "deleted canceled recording");
-            }
+        if (stopwatch.isRunning()) {
+            stopwatch.stop();
         }
+        recorder.stop(saveFile);
         if (saveFile) {
-            new Thread(new Finisher(outputFileWrittenLatch, mOutputFile, autoSendRecording, this))
-                    .start();
+            new Thread(new Finisher(recorder, autoSendRecording, this)).start();
         }
     }
 
     private static class Finisher implements Runnable {
 
-        private final CountDownLatch latch;
-        private final File outputFile;
+        private final VoiceStream.Session recording;
         private final boolean autoSendRecording;
         private final WeakReference<Activity> activityReference;
 
         private Finisher(
-                final CountDownLatch latch,
-                final File outputFile,
+                final VoiceStream.Session recording,
                 final boolean autoSendRecording,
                 final Activity activity) {
-            this.latch = latch;
-            this.outputFile = outputFile;
+            this.recording = recording;
             this.autoSendRecording = autoSendRecording;
             this.activityReference = new WeakReference<>(activity);
         }
 
         @Override
         public void run() {
-            try {
-                if (!latch.await(8, TimeUnit.SECONDS)) {
-                    Log.d(Config.LOGTAG, "time out waiting for output file to be written");
-                }
-            } catch (final InterruptedException e) {
-                Log.d(Config.LOGTAG, "interrupted while waiting for output file to be written", e);
-            }
+            final File outputFile = recording.await();
             final Activity activity = activityReference.get();
             if (activity == null) {
                 return;
             }
-            activity.runOnUiThread(() -> finish(activity));
+            activity.runOnUiThread(() -> finish(activity, outputFile));
         }
 
-        private void finish(final Activity activity) {
+        private void finish(final Activity activity, final File outputFile) {
+            if (outputFile == null) {
+                Toast.makeText(activity, R.string.unable_to_save_recording, Toast.LENGTH_SHORT)
+                        .show();
+                activity.setResult(Activity.RESULT_CANCELED);
+                activity.finish();
+                return;
+            }
             final var intent = new Intent();
             intent.setData(Uri.fromFile(outputFile));
             intent.putExtra(EXTRA_AUTO_SEND_RECORDING, autoSendRecording);
             activity.setResult(Activity.RESULT_OK, intent);
             activity.finish();
         }
-    }
-
-    private void setupOutputFile(final int outputFormat) {
-        mOutputFile = new FileBackend.Cache(this).recording(outputFormat);
-        final File parentDirectory = mOutputFile.getParentFile();
-        if (Objects.requireNonNull(parentDirectory).mkdirs()) {
-            Log.d(Config.LOGTAG, "created " + parentDirectory.getAbsolutePath());
-        }
-        setupFileObserver(parentDirectory);
-    }
-
-    private void setupFileObserver(final File directory) {
-        mFileObserver =
-                new FileObserver(directory.getAbsolutePath()) {
-                    @Override
-                    public void onEvent(int event, String s) {
-                        if (s != null
-                                && s.equals(mOutputFile.getName())
-                                && event == FileObserver.CLOSE_WRITE) {
-                            outputFileWrittenLatch.countDown();
-                        }
-                    }
-                };
-        mFileObserver.startWatching();
     }
 
     private void tick() {

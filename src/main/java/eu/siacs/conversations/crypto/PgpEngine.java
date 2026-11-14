@@ -101,9 +101,9 @@ public class PgpEngine {
                     Log.d(Config.LOGTAG, "created " + outputDirectory.getAbsolutePath());
                 }
                 if (outputFile.createNewFile()) {
-                    Log.d(Config.LOGTAG, "created " + outputFile.getAbsolutePath());
+                    Log.d(Config.LOGTAG, "created the output file"); // Tatrak: no stored file name in the log
                 }
-                is = new FileInputStream(inputFile);
+                is = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().inputStream(inputFile); // Tatrak: plaintext from the media store
                 os = new FileOutputStream(outputFile);
             } catch (final IOException e) {
                 return Futures.immediateFailedFuture(e);

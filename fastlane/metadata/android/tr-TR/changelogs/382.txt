@@ -1,2 +1,0 @@
-* Video görüşmesi sırasında kamerayı değiştirmek için bir düğme eklendi
-* Tabletlerdeki sesli aramalar düzeltildi

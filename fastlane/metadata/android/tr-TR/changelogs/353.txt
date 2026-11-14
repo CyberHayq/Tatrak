@@ -1,4 +1,0 @@
-* Kullanıcıların kendi takma adlarını ayarlamalarına izin verildi
-* OMEMO şifreli dosyaların indirilmesi devam ettirildi
-* Kanallar artık avatar simgesi olarak '#' kullanıyor
-* Quicksy, varsayılan OMEMO şifrelemesi olarak 'her zaman' kullanıyor (kilit simgesini gizliyor)

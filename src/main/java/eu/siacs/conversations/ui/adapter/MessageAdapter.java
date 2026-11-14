@@ -852,7 +852,8 @@ public class MessageAdapter extends ArrayAdapter<Message> {
             final BubbleMessageItemViewHolder viewHolder) {
         final boolean omemoEncryption = message.getEncryption() == Message.ENCRYPTION_AXOLOTL;
         final boolean isInValidSession =
-                message.isValidInSession() && (!omemoEncryption || message.isTrusted());
+                !(message.getEncryption() >= 8 && message.getEncryption() <= 10)
+                        && message.isValidInSession() && (!omemoEncryption || message.isTrusted());
         final Conversational conversation = message.getConversation();
         final Account account = conversation.getAccount();
 
@@ -921,7 +922,10 @@ public class MessageAdapter extends ArrayAdapter<Message> {
 
         final Transferable transferable = message.getTransferable();
         final boolean unInitiatedButKnownSize = MessageUtils.unInitiatedButKnownSize(message);
-        if (unInitiatedButKnownSize
+        if (message.getType() == Message.TYPE_RETRACTED) {
+            displayInfoMessage(
+                    viewHolder, UIHelper.getMessagePreview(activity, message).first, bubbleColor);
+        } else if (unInitiatedButKnownSize
                 || message.isDeleted()
                 || (transferable != null
                         && transferable.getStatus() != Transferable.STATUS_UPLOADING)) {
@@ -950,6 +954,10 @@ public class MessageAdapter extends ArrayAdapter<Message> {
                         UIHelper.getMessagePreview(activity, message).first,
                         bubbleColor);
             }
+        } else if (message.getEncryption() == Message.ENCRYPTION_IMPORTED_PQ_UNAVAILABLE
+                || message.getEncryption() == Message.ENCRYPTION_IMPORTED_PQ_FAILED) {
+            // Tatrak: unavailable imported ciphertext must not enter media/download rendering.
+            displayInfoMessage(viewHolder, activity.getString(R.string.tatrak_backup_pq_unavailable), bubbleColor);
         } else if (message.isFileOrImage()
                 && message.getEncryption() != Message.ENCRYPTION_PGP
                 && message.getEncryption() != Message.ENCRYPTION_DECRYPTION_FAILED) {
@@ -1404,7 +1412,7 @@ public class MessageAdapter extends ArrayAdapter<Message> {
             return;
         }
         final var file = activity.xmppConnectionService.getFileBackend().getFile(message);
-        ViewUtil.view(activity, file, message.getUuid());
+        ViewUtil.view(activity, file, message);
     }
 
     private void showLocation(final Message message) {

@@ -15,6 +15,7 @@ import eu.siacs.conversations.entities.Contact;
 import eu.siacs.conversations.entities.Conversation;
 import eu.siacs.conversations.entities.Conversational;
 import eu.siacs.conversations.entities.Message;
+import eu.siacs.conversations.entities.ReplyTo;
 import eu.siacs.conversations.http.HttpConnectionManager;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.utils.CryptoHelper;
@@ -57,6 +58,7 @@ import im.conversations.android.xmpp.model.occupant.OccupantId;
 import im.conversations.android.xmpp.model.oob.OutOfBandData;
 import im.conversations.android.xmpp.model.pubsub.event.Event;
 import im.conversations.android.xmpp.model.reactions.Reactions;
+import im.conversations.android.xmpp.model.reply.Reply;
 import im.conversations.android.xmpp.model.retraction.Retract;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -517,6 +519,8 @@ public class MessageParser extends AbstractParser
                 }
             }
 
+            // Tatrak: taken before the outer OOB check below can relabel a decrypted OMEMO message
+            final boolean decryptedOmemo = message.getEncryption() == Message.ENCRYPTION_AXOLOTL;
             message.setCounterpart(counterpart);
             message.setRemoteMsgId(remoteMsgId);
             message.setServerMsgId(serverMsgId);
@@ -547,6 +551,44 @@ public class MessageParser extends AbstractParser
                 updateLastseen(account, from);
             }
 
+            // a retraction whose body isn't a plain fallback (e.g. an OMEMO-encrypted one): it
+            // was decrypted above so the session stays in step, but the text is never shown
+            // Tatrak: an OMEMO message counts as a retraction only when its decrypted body says
+            // so; otherwise the unencrypted <retract> was added in transit and the message is shown
+            if (isUserRetraction(packet)
+                    && (!decryptedOmemo
+                            || ModerationManager.isRetractionNotice(message.getBody()))) {
+                // the key it was encrypted with proves who sent it (see ModerationManager)
+                final String retractionFingerprint =
+                        decryptedOmemo ? message.getFingerprint() : null;
+                getManager(ModerationManager.class)
+                        .handleUserRetraction(
+                                packet,
+                                counterpart,
+                                retractionFingerprint,
+                                retractionFingerprint == null ? null : message.getBody());
+                return;
+            }
+
+            message.setReplyTo(replyTo(packet));
+
+            // Tatrak: whatever the correction setting, a correction never brings back a retracted
+            // or hidden message; same sender lookup as below
+            if (replacementId != null
+                    && getManager(ModerationManager.class)
+                            .isCorrectionOfRetracted(
+                                    conversation,
+                                    message,
+                                    replacementId,
+                                    conversation.findMessageWithUuidOrRemoteId(
+                                            replacementId,
+                                            conversationMultiMode
+                                                    ? Strings.nullToEmpty(message.getOccupantId())
+                                                    : null,
+                                            message.getStatus() == Message.STATUS_RECEIVED))) {
+                return;
+            }
+
             if (replacementId != null
                     && message.acceptMessageCorrection()
                     && mXmppConnectionService.allowMessageCorrection()) {
@@ -572,6 +614,14 @@ public class MessageParser extends AbstractParser
                                     account.getJid().asBareJid()
                                             + ": skipping already applied edit");
                             return;
+                        }
+                        final var previousReply = replacedMessage.getReplyTo();
+                        if (message.getReplyTo() != null || previousReply == null) {
+                            replacedMessage.setReplyTo(message.getReplyTo());
+                        } else {
+                            // the new body may not carry the old quote; keep the link only
+                            replacedMessage.setReplyTo(
+                                    new ReplyTo(previousReply.id, previousReply.to, -1, -1));
                         }
                         final String uuid = replacedMessage.getUuid();
                         replacedMessage.setUuid(UUID.randomUUID().toString());
@@ -657,6 +707,10 @@ public class MessageParser extends AbstractParser
                                     + serverMsgIdUpdated);
                     return;
                 }
+            }
+
+            if (getManager(ModerationManager.class).isRetracted(conversation, message)) {
+                return;
             }
 
             if (query != null
@@ -814,6 +868,9 @@ public class MessageParser extends AbstractParser
                     && originalFrom != null
                     && originalFrom.isBareJid()) {
                 getManager(ModerationManager.class).handleRetraction(original);
+            } else if (isUserRetraction(packet)) {
+                // no body, so nothing encrypted: proves nothing for an encrypted target
+                getManager(ModerationManager.class).handleUserRetraction(packet, counterpart, null);
             }
 
             // end no body
@@ -870,5 +927,24 @@ public class MessageParser extends AbstractParser
             return new Pair<>(forwardedMessage, timestamp);
         }
         return null;
+    }
+
+    private static boolean isUserRetraction(
+            final im.conversations.android.xmpp.model.stanza.Message packet) {
+        final var retract = packet.getExtension(Retract.class);
+        return retract != null && retract.getModerated() == null;
+    }
+
+    private static ReplyTo replyTo(final im.conversations.android.xmpp.model.stanza.Message packet) {
+        final var reply = packet.getExtension(Reply.class);
+        final var id = reply == null ? null : reply.getId();
+        if (id == null) {
+            return null;
+        }
+        final var range = Fallback.get(packet, Reply.class, Body.class);
+        if (range.isPresent() && range.get() instanceof Fallback.StartEndRange r) {
+            return new ReplyTo(id, reply.getTo(), r.start(), r.end());
+        }
+        return new ReplyTo(id, reply.getTo(), -1, -1);
     }
 }

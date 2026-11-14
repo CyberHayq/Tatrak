@@ -25,6 +25,7 @@ import eu.siacs.conversations.ui.adapter.UserAdapter;
 import eu.siacs.conversations.ui.util.MucDetailsContextMenuHelper;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 
@@ -34,6 +35,8 @@ public class MucUsersActivity extends XmppActivity
                 TextWatcher {
 
     private UserAdapter userAdapter;
+
+    private MucUsersCompose compose;
 
     private Conversation mConversation = null;
 
@@ -57,17 +60,19 @@ public class MucUsersActivity extends XmppActivity
     private void loadAndSubmitUsers() {
         if (mConversation != null) {
             allUsers = mConversation.getMucOptions().getUsers();
-            submitFilteredList(
-                    mSearchEditText != null ? mSearchEditText.getText().toString() : null);
+            // Tatrak: the search field is the Compose top bar's
+            submitFilteredList(compose.getNeedle());
         }
     }
 
-    private void submitFilteredList(final String search) {
+    // Tatrak: package-private for MucUsersCompose; the list also goes to the Compose screen
+    void submitFilteredList(final String search) {
+        final List<MucOptions.User> list;
         if (Strings.isNullOrEmpty(search)) {
-            userAdapter.submitList(Ordering.natural().immutableSortedCopy(allUsers));
+            list = Ordering.natural().immutableSortedCopy(allUsers);
         } else {
             final String needle = search.toLowerCase(Locale.getDefault());
-            userAdapter.submitList(
+            list =
                     Ordering.natural()
                             .immutableSortedCopy(
                                     Collections2.filter(
@@ -75,8 +80,10 @@ public class MucUsersActivity extends XmppActivity
                                             user ->
                                                     contains(
                                                             Objects.requireNonNull(user),
-                                                            needle))));
+                                                            needle)));
         }
+        userAdapter.submitList(list);
+        compose.publish(list);
     }
 
     private static boolean contains(final MucOptions.User user, final String needle) {
@@ -112,6 +119,9 @@ public class MucUsersActivity extends XmppActivity
         configureActionBar(getSupportActionBar(), true);
         this.userAdapter = new UserAdapter();
         binding.list.setAdapter(this.userAdapter);
+        // Tatrak: the Compose list over the hidden classic layout; see MucUsersCompose
+        this.compose = new MucUsersCompose(this);
+        this.compose.attach(binding.getRoot());
     }
 
     @Override

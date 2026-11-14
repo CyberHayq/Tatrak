@@ -1,1 +1,0 @@
-* Corrige les problèmes d' "Absence de connectivité" sur Android 7.1

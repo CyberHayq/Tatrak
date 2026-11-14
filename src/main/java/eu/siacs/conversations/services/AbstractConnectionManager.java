@@ -70,8 +70,10 @@ public class AbstractConnectionManager {
 
     private static InputStream openFileInputStream(
             final File file, final TransportSecurity transportSecurity)
-            throws FileNotFoundException {
-        final var fileInputStream = new FileInputStream(file);
+            throws IOException {
+        // Tatrak: the attachment's plaintext from the media store; an OpenPGP intermediate in the
+        // cache is outside the store and comes back as the plain file it is
+        final var fileInputStream = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().inputStream(file);
         if (transportSecurity == null) {
             return fileInputStream;
         } else {

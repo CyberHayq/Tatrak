@@ -1,1 +1,0 @@
-* Amélioration mineure pour la stabilité des appels A/V

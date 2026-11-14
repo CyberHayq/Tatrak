@@ -162,16 +162,41 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                 MoreExecutors.directExecutor());
     }
 
+    /**
+     * Tatrak: what a session offers. An OpenPGP file is offered as its .pgp ciphertext
+     * (`getFile(message, false)`, as the HTTP upload), never as its cleartext.
+     */
+    /**
+     * Tatrak: the encryption a received offer is stored under. An OpenPGP file (a .pgp offer)
+     * stays OpenPGP when the transport is encrypted too, so it is written to cache/ and decrypted;
+     * upstream turned it into an OMEMO attachment and kept the ciphertext.
+     */
+    static int receivedEncryption(final int offered, final boolean transportKey) {
+        if (offered == Message.ENCRYPTION_PGP) return Message.ENCRYPTION_PGP;
+        return transportKey ? Message.ENCRYPTION_AXOLOTL : offered;
+    }
+
+    /** Tatrak: the file a transfer offers, sends or writes: an OpenPGP file's .pgp in cache/, else the stored file. */
+    static File transferFile(final eu.siacs.conversations.persistance.FileBackend fileBackend, final Message message) {
+        return fileBackend.getFile(message, false);
+    }
+
+    static FileTransferDescription.File offeredFile(
+            final eu.siacs.conversations.persistance.FileBackend fileBackend, final Message message) {
+        final File file = transferFile(fileBackend, message);
+        return new FileTransferDescription.File(
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(file), // plaintext length; a .pgp's on-disk length
+                eu.siacs.conversations.persistance.FileBackend.transferName(message, file), // the message id, never the stored name
+                // an OpenPGP file is offered as what it is, as the HTTP upload does (the name's
+                // inner extension, <id>.jpg.pgp, still shows the type, as upload names do)
+                file.getName().endsWith(".pgp") ? "application/pgp-encrypted" : message.getMimeType(),
+                Collections.emptyList());
+    }
+
     private void sendSessionInitialize(final XmppAxolotlMessage xmppAxolotlMessage) {
         this.transport = setupTransport();
         this.transport.setTransportCallback(this);
-        final File file = xmppConnectionService.getFileBackend().getFile(message);
-        final var fileDescription =
-                new FileTransferDescription.File(
-                        file.length(),
-                        file.getName(),
-                        message.getMimeType(),
-                        Collections.emptyList());
+        final var fileDescription = offeredFile(xmppConnectionService.getFileBackend(), message); // Tatrak
         final var transportInfoFutureRaw = this.transport.asInitialTransportInfo();
         final var transportInfoFuture =
                 Futures.catchingAsync(
@@ -387,7 +412,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                         new TransportSecurity(
                                 keyTransportMessage.getKey(), keyTransportMessage.getIv());
                 this.message.setFingerprint(keyTransportMessage.getFingerprint());
-                this.message.setEncryption(Message.ENCRYPTION_AXOLOTL);
+                this.message.setEncryption(receivedEncryption(this.message.getEncryption(), true)); // Tatrak
             } else {
                 this.transportSecurity = null;
                 this.message.setFingerprint(null);
@@ -1002,7 +1027,8 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
             throw new IOException("No transport configured");
         }
         final var fileDescription = getLocalContentMap().requireOnlyFile();
-        final File file = xmppConnectionService.getFileBackend().getFile(message);
+        // Tatrak: an OpenPGP file travels as its .pgp ciphertext in cache/, outside the media store
+        final File file = transferFile(xmppConnectionService.getFileBackend(), message);
         final Runnable updateRunnable = new DebouncedInterfaceUpdater(xmppConnectionService);
         if (receiving) {
             return new FileReceiver(
@@ -1011,7 +1037,8 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                     transport.getInputStream(),
                     transport.getTerminationLatch(),
                     fileDescription.size,
-                    updateRunnable);
+                    updateRunnable,
+                    message.getEncryption() == Message.ENCRYPTION_PGP);
         } else {
             return new FileTransmitter(
                     file,
@@ -1400,8 +1427,9 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
             this.outputStream = outputStream;
         }
 
-        private InputStream openFileInputStream() throws FileNotFoundException {
-            final var fileInputStream = new FileInputStream(this.file);
+        private InputStream openFileInputStream() throws IOException {
+            // Tatrak: plaintext from the media store; a .pgp outside it is read as it is
+            final var fileInputStream = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().inputStream(this.file);
             if (this.transportSecurity == null) {
                 return fileInputStream;
             } else {
@@ -1439,7 +1467,7 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                 outputStream.flush();
                 Log.d(
                         Config.LOGTAG,
-                        "transmitted " + transmitted + " bytes from " + file.getAbsolutePath());
+                        "transmitted " + transmitted + " bytes"); // Tatrak: no stored file name in the log
                 final List<FileTransferDescription.Hash> hashes =
                         ImmutableList.of(
                                 new FileTransferDescription.Hash(
@@ -1464,6 +1492,10 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
     private static class FileReceiver extends AbstractFileTransceiver {
 
         private final InputStream inputStream;
+        // Tatrak: the media store's writer; the file is published only after the stream closed
+        private am.cyberhayq.chat.storage.media.MediaWriter writer;
+        // Tatrak: OpenPGP ciphertext, written as it is to cache/<name>.pgp for PgpDecryptionService
+        private final boolean openPgp;
 
         private FileReceiver(
                 final File file,
@@ -1471,19 +1503,33 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                 final InputStream inputStream,
                 final CountDownLatch transportTerminationLatch,
                 final long total,
-                final Runnable updateRunnable) {
+                final Runnable updateRunnable,
+                final boolean openPgp) {
             super(file, transportSecurity, transportTerminationLatch, total, updateRunnable);
             this.inputStream = inputStream;
+            this.openPgp = openPgp;
         }
 
-        private OutputStream openFileOutputStream() throws FileNotFoundException {
+        private OutputStream openFileOutputStream() throws IOException {
             final var directory = this.file.getParentFile();
             if (directory != null && directory.mkdirs()) {
                 Log.d(Config.LOGTAG, "created parent directory: " + directory.getAbsolutePath());
                 // TODO technically this should restart the file observer. maybe do this when file
                 // receiver is initiated
             }
-            final var fileOutputStream = new FileOutputStream(this.file);
+            // Tatrak: written through the media store, an OpenPGP .pgp as it is
+            final OutputStream fileOutputStream;
+            if (openPgp) {
+                try {
+                    fileOutputStream = new FileOutputStream(this.file);
+                } catch (final java.io.FileNotFoundException e) {
+                    // its message is the path, which names the store's generation
+                    throw new java.io.FileNotFoundException("could not create the OpenPGP file");
+                }
+            } else {
+                this.writer = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().createAttachment(this.file);
+                fileOutputStream = this.writer.getOutputStream();
+            }
             if (this.transportSecurity == null) {
                 return fileOutputStream;
             } else {
@@ -1504,23 +1550,30 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
             Log.d(Config.LOGTAG, "file receiver attempting to receive " + total + " bytes");
             final var sha1Hasher = Hashing.sha1().newHasher();
             final var sha256Hasher = Hashing.sha256().newHasher();
-            try (final var fileOutputStream = openFileOutputStream()) {
-                final var buffer = new byte[4096];
-                while (total - transmitted > 0) {
-                    final int count = inputStream.read(buffer);
-                    if (count == -1) {
-                        throw new EOFException(
-                                String.format("reached EOF after %d/%d", transmitted, total));
+            try {
+                try (final var fileOutputStream = openFileOutputStream()) {
+                    final var buffer = new byte[4096];
+                    while (total - transmitted > 0) {
+                        final int count = inputStream.read(buffer);
+                        if (count == -1) {
+                            throw new EOFException(
+                                    String.format("reached EOF after %d/%d", transmitted, total));
+                        }
+                        fileOutputStream.write(buffer, 0, count);
+                        sha1Hasher.putBytes(buffer, 0, count);
+                        sha256Hasher.putBytes(buffer, 0, count);
+                        transmitted += count;
+                        updateProgress();
                     }
-                    fileOutputStream.write(buffer, 0, count);
-                    sha1Hasher.putBytes(buffer, 0, count);
-                    sha256Hasher.putBytes(buffer, 0, count);
-                    transmitted += count;
-                    updateProgress();
+                    Log.d(
+                            Config.LOGTAG,
+                            "written " + transmitted + " bytes"); // Tatrak: no stored name in logs
                 }
-                Log.d(
-                        Config.LOGTAG,
-                        "written " + transmitted + " bytes to " + file.getAbsolutePath());
+                // Tatrak: published, and success reported, only after close() checked the transport
+                // tag (owner's logic exception, 2026-11-09); a failed tag publishes nothing
+                if (writer != null) {
+                    writer.commit();
+                }
                 final List<FileTransferDescription.Hash> hashes =
                         ImmutableList.of(
                                 new FileTransferDescription.Hash(
@@ -1531,6 +1584,11 @@ public class JingleFileTransferConnection extends AbstractJingleConnection
                                         FileTransferDescription.Algorithm.SHA_256));
                 complete.set(hashes);
             } catch (final Exception e) {
+                if (writer != null) {
+                    writer.abort();
+                } else if (openPgp && file.delete()) { // Tatrak: no partial .pgp is left
+                    Log.d(Config.LOGTAG, "deleted the partial OpenPGP file");
+                }
                 complete.setException(e);
             }
             Log.d(Config.LOGTAG, "waiting for transport to terminate before stopping thread");

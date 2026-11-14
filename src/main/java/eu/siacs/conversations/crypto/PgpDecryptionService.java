@@ -14,14 +14,12 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.util.ArrayDeque;
 import java.util.HashSet;
 import java.util.List;
-import java.util.Objects;
 import org.openintents.openpgp.OpenPgpMetadata;
 import org.openintents.openpgp.util.OpenPgpApi;
 
@@ -184,20 +182,33 @@ public class PgpDecryptionService {
                 try {
                     final File inputFile =
                             mXmppConnectionService.getFileBackend().getFile(message, false);
-                    final File outputFile =
+                    final File storedFile =
                             mXmppConnectionService.getFileBackend().getFile(message);
-                    if (Objects.requireNonNull(outputFile.getParentFile()).mkdirs()) {
-                        Log.d(
-                                Config.LOGTAG,
-                                "created parent directories for " + outputFile.getAbsolutePath());
-                    }
-                    outputFile.createNewFile();
+                    // Tatrak: a name of an older generation (a recovery import) cannot be written:
+                    // the result goes under a new name of the active one
+                    final File outputFile =
+                            am.cyberhayq.chat.storage.media.EncryptedMediaStore.get()
+                                    .writableTarget(storedFile);
+                    // Tatrak: decrypted into the media store's writer, committed once under the final
+                    // name with the extension OpenPGP reports; any other result publishes nothing.
+                    // The input is opened first, as upstream: without it the output is not touched.
+                    // A path outside the store (an old shared-storage row) gets a store name too.
                     InputStream is = new FileInputStream(inputFile);
-                    OutputStream os = new FileOutputStream(outputFile);
-                    Intent result = getOpenPgpApi().executeApi(params, is, os);
+                    final am.cyberhayq.chat.storage.media.MediaWriter writer;
+                    try {
+                        writer =
+                                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get()
+                                        .createAttachment(outputFile);
+                    } catch (final IOException e) {
+                        is.close();
+                        throw e;
+                    }
+                    try {
+                    Intent result = getOpenPgpApi().executeApi(params, is, writer.getOutputStream());
                     switch (result.getIntExtra(
                             OpenPgpApi.RESULT_CODE, OpenPgpApi.RESULT_CODE_ERROR)) {
                         case OpenPgpApi.RESULT_CODE_SUCCESS:
+                            File publishedFile = outputFile;
                             OpenPgpMetadata openPgpMetadata =
                                     result.getParcelableExtra(OpenPgpApi.RESULT_METADATA);
                             String originalFilename = openPgpMetadata.getFilename();
@@ -224,21 +235,19 @@ public class PgpDecryptionService {
                                 if (fixedFile.getParentFile().mkdirs()) {
                                     Log.d(
                                             Config.LOGTAG,
-                                            "created parent directories for "
-                                                    + fixedFile.getAbsolutePath());
+                                            "created parent directories for the output"); // Tatrak: no stored file name in the log
                                 }
-                                synchronized (mXmppConnectionService.FILENAMES_TO_IGNORE_DELETION) {
-                                    mXmppConnectionService.FILENAMES_TO_IGNORE_DELETION.add(
-                                            outputFile.getAbsolutePath());
-                                }
-                                if (outputFile.renameTo(fixedFile)) {
-                                    Log.d(
-                                            Config.LOGTAG,
-                                            "renamed "
-                                                    + outputFile.getAbsolutePath()
-                                                    + " to "
-                                                    + fixedFile.getAbsolutePath());
-                                    message.setRelativeFilePath(fixedStorageLocation);
+                                // Tatrak: committed under the final name, not renamed after
+                                // publishing; a file already there is this decryption's, from a
+                                // run that died before the message was updated
+                                writer.commit(fixedFile, true);
+                                message.setRelativeFilePath(fixedStorageLocation);
+                                publishedFile = fixedFile;
+                            } else {
+                                writer.commit(outputFile, true);
+                                if (!outputFile.equals(storedFile)) {
+                                    message.setRelativeFilePath(
+                                            new Message.StorageLocation(outputFile, false));
                                 }
                             }
                             final String url = message.getFileParams().url;
@@ -248,13 +257,12 @@ public class PgpDecryptionService {
                             if (!inputFile.delete()) {
                                 Log.w(
                                         Config.LOGTAG,
-                                        "unable to delete pgp encrypted source file "
-                                                + inputFile.getAbsolutePath());
+                                        "unable to delete pgp encrypted source file"); // Tatrak: no stored file name in the log
                             }
                             skipNotificationPush = true;
                             mXmppConnectionService
                                     .getFileBackend()
-                                    .updateMediaScanner(outputFile, () -> notifyIfPending(message));
+                                    .updateMediaScanner(publishedFile, () -> notifyIfPending(message));
                             break;
                         case OpenPgpApi.RESULT_CODE_USER_INTERACTION_REQUIRED:
                             synchronized (PgpDecryptionService.this) {
@@ -269,6 +277,9 @@ public class PgpDecryptionService {
                             message.setEncryption(Message.ENCRYPTION_DECRYPTION_FAILED);
                             mXmppConnectionService.updateMessage(message);
                             break;
+                    }
+                    } finally {
+                        writer.abort(); // nothing after a commit; otherwise the partial output is gone
                     }
                 } catch (final IOException e) {
                     message.setEncryption(Message.ENCRYPTION_DECRYPTION_FAILED);

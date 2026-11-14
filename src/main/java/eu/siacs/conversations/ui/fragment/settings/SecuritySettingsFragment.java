@@ -15,6 +15,7 @@ import eu.siacs.conversations.R;
 import eu.siacs.conversations.crypto.OmemoSetting;
 import eu.siacs.conversations.services.MemorizingTrustManager;
 import eu.siacs.conversations.services.QuickConversationsService;
+import eu.siacs.conversations.ui.util.SettingsUtils;
 import java.security.KeyStoreException;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,6 +58,9 @@ public class SecuritySettingsFragment extends XmppPreferenceFragment {
             }
             case AppSettings.REQUIRE_CHANNEL_BINDING, AppSettings.REQUIRE_TLS_V1_3 -> {
                 reconnectAccounts();
+            }
+            case AppSettings.ALLOW_SCREENSHOTS -> {
+                SettingsUtils.applyScreenshotSetting(requireActivity());
             }
             case AppSettings.AUTOMATIC_MESSAGE_DELETION -> {
                 requireService().expireOldMessages(true);

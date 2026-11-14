@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- accent colours the chat UI needs beyond Material3, set by ThemeOverlay.Tatrak.Accent.* -->
+    <attr name="tatrakLink" format="color" />
+    <attr name="tatrakBubbleOutgoing" format="color" />
+    <attr name="tatrakTimeOutgoing" format="color" />
+    <attr name="tatrakCheckRead" format="color" />
+    <attr name="tatrakUnreadBadge" format="color" />
+    <attr name="tatrakAccentIn" format="color" />
+    <attr name="tatrakAccentOut" format="color" />
+</resources>

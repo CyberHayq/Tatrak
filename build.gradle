@@ -8,11 +8,14 @@ buildscript {
     dependencies {
         classpath 'com.android.tools.build:gradle:9.4.1'
         classpath 'com.diffplug.spotless:spotless-plugin-gradle:8.10.4'
+        classpath 'org.jetbrains.kotlin:kotlin-gradle-plugin:2.4.21'
+        classpath 'org.jetbrains.kotlin:compose-compiler-gradle-plugin:2.4.21'
     }
 }
 
 apply plugin: 'com.android.application'
 apply plugin: 'com.diffplug.spotless'
+apply plugin: 'org.jetbrains.kotlin.plugin.compose'
 
 repositories {
     google()
@@ -25,6 +28,14 @@ spotless {
     java {
         target '**/*.java'
         googleJavaFormat().aosp().reflowLongStrings()
+    }
+}
+
+composeCompiler {
+    // ./gradlew ... -PcomposeReports: stability and skippability reports in build/compose_compiler
+    if (project.hasProperty('composeReports')) {
+        reportsDestination = layout.buildDirectory.dir('compose_compiler')
+        metricsDestination = layout.buildDirectory.dir('compose_compiler')
     }
 }
 
@@ -49,6 +60,17 @@ dependencies {
     annotationProcessor project(':libs:annotation-processor')
     implementation project(':libs:annotation')
     implementation 'androidx.appcompat:appcompat:1.8.0'
+    // 1.8: pops seek their animators with predictive back (swipe-back in the chat)
+    implementation 'androidx.fragment:fragment-ktx:1.8.9'
+    implementation platform('androidx.compose:compose-bom:2026.09.00')
+    implementation 'androidx.activity:activity-compose:1.13.0'
+    implementation 'androidx.compose.material3:material3'
+    implementation 'androidx.compose.ui:ui'
+    implementation 'androidx.compose.ui:ui-tooling-preview'
+    implementation 'androidx.lifecycle:lifecycle-runtime-compose:2.11.0'
+    implementation 'androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0'
+    debugImplementation 'androidx.compose.ui:ui-tooling'
     implementation 'androidx.cardview:cardview:1.0.0'
     implementation 'androidx.concurrent:concurrent-futures:1.3.0'
     implementation 'androidx.documentfile:documentfile:1.1.0'
@@ -86,12 +108,19 @@ dependencies {
     implementation 'org.osmdroid:osmdroid-android:6.1.20'
     //noinspection NewerVersionAvailable
     implementation 'org.whispersystems:signal-protocol-java:2.6.2'
+    // Tatrak: local database encryption, approved separately from wire encryption.
+    implementation 'net.zetetic:sqlcipher-android:4.20.0@aar'
+    implementation 'androidx.sqlite:sqlite:2.7.0'
     conversationsPlaystoreImplementation 'com.android.installreferrer:installreferrer:2.2'
     quicksyImplementation 'io.michaelrocks:libphonenumber-android:9.0.40'
     quicksyPlaystoreImplementation 'com.google.android.gms:play-services-auth-api-phone:18.3.1'
 
     testImplementation 'junit:junit:4.13.2'
     testImplementation 'org.robolectric:robolectric:4.17'
+    testImplementation 'androidx.compose.ui:ui-test-junit4'
+    testImplementation 'io.github.takahirom.roborazzi:roborazzi:1.77.0'
+    testImplementation 'io.github.takahirom.roborazzi:roborazzi-compose:1.77.0'
+    debugImplementation 'androidx.compose.ui:ui-test-manifest'
     androidTestImplementation 'androidx.test.ext:junit:1.3.0'
 }
 
@@ -108,12 +137,12 @@ android {
     compileSdk = 37
 
     defaultConfig {
-        minSdk = 23
-        versionCode = 42183
-        versionName = '2.21.0'
-        applicationId = 'eu.siacs.conversations'
+        minSdk = 26
+        versionCode = 50000
+        versionName = '0.1.0'
+        applicationId = 'am.cyberhayq.chat'
         resValue('string', 'applicationId', applicationId)
-        def appName = "Conversations"
+        def appName = "Tatrak"
         resValue('string', 'app_name', appName)
         buildConfigField('String', 'APP_NAME', "\"${appName}\"")
     }
@@ -159,7 +188,8 @@ android {
 
         conversations {
             dimension = 'mode'
-            buildConfigField('String', 'PRIVACY_POLICY', '"https://conversations.im/privacy.html"')
+            // Tatrak: conversations.im's policy does not cover Tatrak; null hides the menu entry
+            buildConfigField('String', 'PRIVACY_POLICY', 'null')
         }
 
         playstore {
@@ -211,6 +241,14 @@ android {
                 signingConfig = signingConfigs.getByName('release')
             }
         }
+        // release code (R8, baseline profile) that can be installed and profiled; adds a demo
+        // screen with generated chats for frame-time measurements (src/benchmark)
+        benchmark {
+            initWith release
+            signingConfig = signingConfigs.getByName('debug')
+            applicationIdSuffix = '.benchmark'
+            matchingFallbacks = ['release']
+        }
     }
 
     packaging {
@@ -224,10 +262,21 @@ android {
         disable += ['MissingTranslation', 'InvalidPackage', 'AppCompatResource']
     }
 
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            all {
+                systemProperty 'roborazzi.test.record', 'true'
+                systemProperty 'robolectric.pixelCopyRenderMode', 'hardware'
+            }
+        }
+    }
+
     buildFeatures {
         buildConfig = true
         resValues = true
         dataBinding = true
+        compose = true
     }
 
     dependenciesInfo {

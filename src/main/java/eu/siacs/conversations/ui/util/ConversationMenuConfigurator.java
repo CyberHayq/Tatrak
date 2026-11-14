@@ -40,15 +40,33 @@ import eu.siacs.conversations.entities.Message;
 
 public class ConversationMenuConfigurator {
 
-    public static void configureEncryptionMenu(@NonNull Conversation conversation, Menu menu) {
-        final MenuItem menuSecure = menu.findItem(R.id.action_security);
-
+    // Tatrak: shared with the new chat UI's encryption entry
+    public static boolean isEncryptionMenuVisible(@NonNull Conversation conversation) {
         final boolean participating =
                 conversation.getMode() == Conversational.MODE_SINGLE
                         || conversation.getMucOptions().participating();
-
         if (!participating) {
-            menuSecure.setVisible(false);
+            return false;
+        }
+        final int next = conversation.getNextEncryption();
+        if (OmemoSetting.isAlways()) {
+            return false;
+        } else if (conversation.getMode() == Conversation.MODE_MULTI) {
+            return next != Message.ENCRYPTION_NONE
+                    || conversation.isPrivateAndNonAnonymous()
+                    || conversation.isFormerlyPrivateNonAnonymous();
+        } else {
+            return true;
+        }
+    }
+
+    public static void configureEncryptionMenu(@NonNull Conversation conversation, Menu menu) {
+        final MenuItem menuSecure = menu.findItem(R.id.action_security);
+
+        final boolean visible = isEncryptionMenuVisible(conversation);
+        menuSecure.setVisible(visible);
+
+        if (!visible) {
             return;
         }
 
@@ -57,24 +75,6 @@ public class ConversationMenuConfigurator {
         final MenuItem axolotl = menu.findItem(R.id.encryption_choice_axolotl);
 
         final int next = conversation.getNextEncryption();
-
-        boolean visible;
-        if (OmemoSetting.isAlways()) {
-            visible = false;
-        } else if (conversation.getMode() == Conversation.MODE_MULTI) {
-            visible =
-                    next != Message.ENCRYPTION_NONE
-                            || conversation.isPrivateAndNonAnonymous()
-                            || conversation.isFormerlyPrivateNonAnonymous();
-        } else {
-            visible = true;
-        }
-
-        menuSecure.setVisible(visible);
-
-        if (!visible) {
-            return;
-        }
 
         if (next == Message.ENCRYPTION_NONE) {
             menuSecure.setIcon(R.drawable.ic_lock_open_outline_24dp);

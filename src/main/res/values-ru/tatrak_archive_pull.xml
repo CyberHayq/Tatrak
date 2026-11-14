@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_archive_pull">Потяните вниз, чтобы открыть архив</string>
+    <string name="tatrak_archive_release">Отпустите, чтобы открыть архив</string>
+    <string name="tatrak_archive_hide">Скрыть над списком</string>
+    <string name="tatrak_archive_pin">Закрепить в списке чатов</string>
+    <string name="tatrak_drawer_close">Закрыть меню</string>
+</resources>

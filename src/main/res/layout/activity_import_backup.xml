@@ -25,12 +25,24 @@
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:gravity="center"
+            android:orientation="vertical"
             android:visibility="gone">
 
             <ProgressBar
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center" />
+
+            <!-- Tatrak: restore status line (ImportBackupWorker.status) -->
+            <TextView
+                android:id="@+id/tatrak_restore_status"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:accessibilityLiveRegion="polite"
+                android:gravity="center"
+                android:paddingHorizontal="24dp"
+                android:textAppearance="?attr/textAppearanceBodyMedium" />
         </LinearLayout>
 
 

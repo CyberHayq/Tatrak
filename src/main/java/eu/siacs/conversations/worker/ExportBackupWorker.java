@@ -9,11 +9,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ServiceInfo;
 import android.database.Cursor;
-import android.database.sqlite.SQLiteDatabase;
+// Tatrak: encrypted local storage; protocol APIs are unchanged.
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
 import android.net.Uri;
 import android.os.SystemClock;
 import android.util.Log;
 import androidx.annotation.NonNull;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.app.NotificationCompat;
 import androidx.documentfile.provider.DocumentFile;
 import androidx.work.ForegroundInfo;
@@ -83,11 +85,114 @@ public class ExportBackupWorker extends Worker {
                     : PendingIntent.FLAG_UPDATE_CURRENT;
 
     private final boolean recurringBackup;
+    // Tatrak: AppSettings.BACKUP_FORMAT_* value this export writes
+    private final String format;
+    // Tatrak: monocles format only: exported file path -> its ${FILES}/media/ name, per account
+    private final java.util.Map<String, String> portablePaths = new java.util.HashMap<>();
+    // Tatrak: attachments the media store refused to open, named in the success notification
+    @VisibleForTesting int leftOut;
+    // Tatrak: photos and files, only in one-off backups in Tatrak's format
+    private final boolean includeMedia;
 
     public ExportBackupWorker(@NonNull Context context, @NonNull WorkerParameters workerParams) {
         super(context, workerParams);
         final var inputData = workerParams.getInputData();
         this.recurringBackup = inputData.getBoolean("recurring_backup", false);
+        final var settings = new AppSettings(context);
+        this.format = settings.getBackupFormat();
+        this.includeMedia = !recurringBackup
+                && !AppSettings.BACKUP_FORMAT_CONVERSATIONS.equals(format)
+                && settings.isBackupMedia();
+    }
+
+    // Tatrak: column lists from comparing our schema with Conversations' and monocles' databases.
+    // shortcut: code comparison only, verify with real Conversations and monocles backups
+    private static final java.util.Set<String> NOT_IN_CONVERSATIONS = java.util.Set.of("replyTo");
+    private static final java.util.Set<String> NOT_IN_MONOCLES =
+            java.util.Set.of("replyTo", "sharedStorage");
+
+    /**
+     * Tatrak: whether a column goes into the backup. Conversations and monocles insert a row with
+     * an unknown column as a whole or not at all, so other formats leave out what they lack.
+     */
+    static boolean exported(final String column, final String format) {
+        if (AppSettings.BACKUP_FORMAT_TATRAK.equals(format)) return true;
+        if (column.startsWith("tatrak")) return false;
+        return !(AppSettings.BACKUP_FORMAT_MONOCLES.equals(format)
+                ? NOT_IN_MONOCLES
+                : NOT_IN_CONVERSATIONS).contains(column);
+    }
+
+    /**
+     * Tatrak: whether a message type goes into the backup. Other apps know types up to {@link
+     * Message#TYPE_RTP_SESSION}; our deleted placeholders (7) and messages deleted "for me" (8)
+     * would show there as empty bubbles or, in monocles, as stories.
+     */
+    static boolean exportedType(final int type, final String format) {
+        return AppSettings.BACKUP_FORMAT_TATRAK.equals(format) || type <= Message.TYPE_RTP_SESSION;
+    }
+
+    /** monocles has no PQ encryption of ours: imported PQ history becomes ordinary OMEMO rows. */
+    @VisibleForTesting
+    static int monoclesEncryption(final int encryption) {
+        return switch (encryption) {
+            case Message.ENCRYPTION_IMPORTED_PQ -> Message.ENCRYPTION_AXOLOTL;
+            case Message.ENCRYPTION_IMPORTED_PQ_UNAVAILABLE ->
+                    Message.ENCRYPTION_AXOLOTL_NOT_FOR_THIS_DEVICE;
+            case Message.ENCRYPTION_IMPORTED_PQ_FAILED -> Message.ENCRYPTION_AXOLOTL_FAILED;
+            default -> encryption;
+        };
+    }
+
+    /**
+     * monocles keeps a file's {@code url|size|width|height} in {@code fileParams} and shows the
+     * body as a caption; Tatrak (like Conversations) keeps that string in the body. Returns the
+     * monocles {@code fileParams}, or null when the message is no file with a body.
+     */
+    @VisibleForTesting
+    static String monoclesFileParams(final int type, final String body) {
+        final boolean file = type == Message.TYPE_IMAGE
+                || type == Message.TYPE_FILE
+                || type == Message.TYPE_PRIVATE_FILE;
+        return file && !Strings.isNullOrEmpty(body) ? body : null;
+    }
+
+    /** The monocles body of a file message: the URL, the first segment of the Tatrak body. */
+    @VisibleForTesting
+    static String monoclesFileBody(final String tatrakBody) {
+        return tatrakBody.split("\\|", 2)[0];
+    }
+
+    /** The XML monocles keeps in {@code payloads} for a reply; null when the message has none. */
+    @VisibleForTesting
+    static String monoclesReplyPayload(final String replyToJson) {
+        final var replyTo = eu.siacs.conversations.entities.ReplyTo.fromString(replyToJson);
+        if (replyTo == null) return null;
+        final var xml = new StringBuilder("<reply xmlns=\"urn:xmpp:reply:0\" id=\"")
+                .append(android.text.TextUtils.htmlEncode(replyTo.id)).append('"');
+        if (replyTo.to != null) {
+            xml.append(" to=\"").append(android.text.TextUtils.htmlEncode(replyTo.to)).append('"');
+        }
+        xml.append("/>");
+        if (replyTo.fallbackStart >= 0 && replyTo.fallbackEnd >= 0) {
+            xml.append("<fallback xmlns=\"urn:xmpp:fallback:0\" for=\"urn:xmpp:reply:0\">")
+                    .append("<body start=\"").append(replyTo.fallbackStart)
+                    .append("\" end=\"").append(replyTo.fallbackEnd).append("\"/></fallback>");
+        }
+        return xml.toString();
+    }
+
+    /** The unique monocles path of an exported file; repeated names get -1, -2 before the extension. */
+    @VisibleForTesting
+    static String portablePath(final java.util.Set<String> taken, final String name) {
+        final int dot = name.lastIndexOf('.');
+        final String base = dot > 0 ? name.substring(0, dot) : name;
+        final String extension = dot > 0 ? name.substring(dot) : "";
+        String candidate = "${FILES}/media/" + name;
+        for (int n = 1; !taken.add(candidate); n++) {
+            candidate = "${FILES}/media/" + base + "-" + n + extension;
+        }
+        return candidate;
     }
 
     @NonNull
@@ -97,14 +202,14 @@ public class ExportBackupWorker extends Worker {
         final List<Uri> files;
         try {
             files = export();
-        } catch (final IOException
+        } catch (final RuntimeException | IOException
                 | InvalidKeySpecException
                 | InvalidAlgorithmParameterException
                 | InvalidKeyException
                 | NoSuchPaddingException
                 | NoSuchAlgorithmException
                 | NoSuchProviderException e) {
-            Log.d(Config.LOGTAG, "could not create backup", e);
+            Log.d(Config.LOGTAG, "could not create backup");
             return Result.failure();
         } finally {
             getApplicationContext()
@@ -134,6 +239,14 @@ public class ExportBackupWorker extends Worker {
         }
     }
 
+    /** A legacy export cannot represent PQ provenance without silently losing its meaning. */
+    public static boolean hasImportedPq(final DatabaseBackend database) {
+        try (final Cursor cursor = database.getReadableDatabase().rawQuery(
+                "SELECT 1 FROM messages WHERE encryption BETWEEN 8 AND 10 LIMIT 1", null)) {
+            return cursor.moveToFirst();
+        }
+    }
+
     private List<Uri> export()
             throws IOException,
                     InvalidKeySpecException,
@@ -145,8 +258,22 @@ public class ExportBackupWorker extends Worker {
         final Context context = getApplicationContext();
         final var appSettings = new AppSettings(context);
         final var backupLocation = appSettings.getBackupLocation();
-        final var database = DatabaseBackend.getInstance(context);
+        // Tatrak: the optional pre-migration export uses a separate legacy reader, with no writers.
+        final boolean beforeMigration = getInputData().getBoolean("tatrak_before_migration", false);
+        final var database = beforeMigration
+                ? DatabaseBackend.legacyForExport(context)
+                : DatabaseBackend.getInstance(context);
+        try {
+        if (AppSettings.BACKUP_FORMAT_CONVERSATIONS.equals(format) && hasImportedPq(database)) {
+            final var notice = getNotification().setContentText(context.getString(R.string.tatrak_backup_compatible_pq))
+                    .setProgress(0, 0, false);
+            context.getSystemService(NotificationManager.class).notify(BACKUP_CREATED_NOTIFICATION_ID, notice.build());
+            throw new IOException("PQ provenance requires native backup format");
+        }
         final var accounts = database.getAccounts();
+        if (beforeMigration && accounts.stream().anyMatch(a -> Strings.nullToEmpty(a.getPassword()).trim().isEmpty())) {
+            throw new IOException("An account has no export password");
+        }
 
         int count = 0;
         final int max = accounts.size();
@@ -154,6 +281,7 @@ public class ExportBackupWorker extends Worker {
         Log.d(Config.LOGTAG, "starting backup for " + max + " accounts");
         for (final Account account : accounts) {
             if (isStopped()) {
+                if (beforeMigration) throw new IOException("Export cancelled");
                 Log.d(Config.LOGTAG, "ExportBackupWorker has stopped. Returning what we have");
                 return locations.build();
             }
@@ -172,13 +300,16 @@ public class ExportBackupWorker extends Worker {
             try {
                 uri = export(database, account, password, backupLocation, max, count);
             } catch (final WorkStoppedException e) {
+                if (beforeMigration) throw new IOException("Export cancelled");
                 Log.d(Config.LOGTAG, "ExportBackupWorker has stopped. Returning what we have");
                 return locations.build();
             }
             locations.add(uri);
             count++;
         }
+        if (beforeMigration && accounts.isEmpty()) throw new IOException("No exportable accounts");
         return locations.build();
+        } finally { if (beforeMigration) database.close(); }
     }
 
     private Uri export(
@@ -208,6 +339,12 @@ public class ExportBackupWorker extends Worker {
         Random.SECURE_RANDOM.nextBytes(salt);
         final BackupFileHeader backupFileHeader =
                 new BackupFileHeader(
+                        switch (format) {
+                            case AppSettings.BACKUP_FORMAT_CONVERSATIONS ->
+                                    BackupFileHeader.LEGACY_VERSION;
+                            case AppSettings.BACKUP_FORMAT_MONOCLES -> BackupFileHeader.VERSION;
+                            default -> BackupFileHeader.TATRAK_VERSION;
+                        },
                         context.getString(R.string.app_name),
                         account.getJid(),
                         System.currentTimeMillis(),
@@ -252,6 +389,8 @@ public class ExportBackupWorker extends Worker {
             location = file.getUri();
             outputStream = context.getContentResolver().openOutputStream(location);
         }
+        if (outputStream == null) throw new IOException("Backup destination unavailable");
+        try (outputStream) {
         final DataOutputStream dataOutputStream = new DataOutputStream(outputStream);
         backupFileHeader.write(dataOutputStream);
         dataOutputStream.flush();
@@ -260,20 +399,27 @@ public class ExportBackupWorker extends Worker {
                 Compatibility.twentyEight()
                         ? Cipher.getInstance(CIPHER_MODE)
                         : Cipher.getInstance(CIPHER_MODE, PROVIDER);
-        final byte[] key = getKey(password, salt);
+        final byte[] key =
+                backupFileHeader.getVersion() == BackupFileHeader.LEGACY_VERSION
+                        ? getLegacyKey(password, salt)
+                        : getKey(password, salt);
         SecretKeySpec keySpec = new SecretKeySpec(key, KEY_TYPE);
         IvParameterSpec ivSpec = new IvParameterSpec(IV);
         cipher.init(Cipher.ENCRYPT_MODE, keySpec, ivSpec);
         CipherOutputStream cipherOutputStream = new CipherOutputStream(outputStream, cipher);
 
         final GZIPOutputStream gzipOutputStream = new GZIPOutputStream(cipherOutputStream);
-        final JsonWriter jsonWriter =
-                new JsonWriter(new OutputStreamWriter(gzipOutputStream, StandardCharsets.UTF_8));
+        try (final JsonWriter jsonWriter =
+                new JsonWriter(new OutputStreamWriter(gzipOutputStream, StandardCharsets.UTF_8))) {
         jsonWriter.beginArray();
         final SQLiteDatabase db = database.getReadableDatabase();
         final String uuid = account.getUuid();
         accountExport(db, uuid, jsonWriter);
+        // Tatrak: the media keys right after the account, so a restore can open the files it brings
+        if (AppSettings.BACKUP_FORMAT_TATRAK.equals(format)) mediaKeyExport(db, jsonWriter);
         simpleExport(db, Conversation.TABLENAME, Conversation.ACCOUNT, uuid, jsonWriter);
+        portablePaths.clear();
+        if (includeMedia) fileExport(db, uuid, location, jsonWriter);
         messageExport(db, uuid, location, jsonWriter, progress);
         for (final String table :
                 Arrays.asList(
@@ -286,7 +432,8 @@ public class ExportBackupWorker extends Worker {
         }
         jsonWriter.endArray();
         jsonWriter.flush();
-        jsonWriter.close();
+        }
+        }
         final var path = location.getPath();
         if ("file".equalsIgnoreCase(location.getScheme()) && path != null) {
             mediaScannerScanFile(new File(path));
@@ -332,7 +479,7 @@ public class ExportBackupWorker extends Worker {
         getApplicationContext().sendBroadcast(intent);
     }
 
-    private static void accountExport(
+    private void accountExport(
             final SQLiteDatabase db, final String uuid, final JsonWriter writer)
             throws IOException {
         try (final Cursor accountCursor =
@@ -352,6 +499,7 @@ public class ExportBackupWorker extends Worker {
                 writer.beginObject();
                 for (int i = 0; i < accountCursor.getColumnCount(); ++i) {
                     final String name = accountCursor.getColumnName(i);
+                    if (!exported(name, format)) continue;
                     writer.name(name);
                     final String value = accountCursor.getString(i);
                     if (value == null
@@ -374,7 +522,7 @@ public class ExportBackupWorker extends Worker {
         }
     }
 
-    private static void simpleExport(
+    private void simpleExport(
             final SQLiteDatabase db,
             final String table,
             final String column,
@@ -391,12 +539,89 @@ public class ExportBackupWorker extends Worker {
                 writer.beginObject();
                 for (int i = 0; i < cursor.getColumnCount(); ++i) {
                     final String name = cursor.getColumnName(i);
+                    if (!exported(name, format)) continue;
                     writer.name(name);
                     final String value = cursor.getString(i);
                     writer.value(value);
                 }
                 writer.endObject();
                 writer.endObject();
+            }
+        }
+    }
+
+    /**
+     * Tatrak: every media key this database holds (its own and imported ones), as
+     * {@code {generation, master_key: hex}} records; a restore keeps them as imported keys.
+     */
+    @VisibleForTesting
+    static void mediaKeyExport(final androidx.sqlite.db.SupportSQLiteDatabase db, final JsonWriter writer)
+            throws IOException {
+        final var table = am.cyberhayq.chat.storage.media.MediaKeyTable.TABLE;
+        for (final var key : am.cyberhayq.chat.storage.media.MediaKeyTable.read(db).getByGeneration().entrySet()) {
+            writer.beginObject();
+            writer.name("table").value(table);
+            writer.name("values").beginObject();
+            writer.name("generation").value(key.getKey());
+            writer.name("master_key").value(com.google.common.io.BaseEncoding.base16().lowerCase().encode(key.getValue()));
+            writer.endObject();
+            writer.endObject();
+        }
+    }
+
+    /**
+     * Tatrak: every file the account's messages point at, in monocles' `files` format ({path: the
+     * stored relativeFilePath, sequence, content: base64 of up to 1 MB}), before the messages, as
+     * monocles chat does (ExportBackupWorker.fileExport, commit e7d071a7). Missing files are left
+     * out; an empty file is one record with empty content, so it comes back as a file.
+     */
+    @VisibleForTesting
+    void fileExport(
+            final androidx.sqlite.db.SupportSQLiteDatabase db, final String uuid, final Uri location, final JsonWriter writer)
+            throws IOException, WorkStoppedException {
+        final var paths = new java.util.LinkedHashSet<String>();
+        try (final Cursor cursor =
+                db.query(
+                        "select distinct relativeFilePath from messages join conversations on"
+                                + " conversations.uuid=messages.conversationUuid where"
+                                + " conversations.accountUuid=? and messages.type in (1,2,5) and"
+                                + " messages.deleted=0 and relativeFilePath is not null",
+                        new Object[] {uuid})) {
+            while (cursor.moveToNext()) paths.add(cursor.getString(0));
+        }
+        final byte[] buffer = new byte[1024 * 1024];
+        for (final String path : paths) {
+            final File file = path.startsWith("/")
+                    ? new File(path)
+                    : eu.siacs.conversations.persistance.FileBackend.getLegacyFileForFilename(getApplicationContext(), path);
+            if (!file.isFile() || !file.canRead()) continue;
+            final java.io.InputStream opened;
+            try { opened = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().inputStream(file); }
+            catch (final java.io.FileNotFoundException e) { continue; } // removed meanwhile
+            // a file the store cannot open (no key, a damaged header or end) is left out like a missing one;
+            // a tag that fails while reading fails the backup below
+            catch (final am.cyberhayq.chat.storage.media.MediaRejectedException e) { leftOut++; continue; }
+            // mapped only once the file is open, so a message never points at a file left out
+            final String exportedPath = AppSettings.BACKUP_FORMAT_MONOCLES.equals(format)
+                    ? portablePaths.computeIfAbsent(path, p -> portablePath(
+                            new java.util.HashSet<>(portablePaths.values()), p.substring(p.lastIndexOf('/') + 1)))
+                    : path;
+            // a read or write error fails the backup: a half-written file must not be restored
+            try (final var in = opened) {
+                int length;
+                int sequence = 0;
+                while ((length = com.google.common.io.ByteStreams.read(in, buffer, 0, buffer.length)) > 0 || sequence == 0) {
+                    throwIfWorkStopped(location);
+                    writer.beginObject();
+                    writer.name("table").value("files");
+                    writer.name("values").beginObject();
+                    writer.name("path").value(exportedPath);
+                    writer.name("sequence").value(sequence++);
+                    writer.name("content").value(android.util.Base64.encodeToString(
+                            buffer, 0, length, android.util.Base64.NO_WRAP));
+                    writer.endObject();
+                    writer.endObject();
+                }
             }
         }
     }
@@ -421,18 +646,44 @@ public class ExportBackupWorker extends Worker {
             long lastUpdate = 0;
             int i = 0;
             int p = Integer.MIN_VALUE;
+            final int typeColumn = cursor.getColumnIndexOrThrow(Message.TYPE);
+            final boolean monocles = AppSettings.BACKUP_FORMAT_MONOCLES.equals(format);
             while (cursor.moveToNext()) {
                 throwIfWorkStopped(location);
+                if (!exportedType(cursor.getInt(typeColumn), format)) {
+                    ++i;
+                    continue;
+                }
                 writer.beginObject();
                 writer.name("table");
                 writer.value(Message.TABLENAME);
                 writer.name("values");
                 writer.beginObject();
+                String replyTo = null;
+                String fileParams = null;
                 for (int j = 0; j < cursor.getColumnCount(); ++j) {
                     final String name = cursor.getColumnName(j);
+                    if (monocles && Message.REPLY_TO.equals(name)) {
+                        replyTo = cursor.getString(j); // monocles keeps it as payloads XML
+                    }
+                    if (!exported(name, format)) continue;
                     writer.name(name);
-                    final String value = cursor.getString(j);
+                    String value = cursor.getString(j);
+                    if (monocles && value != null && Message.ENCRYPTION.equals(name)) {
+                        value = Integer.toString(monoclesEncryption(cursor.getInt(j)));
+                    } else if (monocles && value != null && Message.RELATIVE_FILE_PATH.equals(name)) {
+                        value = portablePaths.getOrDefault(value, value);
+                    } else if (monocles && Message.BODY.equals(name)) {
+                        fileParams = monoclesFileParams(cursor.getInt(typeColumn), value);
+                        if (fileParams != null) value = monoclesFileBody(value);
+                    }
                     writer.value(value);
+                }
+                if (fileParams != null) {
+                    writer.name("fileParams").value(fileParams);
+                }
+                if (monocles && replyTo != null) {
+                    writer.name("payloads").value(monoclesReplyPayload(replyTo));
                 }
                 writer.endObject();
                 writer.endObject();
@@ -451,7 +702,29 @@ public class ExportBackupWorker extends Worker {
         }
     }
 
-    public static byte[] getKey(final String password, final byte[] salt)
+    /**
+     * Tatrak: the key of a version 4 backup, Argon2id with monocles chat's parameters (3 passes, 64
+     * MiB, 4 lanes) and a 256-bit AES key.
+     */
+    public static byte[] getKey(final String password, final byte[] salt) {
+        final var parameters =
+                new org.bouncycastle.crypto.params.Argon2Parameters.Builder(
+                                org.bouncycastle.crypto.params.Argon2Parameters.ARGON2_id)
+                        .withVersion(org.bouncycastle.crypto.params.Argon2Parameters.ARGON2_VERSION_13)
+                        .withIterations(3)
+                        .withMemoryAsKB(65536)
+                        .withParallelism(4)
+                        .withSalt(salt)
+                        .build();
+        final var generator = new org.bouncycastle.crypto.generators.Argon2BytesGenerator();
+        generator.init(parameters);
+        final byte[] key = new byte[32];
+        generator.generateBytes(password.toCharArray(), key);
+        return key;
+    }
+
+    /** The key of a version 2 backup (Conversations' format). */
+    public static byte[] getLegacyKey(final String password, final byte[] salt)
             throws InvalidKeySpecException {
         final SecretKeyFactory factory;
         try {
@@ -484,16 +757,14 @@ public class ExportBackupWorker extends Worker {
         final var shareFilesIntent =
                 PendingIntent.getActivity(context, 190, chooser, PENDING_INTENT_FLAGS);
 
+        // Tatrak: say how many attachments were left out
+        final String text = context.getString(R.string.notification_backup_created_subtitle, path)
+                + (leftOut == 0 ? "" : "\n" + context.getResources().getQuantityString(
+                        R.plurals.tatrak_backup_files_left_out, leftOut, leftOut));
         NotificationCompat.Builder builder = new NotificationCompat.Builder(context, "backup");
         builder.setContentTitle(context.getString(R.string.notification_backup_created_title))
-                .setContentText(
-                        context.getString(R.string.notification_backup_created_subtitle, path))
-                .setStyle(
-                        new NotificationCompat.BigTextStyle()
-                                .bigText(
-                                        context.getString(
-                                                R.string.notification_backup_created_subtitle,
-                                                path)))
+                .setContentText(text)
+                .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
                 .setAutoCancel(true)
                 .setSmallIcon(R.drawable.ic_archive_24dp);
 
@@ -524,5 +795,6 @@ public class ExportBackupWorker extends Worker {
         }
     }
 
-    private static class WorkStoppedException extends Exception {}
+    @VisibleForTesting
+    static class WorkStoppedException extends Exception {}
 }

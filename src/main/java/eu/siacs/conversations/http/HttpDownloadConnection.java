@@ -176,21 +176,27 @@ public class HttpDownloadConnection implements Transferable {
 
         final var directory = outputFile.getParentFile();
         if (directory != null && directory.mkdirs()) {
-            Log.d(Config.LOGTAG, "created parent directories for " + outputFile.getAbsolutePath());
+            Log.d(Config.LOGTAG, "created parent directories for the output"); // Tatrak: no stored file name in the log
         }
 
-        if (!outputFile.createNewFile()) {
-            Log.w(Config.LOGTAG, "unable to create output file " + outputFile.getAbsolutePath());
-        }
         final var cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
         cipher.init(
                 false,
                 new AEADParameters(
                         new KeyParameter(transportSecurity.key()), 128, transportSecurity.iv()));
-        try (final InputStream is = new FileInputStream(this.file);
-                final CipherOutputStream outputStream =
-                        new CipherOutputStream(new FileOutputStream(outputFile), cipher)) {
-            ByteStreams.copy(is, outputStream);
+        // Tatrak: decrypted into the media store's writer and published only after close() checked
+        // the transport tag; on a failed tag nothing is published
+        final var writer =
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().createAttachment(outputFile);
+        try {
+            try (final InputStream is = new FileInputStream(this.file);
+                    final CipherOutputStream outputStream =
+                            new CipherOutputStream(writer.getOutputStream(), cipher)) {
+                ByteStreams.copy(is, outputStream);
+            }
+            writer.commit();
+        } finally {
+            writer.abort(); // nothing after a commit; otherwise the partial output is gone
         }
 
         if (file.delete()) {
@@ -449,8 +455,16 @@ public class HttpDownloadConnection implements Transferable {
             final long expected = expectedSize;
             final var fileExists = file.exists();
             final var existingFileSize = fileExists ? file.length() : -1L;
+            // Tatrak: a media store file exists only once complete, and its size is not the plain
+            // size: it is never resumed, and an existing one is kept
+            final boolean stored =
+                    am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().isEncrypted(file);
 
             if (fileExists) {
+                if (stored) {
+                    Log.d(Config.LOGTAG, "attachment already downloaded");
+                    return;
+                }
                 if (expected > 0 && existingFileSize == expected) {
                     Log.d(Config.LOGTAG, "file already exits (presumably decryption failure)");
                     return;
@@ -464,7 +478,7 @@ public class HttpDownloadConnection implements Transferable {
                     new Request.Builder().url(URL.stripFragment(mUrl));
 
             final boolean tryResume =
-                    fileExists && existingFileSize > 0 && existingFileSize < expected;
+                    !stored && fileExists && existingFileSize > 0 && existingFileSize < expected;
             final long resumeSize;
             if (tryResume) {
                 resumeSize = existingFileSize;
@@ -517,18 +531,35 @@ public class HttpDownloadConnection implements Transferable {
                     if (directory != null && directory.mkdirs()) {
                         Log.d(Config.LOGTAG, "create directory " + directory.getAbsolutePath());
                     }
-                    Log.d(Config.LOGTAG, "creating file: " + file.getAbsolutePath());
-                    if (!file.exists() && !file.createNewFile()) {
-                        throw new FileWriterException(file);
-                    }
-                    try (final OutputStream os = new FileOutputStream(file)) {
-                        copy(inputStream, os, 0, expected);
+                    Log.d(Config.LOGTAG, "creating file for " + message.getUuid()); // Tatrak: no stored name in logs
+                    // Tatrak: an attachment is written through the media store, without resume;
+                    // the OMEMO ciphertext and an OpenPGP file in the cache stay plain files
+                    if (stored) {
+                        final var writer =
+                                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get()
+                                        .createAttachment(file);
+                        try {
+                            // a body that ends early is not published as the whole file
+                            if (copy(inputStream, writer.getOutputStream(), 0, expected) != expected) {
+                                throw new IOException("Response body shorter than expected size");
+                            }
+                            writer.commit();
+                        } finally {
+                            writer.abort();
+                        }
+                    } else {
+                        if (!file.exists() && !file.createNewFile()) {
+                            throw new FileWriterException(file);
+                        }
+                        try (final OutputStream os = new FileOutputStream(file)) {
+                            copy(inputStream, os, 0, expected);
+                        }
                     }
                 }
             }
         }
 
-        private void copy(
+        private long copy(
                 final InputStream inputStream,
                 final OutputStream outputStream,
                 final long offset,
@@ -551,6 +582,7 @@ public class HttpDownloadConnection implements Transferable {
                 }
                 updateProgress(Math.round(((double) transmitted / expected) * 100));
             }
+            return transmitted;
         }
 
         private void updateImageBounds() {

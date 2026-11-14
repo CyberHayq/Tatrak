@@ -47,6 +47,7 @@ import android.widget.EditText;
 import androidx.annotation.NonNull;
 import androidx.databinding.DataBindingUtil;
 import com.google.android.material.color.MaterialColors;
+import com.google.common.base.Strings;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.databinding.ActivitySearchBinding;
 import eu.siacs.conversations.entities.Contact;
@@ -81,6 +82,7 @@ public class SearchActivity extends XmppActivity
     private final ChangeWatcher<List<String>> currentSearch = new ChangeWatcher<>();
     private final PendingItem<String> pendingSearchTerm = new PendingItem<>();
     private final PendingItem<List<String>> pendingSearch = new PendingItem<>();
+    private SearchCompose compose;
 
     @Override
     public void onCreate(final Bundle bundle) {
@@ -111,10 +113,25 @@ public class SearchActivity extends XmppActivity
         this.messageListAdapter.setOnContactPictureClicked(this);
         this.binding.searchResults.setAdapter(messageListAdapter);
         registerForContextMenu(this.binding.searchResults);
+        // Tatrak: Compose screen over the hidden classic layout; the search term from the intent
+        // or the saved state goes to its field, the search itself runs as before
+        final String term = pendingSearchTerm.pop();
+        compose = new SearchCompose(this, Strings.nullToEmpty(term));
+        compose.attach(binding.getRoot());
+        if (term != null) {
+            onSearchText(term);
+        }
+    }
+
+    boolean isGlobalSearch() {
+        return uuid == null;
     }
 
     @Override
     public boolean onCreateOptionsMenu(final Menu menu) {
+        if (compose != null) {
+            return false;
+        }
         getMenuInflater().inflate(R.menu.activity_search, menu);
         final MenuItem searchActionMenuItem = menu.findItem(R.id.action_search);
         final EditText searchField =
@@ -173,9 +190,16 @@ public class SearchActivity extends XmppActivity
         if (message == null) {
             return super.onContextItemSelected(item);
         }
-        final int itemId = item.getItemId();
+        return messageAction(message, item.getItemId()) || super.onContextItemSelected(item);
+    }
+
+    /** One of the {@code search_result_context} actions; also called by the Compose screen. */
+    boolean messageAction(final Message message, final int itemId) {
         if (itemId == R.id.open_conversation) {
-            switchToConversation(wrap(message.getConversation()));
+            // Tatrak: the chat opens scrolled to the found message
+            hideSoftKeyboard(this);
+            MessageSearchResults.openAt(this, wrap(message.getConversation()), message.getUuid());
+            finish();
             return true;
         } else if (itemId == R.id.share_with) {
             ShareUtil.share(this, message);
@@ -187,7 +211,7 @@ public class SearchActivity extends XmppActivity
             quote(message);
             return true;
         } else {
-            return super.onContextItemSelected(item);
+            return false;
         }
     }
 
@@ -223,8 +247,15 @@ public class SearchActivity extends XmppActivity
 
     @Override
     protected void onBackendConnected() {
+        if (compose != null && uuid != null) {
+            final Conversation conversation = xmppConnectionService.findConversationByUuid(uuid);
+            compose.setChatName(
+                    conversation == null ? null : conversation.getName().toString());
+        }
         final List<String> searchTerm = pendingSearch.pop();
-        if (searchTerm != null && currentSearch.watch(searchTerm)) {
+        if (searchTerm != null) {
+            // Tatrak: onSearchText already recorded the term before the service was bound
+            currentSearch.watch(searchTerm);
             xmppConnectionService.search(searchTerm, uuid, this);
         }
     }
@@ -252,7 +283,12 @@ public class SearchActivity extends XmppActivity
 
     @Override
     public void afterTextChanged(Editable s) {
-        final List<String> term = FtsUtils.parse(s.toString().trim());
+        onSearchText(s.toString());
+    }
+
+    /** The search field changed (classic or Compose). */
+    void onSearchText(final String text) {
+        final List<String> term = FtsUtils.parse(text.trim());
         if (!currentSearch.watch(term)) {
             return;
         }
@@ -262,8 +298,13 @@ public class SearchActivity extends XmppActivity
             messageListAdapter.setHighlightedTerm(null);
             messageListAdapter.notifyDataSetChanged();
             changeBackground(false, false);
-        } else {
+            if (compose != null) {
+                compose.clear();
+            }
+        } else if (xmppConnectionService != null) {
             xmppConnectionService.search(term, uuid, this);
+        } else {
+            pendingSearch.push(term);
         }
     }
 
@@ -271,6 +312,9 @@ public class SearchActivity extends XmppActivity
     public void onSearchResultsAvailable(List<String> term, List<Message> messages) {
         runOnUiThread(
                 () -> {
+                    if (compose != null) {
+                        compose.publish(term, new ArrayList<>(messages));
+                    }
                     this.messages.clear();
                     messageListAdapter.setHighlightedTerm(term);
                     DateSeparator.addAll(messages);

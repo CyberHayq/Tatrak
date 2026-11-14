@@ -129,34 +129,36 @@ public class UserAdapter extends ListAdapter<MucOptions.User, UserAdapter.ViewHo
         if (user.getMucOptions().isPrivateAndNonAnonymous() && user.getPgpKeyId() != 0) {
             viewHolder.binding.key.setVisibility(View.VISIBLE);
             viewHolder.binding.key.setOnClickListener(
-                    v -> {
-                        final XmppActivity activity = XmppActivity.find(v);
-                        final XmppConnectionService service =
-                                activity == null ? null : activity.xmppConnectionService;
-                        final PgpEngine pgpEngine = service == null ? null : service.getPgpEngine();
-                        if (pgpEngine != null) {
-                            PendingIntent intent = pgpEngine.getIntentForKey(user.getPgpKeyId());
-                            if (intent != null) {
-                                try {
-                                    activity.startIntentSenderForResult(
-                                            intent.getIntentSender(),
-                                            0,
-                                            null,
-                                            0,
-                                            0,
-                                            0,
-                                            Compatibility.pgpStartIntentSenderOptions());
-                                } catch (IntentSender.SendIntentException ignored) {
-
-                                }
-                            }
-                        }
-                    });
+                    v -> openPgpKey(XmppActivity.find(v), user));
             viewHolder.binding.key.setText(OpenPgpUtils.convertKeyIdToHex(user.getPgpKeyId()));
         } else {
             viewHolder.binding.key.setVisibility(View.GONE);
         }
         setHats(viewHolder.binding.tags, user.getDynamicTags());
+    }
+
+    // Tatrak: the key id's click, shared with the Compose participant list (MucUsersCompose)
+    public static void openPgpKey(final XmppActivity activity, final MucOptions.User user) {
+        final XmppConnectionService service =
+                activity == null ? null : activity.xmppConnectionService;
+        final PgpEngine pgpEngine = service == null ? null : service.getPgpEngine();
+        if (pgpEngine != null) {
+            PendingIntent intent = pgpEngine.getIntentForKey(user.getPgpKeyId());
+            if (intent != null) {
+                try {
+                    activity.startIntentSenderForResult(
+                            intent.getIntentSender(),
+                            0,
+                            null,
+                            0,
+                            0,
+                            0,
+                            Compatibility.pgpStartIntentSenderOptions());
+                } catch (IntentSender.SendIntentException ignored) {
+
+                }
+            }
+        }
     }
 
     public static void setHats(final ConstraintLayout layout, final List<DynamicTag> tags) {

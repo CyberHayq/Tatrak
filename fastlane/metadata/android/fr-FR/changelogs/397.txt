@@ -1,3 +1,0 @@
-* Gère les fichiers GPX
-* Améliore la performance de restauration d'archive
-* Correction de problèmes

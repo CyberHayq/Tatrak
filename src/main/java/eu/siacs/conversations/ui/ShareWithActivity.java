@@ -52,6 +52,8 @@ public class ShareWithActivity extends XmppActivity
 
     private static final int REQUEST_START_NEW_CONVERSATION = 0x0501;
     private ConversationAdapter mAdapter;
+    // Tatrak: Compose chat picker drawn over the hidden classic layout
+    private ShareCompose compose;
     private final List<Conversation> mConversations = new ArrayList<>();
 
     protected void onActivityResult(
@@ -115,6 +117,8 @@ public class ShareWithActivity extends XmppActivity
                 new LinearLayoutManager(this, LinearLayoutManager.VERTICAL, false));
         binding.chooseConversationList.setAdapter(mAdapter);
         mAdapter.setConversationClickListener((view, conversation) -> share(conversation));
+        compose = new ShareCompose(this);
+        compose.attach(binding.getRoot());
         final var intent = getIntent();
         final var shortcutId = intent.getStringExtra(ShortcutManagerCompat.EXTRA_SHORTCUT_ID);
         this.share = new Share();
@@ -151,6 +155,8 @@ public class ShareWithActivity extends XmppActivity
     }
 
     private String shortcutIdToConversationFallback(final String shortcutId) {
+        // Tatrak: shortcut lookup can precede onStart while storage is gated.
+        if (!am.cyberhayq.chat.storage.DatabaseStorage.isReady()) return null;
         final var parts =
                 Splitter.on(ShortcutService.ID_SEPARATOR).limit(2).splitToList(shortcutId);
         if (parts.size() == 2) {
@@ -165,6 +171,10 @@ public class ShareWithActivity extends XmppActivity
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
+        if (compose != null) {
+            // the Compose top bar has the "+" button
+            return false;
+        }
         getMenuInflater().inflate(R.menu.share_with, menu);
         return true;
     }
@@ -173,13 +183,23 @@ public class ShareWithActivity extends XmppActivity
     public boolean onOptionsItemSelected(final MenuItem item) {
         final int itemId = item.getItemId();
         if (itemId == R.id.action_add) {
-            final Intent intent = new Intent(getApplicationContext(), ChooseContactActivity.class);
-            intent.putExtra("direct_search", true);
-            startActivityForResult(intent, REQUEST_START_NEW_CONVERSATION);
+            startNewChat();
             return true;
         } else {
             return super.onOptionsItemSelected(item);
         }
+    }
+
+    /** Pick any contact or address in the contact chooser, then share there. */
+    void startNewChat() {
+        final Intent intent = new Intent(getApplicationContext(), ChooseContactActivity.class);
+        intent.putExtra("direct_search", true);
+        startActivityForResult(intent, REQUEST_START_NEW_CONVERSATION);
+    }
+
+    /** Tatrak: called by the Compose picker; same path as a tap in the classic list. */
+    void shareTo(final Conversation conversation) {
+        share(conversation);
     }
 
     @Override
@@ -193,6 +213,9 @@ public class ShareWithActivity extends XmppActivity
         if (xmppConnectionServiceBound) {
             xmppConnectionService.populateWithOrderedConversations(
                     mConversations, this.share.uris.isEmpty(), false);
+            if (compose != null) {
+                compose.publish(new ArrayList<>(mConversations));
+            }
         }
     }
 
@@ -297,5 +320,8 @@ public class ShareWithActivity extends XmppActivity
         xmppConnectionService.populateWithOrderedConversations(
                 mConversations, this.share != null && this.share.uris.isEmpty(), false);
         mAdapter.notifyDataSetChanged();
+        if (compose != null) {
+            compose.publish(new ArrayList<>(mConversations));
+        }
     }
 }

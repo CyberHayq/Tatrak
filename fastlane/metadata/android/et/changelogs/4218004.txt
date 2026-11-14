@@ -1,1 +1,0 @@
-* Kui XMPP-server asub kohtvõrgus, siis küsi vajalikke õigusi

@@ -1,2 +1,0 @@
-* Utilizar SASL SCRAM Downgrade Protection (XEP-0474)
-* Enviar reações para mensagens privadas de MUC para corrigir o JID

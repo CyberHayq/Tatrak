@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_voice_not_sent">Voice message was not sent: the chat was closed before it could be sent</string>
+</resources>

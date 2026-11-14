@@ -1,3 +1,0 @@
-* Visa svarta fält när fjärrvideo inte matchar bildformatet på skärmen
-* Förbättrat sökprestanda
-* Inställning för att förhindra skärmdumpar

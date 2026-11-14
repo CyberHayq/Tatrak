@@ -1,4 +1,0 @@
-* Sök i individuella konversationer
-* Meddela användaren om meddelandeleverans misslyckas
-* Kom ihåg visningsnamn (smeknamn) från Quicksy-användare vid omstarter
-* Lägg till-knapp för att starta Orbot (Tor) från avisering om det behövs

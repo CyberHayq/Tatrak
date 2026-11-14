@@ -1,0 +1,21 @@
+Tatrak is an Android messenger for the open XMPP network that keeps your data encrypted not only in transit, but also on the phone itself.
+
+Encrypted on the device:
+* The whole message history is stored in an encrypted database (SQLCipher)
+* Attachments, voice messages, camera photos, avatars, wallpapers and sticker packs are stored encrypted too
+* The key is random and protected by the Android Keystore
+* There is no app passcode yet: the encryption protects the stored data, not an unlocked phone in someone else's hands
+
+End-to-end encryption with OMEMO and OpenPGP comes from Conversations unchanged.
+
+Also a familiar, Telegram-like interface:
+* Chat folders: All, Personal, Groups and Unread; archive, pin, mute and select several chats at once
+* Search across conversations, replies, reactions, editing and delete for everyone
+* Sticker packs, voice messages and attachment previews in the chat
+* Encrypted audio and video calls
+* Light and dark themes, accent colours and chat wallpapers
+* Several accounts, group chats and push notifications through UnifiedPush, no Google account needed
+
+Tatrak is built on Conversations and works with any standard XMPP server: pick a provider or run your own. Available features depend on the server.
+
+Tatrak is free software under the GNU GPL v3.

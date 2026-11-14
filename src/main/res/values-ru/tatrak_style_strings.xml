@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Slate and Sea: bottom dock, floating search, topics list -->
+    <string name="tatrak_dock_chats">Чаты</string>
+    <string name="tatrak_search_chats">Поиск по чатам</string>
+    <string name="tatrak_topic_unread">Непрочитанных: %1$d</string>
+</resources>

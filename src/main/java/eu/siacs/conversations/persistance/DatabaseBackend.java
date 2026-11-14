@@ -3,9 +3,10 @@ package eu.siacs.conversations.persistance;
 import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
-import android.database.DatabaseUtils;
-import android.database.sqlite.SQLiteDatabase;
-import android.database.sqlite.SQLiteOpenHelper;
+import net.zetetic.database.DatabaseUtils;
+// Tatrak: encrypted local storage; protocol APIs are unchanged.
+import net.zetetic.database.sqlcipher.SQLiteDatabase;
+import net.zetetic.database.sqlcipher.SQLiteOpenHelper;
 import android.os.Environment;
 import android.os.SystemClock;
 import android.util.Base64;
@@ -76,7 +77,8 @@ import org.whispersystems.libsignal.state.SignedPreKeyRecord;
 public class DatabaseBackend extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "history";
-    private static final int DATABASE_VERSION = 55;
+    // Tatrak: public so DatabaseStorage accepts every schema this build can write
+    public static final int DATABASE_VERSION = 59;
 
     private static boolean requiresMessageIndexRebuild = false;
     private static DatabaseBackend instance = null;
@@ -327,7 +329,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
                     + " BEGIN UPDATE messages_index SET body=NEW.body,uuid=NEW.uuid WHERE"
                     + " rowid=OLD.rowid; END;";
     private static final String CREATE_MESSAGE_DELETE_TRIGGER =
-            "CREATE TRIGGER after_message_delete AFTER DELETE ON "
+            "CREATE TRIGGER after_message_delete BEFORE DELETE ON "
                     + Message.TABLENAME
                     + " BEGIN DELETE FROM messages_index WHERE rowid=OLD.rowid; END;";
     private static final String COPY_PREEXISTING_ENTRIES =
@@ -336,8 +338,33 @@ public class DatabaseBackend extends SQLiteOpenHelper {
     private final Context context;
 
     private DatabaseBackend(Context context) {
-        super(context, DATABASE_NAME, null, DATABASE_VERSION);
+        this(context, am.cyberhayq.chat.storage.DatabaseStorage.historyPath(context),
+                am.cyberhayq.chat.storage.DatabaseStorage.password(context));
+    }
+
+    // Tatrak: explicit destinations also support isolated migration and authenticated import staging.
+    private DatabaseBackend(Context context, String path, byte[] password) {
+        this(context, path, password, DATABASE_VERSION);
+    }
+
+    private DatabaseBackend(Context context, String path, byte[] password, int version) {
+        super(context, path, password, null, version, 0,
+                am.cyberhayq.chat.storage.DatabaseStorage.PRESERVE, null, false);
         this.context = context.getApplicationContext();
+    }
+
+    public static DatabaseBackend legacyForExport(Context context) {
+        final String path = context.getDatabasePath("history").getPath();
+        try (final var reader = net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
+                path, (byte[]) null, null,
+                net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READONLY,
+                am.cyberhayq.chat.storage.DatabaseStorage.PRESERVE, null)) {
+            return new DatabaseBackend(context, path, null, reader.getVersion());
+        }
+    }
+
+    public static DatabaseBackend isolated(Context context, String path, byte[] password) {
+        return new DatabaseBackend(context, path, password);
     }
 
     private static ContentValues createFingerprintStatusContentValues(
@@ -359,6 +386,33 @@ public class DatabaseBackend extends SQLiteOpenHelper {
         Log.d(Config.LOGTAG, "rebuilt message index in " + stopwatch.stop());
     }
 
+    // Tatrak: a backup commit or VACUUM holds the only database connection for seconds; a main-thread
+    // read meanwhile would wait that long and cause an ANR, so such readers check this first.
+    private static volatile boolean longWrite;
+
+    public static boolean isLongWrite() {
+        return longWrite;
+    }
+
+    public static void setLongWrite(final boolean value) {
+        longWrite = value;
+    }
+
+    // Tatrak: deleted rows only leave free pages; VACUUM gives the space back to the system
+    public void vacuum() {
+        final Stopwatch stopwatch = Stopwatch.createStarted();
+        setLongWrite(true);
+        try {
+            getWritableDatabase().execSQL("VACUUM");
+            Log.d(Config.LOGTAG, "vacuumed database in " + stopwatch.stop());
+        } catch (final RuntimeException e) {
+            // No message: SQLCipher error text can contain key material. Needs free space ~ db size.
+            Log.d(Config.LOGTAG, "vacuum failed: " + e.getClass().getName());
+        } finally {
+            setLongWrite(false);
+        }
+    }
+
     public static synchronized DatabaseBackend getInstance(Context context) {
         if (instance == null) {
             instance = new DatabaseBackend(context);
@@ -368,6 +422,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 
     @Override
     public void onConfigure(SQLiteDatabase db) {
+        db.execSQL("PRAGMA temp_store=MEMORY");
         db.execSQL("PRAGMA foreign_keys=ON");
         db.rawQuery("PRAGMA secure_delete=ON", null).close();
     }
@@ -494,6 +549,10 @@ public class DatabaseBackend extends SQLiteOpenHelper {
                         + " TEXT,"
                         + Message.REACTIONS
                         + " TEXT,"
+                        + Message.REPLY_TO
+                        + " TEXT,"
+                        + Message.RETRACT_ATTEMPT
+                        + " NUMBER DEFAULT 0,"
                         + Message.REMOTE_MSG_ID
                         + " TEXT, FOREIGN KEY("
                         + Message.CONVERSATION
@@ -521,6 +580,12 @@ public class DatabaseBackend extends SQLiteOpenHelper {
         db.execSQL(CREATE_CAPS_CACHE_TABLE);
         db.execSQL(CREATE_CAPS_CACHE_INDEX_CAPS);
         db.execSQL(CREATE_CAPS_CACHE_INDEX_CAPS2);
+        // Tatrak: retained source protocol for imported, already decrypted history.
+        db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_encryption INTEGER");
+        db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_fingerprint TEXT");
+        // Tatrak: the master key of encrypted media is made only here, with a new database; there
+        // is no upgrade step, so a database that lacks it never gets a replacement key
+        am.cyberhayq.chat.storage.media.MediaKeyTable.create(db);
     }
 
     @Override
@@ -1103,6 +1168,33 @@ public class DatabaseBackend extends SQLiteOpenHelper {
                             + " ADD COLUMN "
                             + Message.SHARED_STORAGE
                             + " BOOLEAN NOT NULL DEFAULT 1");
+        }
+        if (oldVersion < 56 && newVersion >= 56) {
+            db.execSQL(
+                    "ALTER TABLE "
+                            + Message.TABLENAME
+                            + " ADD COLUMN "
+                            + Message.REPLY_TO
+                            + " TEXT");
+        }
+        if (oldVersion < 57 && newVersion >= 57) {
+            db.execSQL(
+                    "ALTER TABLE "
+                            + Message.TABLENAME
+                            + " ADD COLUMN "
+                            + Message.RETRACT_ATTEMPT
+                            + " NUMBER DEFAULT 0");
+        }
+        // Tatrak: provenance is historical metadata, never an OMEMO trust/session identity.
+        if (oldVersion < 58 && newVersion >= 58) {
+            db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_encryption INTEGER");
+            db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_fingerprint TEXT");
+        }
+        if (oldVersion < 59 && newVersion >= 59) {
+            // Tatrak: FTS4 external content must still exist when its index entry is deleted.
+            db.execSQL("DROP TRIGGER IF EXISTS after_message_delete");
+            db.execSQL(CREATE_MESSAGE_DELETE_TRIGGER);
+            db.execSQL(COPY_PREEXISTING_ENTRIES);
         }
     }
 

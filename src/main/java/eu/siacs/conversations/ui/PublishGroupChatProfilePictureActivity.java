@@ -122,10 +122,24 @@ public class PublishGroupChatProfilePictureActivity extends XmppActivity
     public void pickAvatar() {
         this.cropImage.launch(
                 new CropImageContractOptions(
-                        null, PublishProfilePictureActivity.getCropImageOptions()));
+                        null, PublishProfilePictureActivity.getCropImageOptions(this)));
+    }
+
+    // Tatrak: the crop is deleted when the screen closes (a publish in flight leaves it to the
+    // start-up cleanup)
+    @Override
+    protected void onDestroy() {
+        if (isFinishing() && binding.publishButton.isEnabled()) {
+            am.cyberhayq.chat.storage.media.TemporaryMedia.deleteCrop(this, this.uri);
+        }
+        super.onDestroy();
     }
 
     private void onAvatarPicked(final Uri uri) {
+        // Tatrak: a crop picked again replaces the previous one
+        if (!uri.equals(this.uri)) {
+            am.cyberhayq.chat.storage.media.TemporaryMedia.deleteCrop(this, this.uri);
+        }
         this.uri = uri;
         if (xmppConnectionServiceBound) {
             reloadAvatar();
@@ -136,6 +150,8 @@ public class PublishGroupChatProfilePictureActivity extends XmppActivity
     public void onAvatarPublicationSucceeded() {
         runOnUiThread(
                 () -> {
+                    // Tatrak: published, so the crop is no longer read
+                    am.cyberhayq.chat.storage.media.TemporaryMedia.deleteCrop(this, this.uri);
                     Toast.makeText(this, R.string.avatar_has_been_published, Toast.LENGTH_SHORT)
                             .show();
                     finish();

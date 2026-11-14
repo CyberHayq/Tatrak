@@ -9,6 +9,8 @@ import static eu.siacs.conversations.utils.PermissionUtils.cameraGranted;
 import static eu.siacs.conversations.utils.PermissionUtils.getFirstDenied;
 import static eu.siacs.conversations.utils.PermissionUtils.writeGranted;
 
+import am.cyberhayq.chat.storage.media.TemporaryMedia;
+import am.cyberhayq.chat.ui.storage.MediaPrompts;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -64,6 +66,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.content.ContextCompat;
 import androidx.core.view.MenuProvider;
 import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 import androidx.core.view.inputmethod.InputConnectionCompat;
 import androidx.databinding.DataBindingUtil;
@@ -74,7 +77,6 @@ import androidx.lifecycle.Lifecycle;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.base.Optional;
 import com.google.common.base.Strings;
-import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Sets;
@@ -91,8 +93,6 @@ import eu.siacs.conversations.Config;
 import eu.siacs.conversations.Conversations;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.crypto.PgpEngine;
-import eu.siacs.conversations.crypto.axolotl.AxolotlService;
-import eu.siacs.conversations.crypto.axolotl.FingerprintStatus;
 import eu.siacs.conversations.databinding.DialogDeleteFileBinding;
 import eu.siacs.conversations.databinding.DialogModerationBinding;
 import eu.siacs.conversations.databinding.FragmentConversationBinding;
@@ -130,6 +130,7 @@ import eu.siacs.conversations.ui.util.SendButtonAction;
 import eu.siacs.conversations.ui.util.SendButtonTool;
 import eu.siacs.conversations.ui.util.ShareUtil;
 import eu.siacs.conversations.ui.util.ToolbarUtils;
+import eu.siacs.conversations.ui.util.TrustKeysGate;
 import eu.siacs.conversations.ui.util.ViewUtil;
 import eu.siacs.conversations.ui.widget.EditMessage;
 import eu.siacs.conversations.utils.AccountUtils;
@@ -158,7 +159,6 @@ import eu.siacs.conversations.xmpp.manager.JingleManager;
 import eu.siacs.conversations.xmpp.manager.MessageArchiveManager;
 import eu.siacs.conversations.xmpp.manager.ModerationManager;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
-import eu.siacs.conversations.xmpp.manager.PresenceManager;
 import im.conversations.android.model.AttachmentChoice;
 import im.conversations.android.provider.ApplicationProvider;
 import im.conversations.android.provider.VCardProvider;
@@ -178,13 +178,15 @@ import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class ConversationFragment extends XmppFragment
         implements EditMessage.KeyboardListener,
                 MessageAdapter.OnContactPictureLongClicked,
-                MessageAdapter.OnContactPictureClicked {
+                MessageAdapter.OnContactPictureClicked,
+                ConversationHost {
 
     public static final List<AttachmentChoice> ATTACHMENT_CHOICES =
             Arrays.asList(
@@ -265,6 +267,9 @@ public class ConversationFragment extends XmppFragment
     private final PendingItem<ScrollState> pendingScrollState = new PendingItem<>();
     private final PendingItem<String> pendingLastMessageUuid = new PendingItem<>();
     private final PendingItem<Message> pendingMessage = new PendingItem<>();
+    // Tatrak: previews that are camera captures encrypted into the store, deleted when discarded
+    private final HashSet<UUID> cameraDrafts = new HashSet<>();
+    private static final String STATE_CAMERA_DRAFTS = "tatrak_classic_camera_drafts";
     private final MediaPreviewAdapter mediaPreviewAdapter =
             new MediaPreviewAdapter(
                     this,
@@ -279,6 +284,7 @@ public class ConversationFragment extends XmppFragment
                                         "deleted temporary file " + file.get().getAbsolutePath());
                             }
                         }
+                        TemporaryMedia.deleteDrafts(cameraDrafts, List.of(attachment)); // Tatrak
                     });
     private InputSettings inputSettings = new InputSettings(true, false, false, true);
     private boolean mShowLastUserInteraction = false;
@@ -420,6 +426,8 @@ public class ConversationFragment extends XmppFragment
         final View v = binding.messagesView.getChildAt(childPos);
         final int pxOffset = (v == null) ? 0 : v.getTop();
         this.conversation.populateWithMessages(this.messageList);
+        // Tatrak: messages deleted "for me" stay stored but out of sight
+        this.messageList.removeIf(m -> m.getType() == Message.TYPE_HIDDEN);
         try {
             updateStatusMessages();
         } catch (final IllegalStateException e) {
@@ -546,8 +554,8 @@ public class ConversationFragment extends XmppFragment
                 public void onClick(View v) {
                     final Contact contact = conversation == null ? null : conversation.getContact();
                     if (contact != null) {
-                        requireXmppActivity().xmppConnectionService.createContact(contact);
-                        requireXmppActivity().switchToContactDetails(contact);
+                        // Tatrak: shared with the new chat UI
+                        SubscriptionRequests.addBack(requireXmppActivity(), contact);
                     }
                 }
             };
@@ -558,10 +566,7 @@ public class ConversationFragment extends XmppFragment
                 public void onClick(View v) {
                     final Contact contact = conversation == null ? null : conversation.getContact();
                     if (contact != null) {
-                        final var connection = contact.getAccount().getXmppConnection();
-                        connection
-                                .getManager(PresenceManager.class)
-                                .subscribed(contact.getAddress().asBareJid());
+                        SubscriptionRequests.allow(contact);
                         hideSnackbar();
                     }
                 }
@@ -841,8 +846,9 @@ public class ConversationFragment extends XmppFragment
 
     private static Conversation getConversation(FragmentActivity activity, @IdRes int res) {
         final Fragment fragment = activity.getSupportFragmentManager().findFragmentById(res);
-        if (fragment instanceof ConversationFragment conversationFragment) {
-            return conversationFragment.getConversation();
+        // Tatrak: the Compose ChatFragment is a host too, so activity results (PGP choose/announce/decrypt) find its conversation.
+        if (fragment instanceof ConversationHost host) {
+            return host.getConversation();
         } else {
             return null;
         }
@@ -1082,40 +1088,12 @@ public class ConversationFragment extends XmppFragment
     }
 
     protected boolean trustKeysIfNeeded(final int requestCode) {
-        final var axolotlService = conversation.getAccount().getAxolotlService();
-        final var targets = axolotlService.getCryptoTargets(conversation);
-        boolean hasUnaccepted = !conversation.getAcceptedCryptoTargets().containsAll(targets);
-        // TODO basically all of those are hitting the database. This should be async
-        boolean hasUndecidedOwn =
-                !axolotlService
-                        .getKeysWithTrust(FingerprintStatus.createActiveUndecided())
-                        .isEmpty();
-        boolean hasUndecidedContacts =
-                !axolotlService
-                        .getKeysWithTrust(FingerprintStatus.createActiveUndecided(), targets)
-                        .isEmpty();
-        boolean hasPendingKeys = !axolotlService.findDevicesWithoutSession(conversation).isEmpty();
-        boolean hasNoTrustedKeys = axolotlService.anyTargetHasNoTrustedKeys(targets);
-        boolean downloadInProgress = axolotlService.hasPendingKeyFetches(targets);
-        if (hasUndecidedOwn
-                || hasUndecidedContacts
-                || hasPendingKeys
-                || hasNoTrustedKeys
-                || hasUnaccepted
-                || downloadInProgress) {
-            axolotlService.createSessionsIfNeeded(conversation);
-            final Intent intent = new Intent(requireActivity(), TrustKeysActivity.class);
-            intent.putExtra(
-                    "contacts",
-                    Collections2.transform(targets, Jid::toString).toArray(new String[0]));
-            intent.putExtra(
-                    EXTRA_ACCOUNT, conversation.getAccount().getJid().asBareJid().toString());
-            intent.putExtra("conversation", conversation.getUuid());
-            startActivityForResult(intent, requestCode);
-            return true;
-        } else {
+        final Intent intent = TrustKeysGate.intentIfTrustNeeded(requireActivity(), conversation);
+        if (intent == null) {
             return false;
         }
+        startActivityForResult(intent, requestCode);
+        return true;
     }
 
     public void updateChatMsgHint() {
@@ -1171,8 +1149,24 @@ public class ConversationFragment extends XmppFragment
             case ATTACHMENT_CHOICE_TAKE_PHOTO:
                 final Uri takePhotoUri = pendingTakePhotoUri.pop();
                 if (takePhotoUri != null) {
-                    mediaPreviewAdapter.addMediaPreviews(
-                            Attachment.of(requireContext(), takePhotoUri, Attachment.Type.IMAGE));
+                    // Tatrak: the draft is the encrypted capture; the plain one only if that failed.
+                    // shortcut: encrypted on the main thread (one photo, tens of ms) because a
+                    // background job cannot hand its result to this legacy screen after a
+                    // recreation; move it off the main thread if captures become large.
+                    final var path = takePhotoUri.getPath();
+                    final java.io.File stored =
+                            "file".equals(takePhotoUri.getScheme()) && path != null
+                                    ? TemporaryMedia.encryptCapture(requireContext(), new java.io.File(path))
+                                    : null;
+                    final var added =
+                            Attachment.of(
+                                    requireContext(),
+                                    stored == null ? takePhotoUri : Uri.fromFile(stored),
+                                    Attachment.Type.IMAGE);
+                    if (stored != null) {
+                        cameraDrafts.add(added.get(0).getUuid());
+                    }
+                    mediaPreviewAdapter.addMediaPreviews(added);
                     toggleInputMethod();
                 } else {
                     Log.d(Config.LOGTAG, "lost take photo uri. unable to to attach");
@@ -1370,6 +1364,18 @@ public class ConversationFragment extends XmppFragment
             final Bundle savedInstanceState) {
         this.binding =
                 DataBindingUtil.inflate(inflater, R.layout.fragment_conversation, container, false);
+        // the activity is edge-to-edge (Tatrak); keep this screen clear of system bars and keyboard
+        ViewCompat.setOnApplyWindowInsetsListener(
+                binding.getRoot(),
+                (v, insets) -> {
+                    final var bars =
+                            insets.getInsets(
+                                    WindowInsetsCompat.Type.systemBars()
+                                            | WindowInsetsCompat.Type.displayCutout()
+                                            | WindowInsetsCompat.Type.ime());
+                    v.setPadding(bars.left, bars.top, bars.right, bars.bottom);
+                    return WindowInsetsCompat.CONSUMED;
+                });
         final var viewIdBuilder = new ImmutableList.Builder<Integer>();
         final var showContactHideRecording =
                 QuickConversationsService.isContactListIntegration(requireContext())
@@ -1515,7 +1521,9 @@ public class ConversationFragment extends XmppFragment
         if (m.getType() != Message.TYPE_STATUS && m.getType() != Message.TYPE_RTP_SESSION) {
 
             if (m.getEncryption() == Message.ENCRYPTION_AXOLOTL_NOT_FOR_THIS_DEVICE
-                    || m.getEncryption() == Message.ENCRYPTION_AXOLOTL_FAILED) {
+                    || m.getEncryption() == Message.ENCRYPTION_AXOLOTL_FAILED
+                    || m.getEncryption() == Message.ENCRYPTION_IMPORTED_PQ_UNAVAILABLE
+                    || m.getEncryption() == Message.ENCRYPTION_IMPORTED_PQ_FAILED) {
                 return;
             }
 
@@ -1930,42 +1938,9 @@ public class ConversationFragment extends XmppFragment
         if (conversation == null) {
             return;
         }
-        final boolean updated;
-        final int itemId = item.getItemId();
-        if (itemId == R.id.encryption_choice_none) {
-            updated = conversation.setNextEncryption(Message.ENCRYPTION_NONE);
+        // Tatrak: the selection itself is shared with the new chat UI
+        if (EncryptionChoice.select(requireXmppActivity(), conversation, item.getItemId())) {
             item.setChecked(true);
-        } else if (itemId == R.id.encryption_choice_pgp) {
-            if (requireXmppActivity().hasPgp()) {
-                if (conversation.getAccount().getPgpSignature() != null) {
-                    updated = conversation.setNextEncryption(Message.ENCRYPTION_PGP);
-                    item.setChecked(true);
-                } else {
-                    updated = false;
-                    requireXmppActivity()
-                            .announcePgp(
-                                    conversation.getAccount(),
-                                    conversation,
-                                    null,
-                                    requireXmppActivity().onOpenPGPKeyPublished);
-                }
-            } else {
-                requireXmppActivity().showInstallPgpDialog();
-                updated = false;
-            }
-        } else if (itemId == R.id.encryption_choice_axolotl) {
-            Log.d(
-                    Config.LOGTAG,
-                    AxolotlService.getLogprefix(conversation.getAccount())
-                            + "Enabled axolotl for Contact "
-                            + conversation.getContact().getAddress());
-            updated = conversation.setNextEncryption(Message.ENCRYPTION_AXOLOTL);
-            item.setChecked(true);
-        } else {
-            updated = conversation.setNextEncryption(Message.ENCRYPTION_NONE);
-        }
-        if (updated) {
-            requireXmppActivity().xmppConnectionService.updateConversation(conversation);
         }
         updateChatMsgHint();
         this.binding.toolbar.invalidateMenu();
@@ -2221,14 +2196,9 @@ public class ConversationFragment extends XmppFragment
     private boolean hasPermissions(final int requestCode, final List<String> permissions) {
         final var missingPermissionsBuilder = new ImmutableList.Builder<String>();
         for (final var permission : permissions) {
+            // Tatrak: storage was needed only for the removed shared-storage setting
             if (permission.equals(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                    continue;
-                }
-                final var appSettings = new AppSettings(requireContext());
-                if (!appSettings.isUseSharedStorage()) {
-                    continue;
-                }
+                continue;
             }
             if (requireContext().checkSelfPermission(permission)
                     != PackageManager.PERMISSION_GRANTED) {
@@ -2389,7 +2359,13 @@ public class ConversationFragment extends XmppFragment
         } else {
             final var file =
                     requireXmppActivity().xmppConnectionService.getFileBackend().getFile(message);
-            ViewUtil.view(requireContext(), file, message.getUuid());
+            // Tatrak: Open with must bypass the in-app viewer.
+            if (!file.exists()) {
+                Toast.makeText(requireContext(), R.string.file_deleted, Toast.LENGTH_SHORT).show();
+                return;
+            }
+            ViewUtil.viewExternally(requireContext(), file, message.getUuid(),
+                    ViewUtil.nullToWildcard(eu.siacs.conversations.utils.MimeUtils.getMimeType(file)));
         }
     }
 
@@ -2491,6 +2467,11 @@ public class ConversationFragment extends XmppFragment
     }
 
     private void saveFile(final Message message) {
+        // Tatrak: the first save warns that the copy is not encrypted
+        MediaPrompts.confirmSave(requireActivity(), () -> saveFileNow(message));
+    }
+
+    private void saveFileNow(final Message message) {
         final var storageLocation = message.getRelativeFilePath();
         if (storageLocation == null || storageLocation.sharedStorage()) {
             return;
@@ -2741,6 +2722,12 @@ public class ConversationFragment extends XmppFragment
             final ArrayList<Attachment> attachments = mediaPreviewAdapter.getAttachments();
             if (!attachments.isEmpty()) {
                 outState.putParcelableArrayList(STATE_MEDIA_PREVIEWS, attachments);
+                // Tatrak
+                final ArrayList<String> drafts = new ArrayList<>();
+                for (final UUID draft : cameraDrafts) {
+                    drafts.add(draft.toString());
+                }
+                outState.putStringArrayList(STATE_CAMERA_DRAFTS, drafts);
             }
         }
         outState.putBoolean(
@@ -2760,6 +2747,13 @@ public class ConversationFragment extends XmppFragment
         this.pendingConversationsUuid.push(uuid);
         if (attachments != null && !attachments.isEmpty()) {
             this.pendingMediaPreviews.push(attachments);
+            // Tatrak
+            final var drafts = savedInstanceState.getStringArrayList(STATE_CAMERA_DRAFTS);
+            if (drafts != null) {
+                for (final String draft : drafts) {
+                    cameraDrafts.add(UUID.fromString(draft));
+                }
+            }
         }
         final var takePhotoUri = savedInstanceState.getString(STATE_PHOTO_URI);
         if (takePhotoUri != null) {
@@ -2829,6 +2823,7 @@ public class ConversationFragment extends XmppFragment
         storeNextMessage(msg);
         updateChatState(this.conversation, msg);
         messageListAdapter.stopAudioPlayer();
+        TemporaryMedia.deleteDrafts(cameraDrafts, mediaPreviewAdapter.getAttachments()); // Tatrak
         mediaPreviewAdapter.clearPreviews();
         toggleInputMethod();
     }
@@ -3284,6 +3279,7 @@ public class ConversationFragment extends XmppFragment
         synchronized (this.messageList) {
             if (this.conversation != null) {
                 conversation.populateWithMessages(this.messageList);
+                this.messageList.removeIf(m -> m.getType() == Message.TYPE_HIDDEN);
                 updateSnackBar(conversation);
                 updateStatusMessages();
                 if (conversation.getReceivedMessagesCountSinceUuid(lastMessageUuid) != 0) {

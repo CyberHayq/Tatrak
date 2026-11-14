@@ -95,6 +95,14 @@ public class Conversations extends Application {
         EmojiInitializationService.execute(getApplicationContext());
         ExceptionHelper.init(getApplicationContext());
         SettingsUtils.applyThemeSettings(this);
+        // Tatrak: migration finishes before service/UI database admission.
+        am.cyberhayq.chat.storage.DatabaseStorage.start(this);
+        // Tatrak: a plain video left by a transcode the process did not finish
+        eu.siacs.conversations.services.AttachFileToConversationRunnable.deleteTranscodeLeftovers(this);
+        // Tatrak: a plain recording, own avatar encode or abandoned camera capture the process did not finish
+        am.cyberhayq.chat.storage.media.TemporaryMedia.deleteLeftovers(this);
+        // Tatrak: the value of the removed "store in shared folders" setting
+        androidx.preference.PreferenceManager.getDefaultSharedPreferences(this).edit().remove("use_shared_storage").apply();
     }
 
     private static void installSecurityProvider() {
@@ -117,6 +125,8 @@ public class Conversations extends Application {
     }
 
     public Collection<DatabaseBackend.AccountWithOptions> getAccounts() {
+        // Do not memoize an empty account list while local storage is unavailable.
+        if (!am.cyberhayq.chat.storage.DatabaseStorage.isReady()) return java.util.List.of();
         return this.accountWithOptions.get();
     }
 

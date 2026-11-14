@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_backup_format">Backup format</string>
+    <string-array name="tatrak_backup_format_entries">
+        <item>Tatrak: everything, restorable only in Tatrak</item>
+        <item>Conversations: weaker password protection, no photos or files, no Tatrak-only data</item>
+        <item>monocles chat: no Tatrak-only data</item>
+    </string-array>
+    <string-array name="tatrak_backup_format_values" translatable="false">
+        <item>tatrak</item>
+        <item>conversations</item>
+        <item>monocles</item>
+    </string-array>
+    <bool name="tatrak_backup_media">false</bool>
+    <string name="tatrak_backup_media">Include photos and files</string>
+    <string name="tatrak_backup_media_summary">One-off backups also carry photos, videos and files, so they get much larger. Automatic backups and backups in Conversations format never include them.</string>
+    <string name="tatrak_backup_partial_title">Backup partially restored</string>
+    <string name="tatrak_backup_partial_summary">Some data could not be restored. Skipped records: %1$d.</string>
+    <plurals name="tatrak_backup_files_left_out">
+        <item quantity="one">%d file could not be read and was left out.</item>
+        <item quantity="other">%d files could not be read and were left out.</item>
+    </plurals>
+</resources>

@@ -1,2 +1,0 @@
-* Åtgärdat felmeddelandet för servrar som inte stöder TLS 1.3
-* Åtgärdat problem med enhetsrotation

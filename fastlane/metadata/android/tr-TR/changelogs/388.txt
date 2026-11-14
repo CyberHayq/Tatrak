@@ -1,3 +1,0 @@
-* Bazı cihazlarda aramalar sırasında yankıyı azaltıldı
-* Şifrelerde özel karakterler bulunduğunda oturum açma düzeltildi
-* Video görüşmeleri sırasında hoparlörden arama ve meşgul tonları çalınır

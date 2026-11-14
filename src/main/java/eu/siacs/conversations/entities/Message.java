@@ -62,6 +62,10 @@ public class Message extends AbstractEntity
     public static final int ENCRYPTION_AXOLOTL = 5;
     public static final int ENCRYPTION_AXOLOTL_NOT_FOR_THIS_DEVICE = 6;
     public static final int ENCRYPTION_AXOLOTL_FAILED = 7;
+    // Tatrak: historical imported source flags only; never active PQ sessions.
+    public static final int ENCRYPTION_IMPORTED_PQ = 8;
+    public static final int ENCRYPTION_IMPORTED_PQ_UNAVAILABLE = 9;
+    public static final int ENCRYPTION_IMPORTED_PQ_FAILED = 10;
 
     public static final int TYPE_TEXT = 0;
     public static final int TYPE_IMAGE = 1;
@@ -70,6 +74,10 @@ public class Message extends AbstractEntity
     public static final int TYPE_PRIVATE = 4;
     public static final int TYPE_PRIVATE_FILE = 5;
     public static final int TYPE_RTP_SESSION = 6;
+    // Tatrak: placeholder of a message that was retracted; see eraseContent()
+    public static final int TYPE_RETRACTED = 7;
+    // Tatrak: erased message deleted "for me"; the row stays so MAM does not bring it back
+    public static final int TYPE_HIDDEN = 8;
 
     public static final String CONVERSATION = "conversationUuid";
     public static final String COUNTERPART = "counterpart";
@@ -95,6 +103,9 @@ public class Message extends AbstractEntity
     public static final String DELETED = "deleted";
     public static final String OCCUPANT_ID = "occupantId";
     public static final String REACTIONS = "reactions";
+    public static final String REPLY_TO = "replyTo";
+    // Tatrak: time an unverified retraction of this (encrypted) message arrived; 0 when none
+    public static final String RETRACT_ATTEMPT = "tatrakRetractAttempt";
     public static final String ME_COMMAND = "/me ";
 
     public static final String ERROR_MESSAGE_CANCELLED = "eu.siacs.conversations.cancelled";
@@ -127,6 +138,8 @@ public class Message extends AbstractEntity
     private final Set<ReadByMarker> readByMarkers = new CopyOnWriteArraySet<>();
     private String occupantId;
     private Collection<Reaction> reactions = Collections.emptyList();
+    private ReplyTo replyTo;
+    private long retractAttempt = 0;
 
     private Boolean isGeoUri = null;
     private Boolean isEmojisOnly = null;
@@ -263,7 +276,7 @@ public class Message extends AbstractEntity
 
     public static Message fromCursor(
             final Context context, final Cursor cursor, final Conversation conversation) {
-        return new Message(
+        final var message = new Message(
                 conversation,
                 cursor.getString(cursor.getColumnIndexOrThrow(UUID)),
                 cursor.getString(cursor.getColumnIndexOrThrow(CONVERSATION)),
@@ -290,6 +303,9 @@ public class Message extends AbstractEntity
                 cursor.getString(cursor.getColumnIndexOrThrow(BODY_LANGUAGE)),
                 cursor.getString(cursor.getColumnIndexOrThrow(OCCUPANT_ID)),
                 Reaction.fromString(cursor.getString(cursor.getColumnIndexOrThrow(REACTIONS))));
+        message.replyTo = ReplyTo.fromString(cursor.getString(cursor.getColumnIndexOrThrow(REPLY_TO)));
+        message.retractAttempt = cursor.getLong(cursor.getColumnIndexOrThrow(RETRACT_ATTEMPT));
+        return message;
     }
 
     protected static StorageLocation storageLocationFromCursor(
@@ -376,6 +392,8 @@ public class Message extends AbstractEntity
         values.put(BODY_LANGUAGE, bodyLanguage);
         values.put(OCCUPANT_ID, occupantId);
         values.put(REACTIONS, Reaction.toString(this.reactions));
+        values.put(REPLY_TO, ReplyTo.toString(this.replyTo));
+        values.put(RETRACT_ATTEMPT, retractAttempt);
         return values;
     }
 
@@ -543,6 +561,28 @@ public class Message extends AbstractEntity
 
     public void setType(int type) {
         this.type = type;
+    }
+
+    /**
+     * Tatrak: turns the message into a "deleted" placeholder. Nothing of the content stays; the
+     * ids stay so a late copy (MAM, correction) is still recognised as this message.
+     */
+    public synchronized void eraseContent() {
+        this.type = TYPE_RETRACTED;
+        setBody("");
+        this.encryptedBody = null;
+        this.storageLocation = null;
+        this.deleted = false;
+        this.oob = false;
+        this.transferable = null;
+        this.reactions = Collections.emptyList();
+        this.replyTo = null;
+        this.retractAttempt = 0;
+        final var bare = new ImmutableList.Builder<Edit>();
+        for (final Edit edit : this.edits) {
+            bare.add(new Edit(edit.id(), edit.serverMsgId(), edit.sentAt(), null, null, null));
+        }
+        this.edits = bare.build();
     }
 
     // TODO carbons is mostly unused these days (only the inValidSession() is still using this)
@@ -798,6 +838,8 @@ public class Message extends AbstractEntity
     }
 
     public boolean acceptMessageCorrection() {
+        // Tatrak: imported PQ history cannot be edited/resubmitted through the legacy engine.
+        if (encryption >= 8 && encryption <= 10) return false;
         return type == Message.TYPE_TEXT && !this.isGeoUri() && !this.treatAsDownloadable();
     }
 
@@ -849,6 +891,32 @@ public class Message extends AbstractEntity
 
     public Reaction.Aggregated getAggregatedReactions() {
         return Reaction.aggregated(this.reactions);
+    }
+
+    /** The body as people read it: without the XEP-0461 quote fallback. */
+    public String getBodyWithoutReplyFallback() {
+        return this.replyTo == null ? this.body : this.replyTo.stripFallback(this.body);
+    }
+
+    /**
+     * Tatrak: when someone asked to delete this encrypted message without proof that the author
+     * sent the request (no matching OMEMO key), the message is kept and this records when; 0 if
+     * never.
+     */
+    public long getRetractAttempt() {
+        return retractAttempt;
+    }
+
+    public void setRetractAttempt(final long retractAttempt) {
+        this.retractAttempt = retractAttempt;
+    }
+
+    public ReplyTo getReplyTo() {
+        return this.replyTo;
+    }
+
+    public void setReplyTo(final ReplyTo replyTo) {
+        this.replyTo = replyTo;
     }
 
     public void setReactions(final Collection<Reaction> reactions) {
@@ -1067,6 +1135,7 @@ public class Message extends AbstractEntity
     }
 
     public boolean isTrusted() {
+        if (encryption >= 8 && encryption <= 10) return false;
         final AxolotlService axolotlService = conversation.getAccount().getAxolotlService();
         final FingerprintStatus s =
                 axolotlService != null

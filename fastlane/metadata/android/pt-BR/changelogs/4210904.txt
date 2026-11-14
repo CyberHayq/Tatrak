@@ -1,2 +1,0 @@
-* Corrigir registração Quicksy no Android 6/7
-* Tocar o toque de chamada no canal de notificação

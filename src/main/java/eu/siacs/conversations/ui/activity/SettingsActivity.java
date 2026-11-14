@@ -2,20 +2,17 @@ package eu.siacs.conversations.ui.activity;
 
 import android.app.Notification;
 import android.os.Bundle;
-
 import androidx.databinding.DataBindingUtil;
-import androidx.preference.PreferenceFragmentCompat;
-
+import androidx.fragment.app.Fragment;
 import com.google.common.collect.ImmutableSet;
-
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.databinding.ActivitySettingsBinding;
 import eu.siacs.conversations.ui.Activities;
 import eu.siacs.conversations.ui.XmppActivity;
-import eu.siacs.conversations.ui.fragment.settings.MainSettingsFragment;
 import eu.siacs.conversations.ui.fragment.settings.NotificationsSettingsFragment;
+import eu.siacs.conversations.ui.fragment.settings.SettingsHomeFragment;
 import eu.siacs.conversations.ui.fragment.settings.XmppPreferenceFragment;
-
+import eu.siacs.conversations.ui.interfaces.OnBackendConnected;
 import java.util.Collections;
 
 public class SettingsActivity extends XmppActivity {
@@ -29,6 +26,8 @@ public class SettingsActivity extends XmppActivity {
         final var currentFragment = fragmentManager.findFragmentById(R.id.fragment_container);
         if (currentFragment instanceof XmppPreferenceFragment xmppPreferenceFragment) {
             xmppPreferenceFragment.onBackendConnected();
+        } else if (currentFragment instanceof OnBackendConnected fragment) {
+            fragment.onBackendConnected();
         }
     }
 
@@ -42,12 +41,12 @@ public class SettingsActivity extends XmppActivity {
 
         final var intent = getIntent();
         final var categories = intent == null ? Collections.emptySet() : intent.getCategories();
-        final PreferenceFragmentCompat preferenceFragment;
+        final Fragment preferenceFragment;
         if (ImmutableSet.of(Notification.INTENT_CATEGORY_NOTIFICATION_PREFERENCES)
                 .equals(categories)) {
             preferenceFragment = new NotificationsSettingsFragment();
         } else {
-            preferenceFragment = new MainSettingsFragment();
+            preferenceFragment = null;
         }
 
         final var fragmentManager = getSupportFragmentManager();
@@ -55,7 +54,11 @@ public class SettingsActivity extends XmppActivity {
         if (currentFragment == null) {
             fragmentManager
                     .beginTransaction()
-                    .replace(R.id.fragment_container, preferenceFragment)
+                    .replace(
+                            R.id.fragment_container,
+                            preferenceFragment == null
+                                    ? new SettingsHomeFragment()
+                                    : preferenceFragment)
                     .commit();
         }
         binding.materialToolbar.setNavigationOnClickListener(

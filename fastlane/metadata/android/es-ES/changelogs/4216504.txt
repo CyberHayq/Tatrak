@@ -1,2 +1,0 @@
-* Arreglo: las llamadas ya no se traban al conectar si "Utilizar siempre relés" está activado pero el servidor no tiene ninguno
-* Optimizaciones de ancho de banda

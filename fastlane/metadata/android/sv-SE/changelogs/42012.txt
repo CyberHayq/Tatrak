@@ -1,1 +1,0 @@
-* Åtgärdat upp-/nedladdning via HTTP för användare som inte litar på systemcertifikatutfärdare

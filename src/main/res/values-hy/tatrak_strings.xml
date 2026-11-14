@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The app is not translated into Armenian: only the launcher label follows an Armenian system locale -->
+    <string name="tatrak_launcher_label">Տատրակ</string>
+</resources>

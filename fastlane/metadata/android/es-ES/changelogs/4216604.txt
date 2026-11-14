@@ -1,1 +1,0 @@
-* Integrar operaciones relacionadas con el código QR (mostrar, escanear, invitar) en un menú central

@@ -1,3 +1,0 @@
-* Stöd för privat DNS över TLS (DoT)
-* Stöd för temaanpassad appikon i launchers
-* Åtgärdat sällsynt behörighetsproblem när man delar filer på Android 11 och nyare versioner

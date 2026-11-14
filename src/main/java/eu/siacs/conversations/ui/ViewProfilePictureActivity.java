@@ -1,6 +1,5 @@
 package eu.siacs.conversations.ui;
 
-import android.net.Uri;
 import android.os.Bundle;
 import androidx.databinding.DataBindingUtil;
 import eu.siacs.conversations.R;
@@ -41,7 +40,9 @@ public class ViewProfilePictureActivity extends ActionBarActivity {
         }
         final var displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME);
         final var file = FileBackend.getAvatarFile(this, avatar);
-        this.binding.imageView.setImageURI(Uri.fromFile(file));
+        // Tatrak: the avatar is encrypted at rest; one the store cannot open shows nothing
+        this.binding.imageView.setImageBitmap(
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(this).decodeBitmap(file, null));
         setTitle(displayName);
     }
 }

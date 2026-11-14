@@ -81,8 +81,10 @@ public class BackupFile implements Comparable<BackupFile> {
     }
 
     private static List<BackupFile> list(final Context context) {
-        final var database = DatabaseBackend.getInstance(context);
-        final var accounts = database.getAccountAddresses();
+        // Tatrak: recovery must discover exports even when the old local key is unavailable.
+        final var accounts = am.cyberhayq.chat.storage.DatabaseStorage.isReady()
+                ? DatabaseBackend.getInstance(context).getAccountAddresses()
+                : java.util.List.<eu.siacs.conversations.xmpp.Jid>of();
         final var backupFiles = new ImmutableList.Builder<BackupFile>();
         final var apps =
                 ImmutableSet.of("Conversations", "Quicksy", context.getString(R.string.app_name));

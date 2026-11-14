@@ -1,2 +1,0 @@
-* La till 'Anteckning till mig själv' som sökförslag
-* Mindre buggfixar

@@ -167,6 +167,7 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
     private MediaAdapter mMediaAdapter;
     private ActionMode actionMode;
     private EnumSet<FilterType> appliedFilter = EnumSet.allOf(FilterType.class);
+    private MediaBrowserCompose compose;
 
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
@@ -210,10 +211,27 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
                 });
         binding.media.setAdapter(mMediaAdapter);
         GridManager.setupLayoutManager(this, binding.media, R.dimen.browser_media_size);
+        // Tatrak: Compose screen with tabs over the hidden classic grid; the actions below are
+        // shared, the Compose screen keeps its own selection and passes it in
+        compose = new MediaBrowserCompose(this);
+        compose.attach(binding.getRoot());
+    }
+
+    /** The legacy filter an attachment falls under (the first that matches, OTHER last). */
+    static FilterType typeOf(final Attachment attachment) {
+        for (final var entry : FILTERS.entrySet()) {
+            if (entry.getValue().condition.apply(attachment)) {
+                return entry.getKey();
+            }
+        }
+        return FilterType.OTHER;
     }
 
     @Override
     public boolean onCreateOptionsMenu(final Menu menu) {
+        if (compose != null) {
+            return false;
+        }
         getMenuInflater().inflate(R.menu.activity_media_browser, menu);
         return super.onCreateOptionsMenu(menu);
     }
@@ -294,9 +312,29 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
     }
 
     private void saveSelectedAttachments() {
+        saveAttachments(this.mMediaAdapter.getSelectedAttachments());
+    }
+
+    /** Whether some of the attachments are in private storage ("save" is shown for them). */
+    boolean canSaveAttachments(final List<Attachment> attachments) {
+        final var service = xmppConnectionService;
+        if (service == null) {
+            return false;
+        }
+        final var storageLocations = service.getFileBackend().inferStorageLocation(attachments);
+        return !Collections2.filter(storageLocations, sl -> sl != null && !sl.sharedStorage())
+                .isEmpty();
+    }
+
+    void saveAttachments(final List<Attachment> attachments) {
+        // Tatrak: the first save warns that the copy is not encrypted
+        am.cyberhayq.chat.ui.storage.MediaPrompts.confirmSave(
+                this, () -> saveAttachmentsNow(attachments));
+    }
+
+    private void saveAttachmentsNow(final List<Attachment> attachments) {
         final var fileBackend = xmppConnectionService.getFileBackend();
-        final var storageLocations =
-                fileBackend.inferStorageLocation(this.mMediaAdapter.getSelectedAttachments());
+        final var storageLocations = fileBackend.inferStorageLocation(attachments);
         if (storageLocations.isEmpty()) {
             return;
         }
@@ -310,14 +348,12 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
                 future,
                 new FutureCallback<>() {
                     @Override
-                    public void onSuccess(List<Void> result) {
+                    public void onSuccess(List<Boolean> result) {
+                        // Tatrak: says how many were saved, not how many were tried
                         Toast.makeText(
                                         getApplicationContext(),
-                                        getResources()
-                                                .getQuantityString(
-                                                        R.plurals.attachments_saved,
-                                                        result.size(),
-                                                        result.size()),
+                                        am.cyberhayq.chat.ui.media.SaveResult.message(
+                                                getApplicationContext(), result),
                                         Toast.LENGTH_LONG)
                                 .show();
                     }
@@ -336,7 +372,10 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
     }
 
     private void deleteSelectedAttachments() {
-        final var attachments = this.mMediaAdapter.getSelectedAttachments();
+        deleteAttachments(this.mMediaAdapter.getSelectedAttachments());
+    }
+
+    void deleteAttachments(final List<Attachment> attachments) {
         final var files =
                 Collections2.transform(
                         Collections2.filter(
@@ -395,7 +434,10 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
     }
 
     private void shareSelectedAttachments() {
-        final var attachments = this.mMediaAdapter.getSelectedAttachments();
+        shareAttachments(this.mMediaAdapter.getSelectedAttachments());
+    }
+
+    void shareAttachments(final List<Attachment> attachments) {
         if (attachments.isEmpty()) {
             return;
         }
@@ -404,24 +446,31 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
                         Lists.transform(
                                 attachments,
                                 a -> ViewUtil.nullToWildcard(Objects.requireNonNull(a).getMime())));
-        final var uris =
-                ImmutableList.copyOf(
-                        Lists.transform(
-                                attachments,
-                                a ->
-                                        FileBackend.getUriForUri(
-                                                        this, Objects.requireNonNull(a).getUri())
-                                                .buildUpon()
-                                                .appendQueryParameter(
-                                                        "uuid", a.getUuid().toString())
-                                                .build()));
+        final var uris = new ArrayList<android.net.Uri>();
+        for (final Attachment a : attachments) {
+            try {
+                uris.add(
+                        FileBackend.getUriForUri(this, a.getUri())
+                                .buildUpon()
+                                .appendQueryParameter("uuid", a.getUuid().toString())
+                                .build());
+            } catch (final SecurityException e) {
+                // Tatrak: a file outside file_paths.xml (e.g. from a restored backup) is not shared
+                Toast.makeText(
+                                this,
+                                getString(R.string.no_permission_to_access_x, a.getUri().getPath()),
+                                Toast.LENGTH_SHORT)
+                        .show();
+                return;
+            }
+        }
         final var intent = new Intent(Intent.ACTION_SEND_MULTIPLE);
         if (mimes.size() == 1) {
             intent.setType(Iterables.getOnlyElement(mimes));
         } else {
             intent.setType(ViewUtil.WILDCARD);
         }
-        intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, new ArrayList<>(uris));
+        intent.putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris);
         intent.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
         startActivity(Intent.createChooser(intent, null));
     }
@@ -491,6 +540,9 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
         runOnUiThread(
                 () -> {
                     final var actionMode = this.actionMode;
+                    if (compose != null) {
+                        compose.publish(attachments);
+                    }
                     setFilteredAttachments(attachments);
                     if (actionMode != null) {
                         actionMode.invalidate();

@@ -1,5 +1,6 @@
 package eu.siacs.conversations.services;
 
+import android.content.Context;
 import android.net.Uri;
 import android.util.Log;
 import androidx.annotation.NonNull;
@@ -18,6 +19,7 @@ import eu.siacs.conversations.persistance.DatabaseBackend;
 import eu.siacs.conversations.persistance.FileBackend;
 import eu.siacs.conversations.utils.MimeUtils;
 import eu.siacs.conversations.utils.TranscoderStrategies;
+import java.io.File;
 import java.io.FileNotFoundException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -33,6 +35,9 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
     private final boolean isVideoMessage;
     private final long originalFileSize;
     private int currentProgress = -1;
+    // Tatrak: the transcoder needs a seekable file, so it writes a plain temporary one here; the
+    // result is encrypted into the media store and this file deleted on every outcome
+    private File transcodeFile;
 
     AttachFileToConversationRunnable(
             final XmppConnectionService xmppConnectionService,
@@ -64,10 +69,31 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
         mXmppConnectionService.getFileBackend().updateFileParams(message);
     }
 
+    /** Tatrak: a transcode interrupted by a process death leaves its plain file here; emptied at start. */
+    public static void deleteTranscodeLeftovers(final Context context) {
+        final File[] files = transcodeDirectory(context).listFiles();
+        if (files != null) {
+            for (final File file : files) {
+                file.delete();
+            }
+        }
+    }
+
+    private static File transcodeDirectory(final Context context) {
+        return new File(context.getCacheDir(), "tatrak_transcode");
+    }
+
+    private void deleteTranscodeFile() {
+        if (transcodeFile != null && transcodeFile.delete()) {
+            Log.d(Config.LOGTAG, "deleted transcoded file " + transcodeFile.getAbsolutePath());
+        }
+    }
+
     private ListenableFuture<Void> fallbackToProcessAsFile() {
+        deleteTranscodeFile();
         final var file = mXmppConnectionService.getFileBackend().getFile(message);
         if (file.exists() && file.delete()) {
-            Log.d(Config.LOGTAG, "deleted preexisting file " + file.getAbsolutePath());
+            Log.d(Config.LOGTAG, "deleted preexisting file"); // Tatrak: no stored file name in the log (it carries the generation id)
         }
         return Futures.submit(this::processAsFile, XmppConnectionService.FILE_ATTACHMENT_EXECUTOR);
     }
@@ -78,12 +104,12 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
         mXmppConnectionService
                 .getFileBackend()
                 .setupRelativeFilePath(message, String.format("%s.%s", message.getUuid(), "mp4"));
-        final var file = mXmppConnectionService.getFileBackend().getFile(message);
-        final var parent = file.getParentFile();
-        if (parent != null && parent.mkdirs()) {
-            Log.d(Config.LOGTAG, "created parent directory: " + parent.getAbsolutePath());
-            mXmppConnectionService.restartFileObserver();
+        // Tatrak: into the plain temporary folder, not the attachment path
+        final var directory = transcodeDirectory(mXmppConnectionService);
+        if (directory.mkdirs()) {
+            Log.d(Config.LOGTAG, "created directory " + directory.getAbsolutePath());
         }
+        this.transcodeFile = new File(directory, message.getUuid() + ".mp4");
 
         final DefaultVideoStrategy selectedVideoTranscoderStrategy;
         final DefaultAudioStrategy derivedAudioTranscoderStrategy;
@@ -113,7 +139,7 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
         final Future<Void> transcoderFuture;
         try {
             transcoderFuture =
-                    Transcoder.into(file.getAbsolutePath())
+                    Transcoder.into(transcodeFile.getAbsolutePath())
                             .addDataSource(mXmppConnectionService, uri)
                             .setVideoTrackStrategy(selectedVideoTranscoderStrategy)
                             .setAudioTrackStrategy(derivedAudioTranscoderStrategy)
@@ -153,25 +179,41 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
     @Override
     public void onTranscodeCompleted(int successCode) {
         mXmppConnectionService.stopOngoingVideoTranscodingForegroundNotification();
-        final var file = mXmppConnectionService.getFileBackend().getFile(message);
-        final long convertedFileSize =
-                mXmppConnectionService.getFileBackend().getFile(message).length();
-        Log.d(
-                Config.LOGTAG,
-                "originalFileSize=" + originalFileSize + " convertedFileSize=" + convertedFileSize);
-        if (originalFileSize != 0 && convertedFileSize >= originalFileSize) {
-            if (file.delete()) {
+        // Tatrak: off the transcoder's callback thread: the copy into the store reads the whole file
+        this.callbackHandler.setFuture(
+                Futures.submit(
+                        () -> storeTranscodedVideo(successCode),
+                        XmppConnectionService.FILE_ATTACHMENT_EXECUTOR));
+    }
+
+    private void storeTranscodedVideo(final int successCode) {
+        try {
+            // Tatrak: SUCCESS_NOT_NEEDED writes no video (the muxer leaves an empty file): the
+            // original is sent, as when the converted one is not smaller
+            if (successCode == Transcoder.SUCCESS_NOT_NEEDED) {
+                Log.d(Config.LOGTAG, "transcoding not needed. processing as file");
+                processAsFile();
+                return;
+            }
+            final long convertedFileSize = transcodeFile.length();
+            Log.d(
+                    Config.LOGTAG,
+                    "originalFileSize=" + originalFileSize + " convertedFileSize=" + convertedFileSize);
+            if (originalFileSize != 0 && convertedFileSize >= originalFileSize) {
                 Log.d(
                         Config.LOGTAG,
                         "original file size was smaller. deleting and processing as file");
-                this.callbackHandler.setFuture(fallbackToProcessAsFile());
+                processAsFile();
                 return;
-            } else {
-                Log.d(Config.LOGTAG, "unable to delete converted file");
             }
+            // encrypted into the media store by the generic copy
+            mXmppConnectionService
+                    .getFileBackend()
+                    .copyFileToPrivateStorage(message, Uri.fromFile(transcodeFile), "video/mp4");
+            mXmppConnectionService.getFileBackend().updateFileParams(message);
+        } finally {
+            deleteTranscodeFile();
         }
-        mXmppConnectionService.getFileBackend().updateFileParams(message);
-        this.callbackHandler.set(null);
     }
 
     @Override
@@ -199,7 +241,7 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
                 final var sanityCheck =
                         FileBackend.getUriForFile(mXmppConnectionService, storageLocation.file());
                 if (sanityCheck.getPath() != null && sanityCheck.getPath().equals(uri.getPath())) {
-                    Log.d(Config.LOGTAG, "using existing file " + storageLocation);
+                    Log.d(Config.LOGTAG, "using existing file"); // Tatrak: no stored file name in the log (it carries the generation id)
                     message.setRelativeFilePath(storageLocation);
                     mXmppConnectionService.getFileBackend().updateFileParams(message);
                     return;
@@ -223,6 +265,11 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
         try {
             callbackHandler.get();
         } catch (final Exception e) {
+            // Tatrak: a failed copy into the store fails the attach, as it does without
+            // transcoding; swallowed here, the message would be sent without its file
+            if (e.getCause() instanceof FileBackend.FileCopyException copy) {
+                throw copy;
+            }
             Log.e(Config.LOGTAG, "awaiting callback or fallback failed", e);
         }
     }

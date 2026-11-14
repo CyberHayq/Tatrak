@@ -1,3 +1,0 @@
-* Åtgärdat röst-/video-samtal på Android 8
-* Åtgärdat 'race conditions' i ny samtalsintegration
-* Åtgärdat videokomprimering som fastnar

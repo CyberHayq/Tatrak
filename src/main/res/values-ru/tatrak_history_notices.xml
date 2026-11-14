@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_history_notices">Уведомления о загрузке истории</string>
+    <string name="tatrak_history_notices_summary">Показывать вверху чата «Загрузка истории с сервера» и «Больше истории на сервере нет».</string>
+</resources>

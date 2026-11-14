@@ -1,0 +1,9 @@
+# Local XMPP server for emulator checks (see knowledge/ops/test-server.md)
+FROM docker.io/library/debian:trixie
+RUN export DEBIAN_FRONTEND=noninteractive && apt-get update && apt-get install -y --no-install-recommends prosody openssl ca-certificates lua-unbound python3-slixmpp python3-aiohttp \
+ && rm -rf /var/lib/apt/lists/*
+COPY prosody.cfg.lua /etc/prosody/prosody.cfg.lua
+COPY start.sh /start.sh
+COPY send.py /send.py
+EXPOSE 5222 5281
+CMD ["sh", "/start.sh"]

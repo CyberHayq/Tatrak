@@ -181,7 +181,17 @@ public class RtpSessionActivity extends XmppActivity
         this.binding.remoteVideo.setOnClickListener(this::onVideoScreenClick);
         this.binding.localVideo.setOnClickListener(this::onVideoScreenClick);
         setSupportActionBar(binding.toolbar);
-        Activities.setStatusAndNavigationBarColors(this, binding.getRoot());
+        // Tatrak: gradient behind transparent bars, state shown under the name
+        CallScreenStyle.apply(this, binding.getRoot());
+    }
+
+    /** Tatrak: the call state goes under the name (the toolbar title is hidden). */
+    @Override
+    public void setTitle(final int titleId) {
+        super.setTitle(titleId);
+        if (binding != null) {
+            binding.tatrakCallState.setText(titleId);
+        }
     }
 
     private void onVideoScreenClick(final View view) {
@@ -554,6 +564,11 @@ public class RtpSessionActivity extends XmppActivity
     }
 
     private void setWith(final RtpEndUserState state, final Contact contact) {
+        // Tatrak: remembered for the avatar that stays on screen for the whole call
+        this.tatrakWith = contact;
+        if (state != RtpEndUserState.INCOMING_CALL && state != RtpEndUserState.ACCEPTING_CALL) {
+            tatrakShowAvatar();
+        }
         binding.with.setText(contact.getDisplayName());
         if (Arrays.asList(RtpEndUserState.INCOMING_CALL, RtpEndUserState.ACCEPTING_CALL)
                 .contains(state)) {
@@ -920,8 +935,21 @@ public class RtpSessionActivity extends XmppActivity
                     getString(R.string.using_account, account.getJid().asBareJid().toString()));
         } else {
             binding.usingAccount.setVisibility(View.GONE);
-            binding.contactPhoto.setVisibility(View.GONE);
+            tatrakShowAvatar();
         }
+    }
+
+    /**
+     * Tatrak: like Telegram, the avatar stays for the whole call (the legacy screen only showed it
+     * while ringing). The video views and the PiP placeholder are drawn over it.
+     */
+    private void tatrakShowAvatar() {
+        if (tatrakWith == null || !getResources().getBoolean(R.bool.is_portrait_mode)) {
+            binding.contactPhoto.setVisibility(View.GONE);
+            return;
+        }
+        binding.contactPhoto.setVisibility(View.VISIBLE);
+        AvatarWorkerTask.loadAvatar(tatrakWith, binding.contactPhoto, R.dimen.publish_avatar_size);
     }
 
     private void updateSupportWarning(final RtpEndUserState state, final Contact contact) {
@@ -1446,6 +1474,8 @@ public class RtpSessionActivity extends XmppActivity
         startActivity(launchIntent);
         finish();
     }
+
+    private Contact tatrakWith;
 
     private Contact getWith() {
         final AbstractJingleConnection.Id id = requireRtpConnection().getId();

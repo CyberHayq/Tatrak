@@ -1,1 +1,0 @@
-* Kui serverina on kasutusel Prosody 0.12, siis sisselogimisviga on parandatud

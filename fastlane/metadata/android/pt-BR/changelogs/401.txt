@@ -1,2 +1,0 @@
-* busca no Android <= 5 foi corrigida
-* otimizar o consumo de memória

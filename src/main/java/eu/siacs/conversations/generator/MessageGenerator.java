@@ -9,6 +9,9 @@ import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xmpp.Jid;
+import im.conversations.android.xmpp.model.fallback.Body;
+import im.conversations.android.xmpp.model.fallback.Fallback;
+import im.conversations.android.xmpp.model.reply.Reply;
 import im.conversations.android.xmpp.model.correction.Replace;
 import im.conversations.android.xmpp.model.hints.Store;
 import im.conversations.android.xmpp.model.markers.Markable;
@@ -59,6 +62,17 @@ public class MessageGenerator extends AbstractGenerator {
         }
         if (message.edited()) {
             packet.addExtension(new Replace(message.getMessageId()));
+        }
+        // XEP-0461; outside the encryption like reactions, so only ids and offsets are visible
+        final var replyTo = message.getReplyTo();
+        if (replyTo != null) {
+            packet.addExtension(new Reply(replyTo.to, replyTo.id));
+            if (replyTo.hasFallback()) {
+                final var fallback = packet.addExtension(new Fallback(Namespace.REPLY));
+                final var range = fallback.addExtension(new Body());
+                range.setAttribute("start", replyTo.fallbackStart);
+                range.setAttribute("end", replyTo.fallbackEnd);
+            }
         }
         return packet;
     }

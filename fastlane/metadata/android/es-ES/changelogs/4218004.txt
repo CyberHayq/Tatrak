@@ -1,1 +1,0 @@
-* Solicitar permiso cuando el servidor XMPP esté en la red local

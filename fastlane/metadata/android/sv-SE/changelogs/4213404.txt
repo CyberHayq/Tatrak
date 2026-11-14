@@ -1,1 +1,0 @@
-* Åtgärdat krasch vid filöverföring när finsk översättning användes

@@ -1,0 +1,17 @@
+<!-- Tatrak logo for main_logo/splash_logo: the round adaptive launcher icon (tatrak_launcher_background + mirrored ic_launcher_foreground). Render with art/tatrak/render_logo.sh. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <clipPath id="c"><circle cx="54" cy="54" r="54"/></clipPath>
+    <linearGradient id="g" gradientUnits="userSpaceOnUse" x1="176.75" y1="-41" x2="176.75" y2="246">
+      <stop offset="0.11" stop-color="#D9D9D9" stop-opacity="0.047"/>
+      <stop offset="0.94" stop-color="#FFFFFF" stop-opacity="0.5"/>
+    </linearGradient>
+  </defs>
+  <g clip-path="url(#c)">
+    <rect width="108" height="108" fill="#1682E8"/>
+    <circle cx="176.75" cy="102.5" r="143.5" fill="url(#g)"/>
+    <g transform="scale(0.22131) translate(-122,-122) translate(150,150) translate(216,0) scale(-1,1) translate(-216,0)">
+      <path fill="#FFFFFF" d="M216 74.92c-79.3 0.37-144 63.8-144 141.73 0 77.93 64.69 140.8 144 140.43 24.66-0.11 43.7-5.26 65.4-13.25l68.95 27.47c6.87 2.76 14.01-3.47 12.22-10.67l-18.68-75.4c12-21.14 16.11-45.17 16.11-69.92 0-77.93-64.7-140.76-144-140.4Zm-68.25 127.8c8.62-0.04 15.6 6.92 15.6 15.53 0 8.62-6.98 15.64-15.6 15.68-8.62 0.04-15.6-6.91-15.6-15.53s6.98-15.64 15.6-15.68Zm68.47-0.31c8.62-0.04 15.6 6.9 15.6 15.53 0 8.61-6.98 15.63-15.6 15.67-8.61 0.04-15.6-6.91-15.6-15.53s6.99-15.64 15.6-15.68Zm68.66-0.32c8.61-0.05 15.6 6.9 15.6 15.53 0 8.61-6.99 15.63-15.6 15.67-8.62 0.04-15.6-6.91-15.6-15.53s6.98-15.63 15.6-15.67Z"/>
+    </g>
+  </g>
+</svg>

@@ -17,7 +17,6 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Ordering;
 import com.google.common.hash.Hashing;
-import com.google.common.hash.HashingOutputStream;
 import com.google.common.io.ByteStreams;
 import com.google.common.io.Files;
 import com.google.common.util.concurrent.FutureCallback;
@@ -45,6 +44,8 @@ import im.conversations.android.xmpp.model.avatar.Metadata;
 import im.conversations.android.xmpp.model.pubsub.Items;
 import im.conversations.android.xmpp.model.upload.purpose.Profile;
 import im.conversations.android.xmpp.model.vcard.update.VCardUpdate;
+import com.google.common.hash.HashingOutputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
@@ -64,8 +65,6 @@ import okhttp3.Request;
 import okhttp3.Response;
 
 public class AvatarManager extends AbstractManager {
-
-    private static final Object RENAME_LOCK = new Object();
 
     private static final List<String> SUPPORTED_CONTENT_TYPES;
 
@@ -169,7 +168,7 @@ public class AvatarManager extends AbstractManager {
                     }
 
                     final var file = FileBackend.getAvatarFile(context, avatar.getId());
-                    if (file.exists()) {
+                    if (isCached(file)) {
                         return Futures.immediateFuture(avatar);
                     }
                     return Futures.transform(
@@ -181,17 +180,45 @@ public class AvatarManager extends AbstractManager {
     private ListenableFuture<Void> write(final File destination, byte[] bytes) {
         return Futures.submit(
                 () -> {
-                    final var randomFile =
-                            new File(context.getCacheDir(), UUID.randomUUID().toString());
-                    Files.write(bytes, randomFile);
-                    if (moveAvatarIntoCache(randomFile, destination)) {
-                        return null;
-                    }
-                    throw new IllegalStateException(
-                            String.format(
-                                    "Could not move file to %s", destination.getAbsolutePath()));
+                    store(destination.getName(), bytes); // Tatrak: the file name is the hash
+                    return null;
                 },
                 AVATAR_COMPRESSION_EXECUTOR);
+    }
+
+    // Tatrak: avatars are encrypted at rest: one store publish under the hash, no plain file
+    private void store(final String hash, final byte[] bytes) throws IOException {
+        final var writer =
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(context)
+                        .create(am.cyberhayq.chat.storage.media.MediaArea.AVATARS, hash);
+        try {
+            writer.getOutputStream().write(bytes);
+            writer.commit();
+        } finally {
+            writer.abort(); // nothing after a commit
+        }
+    }
+
+    // Tatrak: cached means the store reads the whole file (every segment's tag); one it refuses
+    // (an old plain file, a damaged one, another install's key) is fetched again, and the new
+    // publish replaces it. Not deleted here: a publish of the same name may have just landed.
+    private boolean isCached(final File file) {
+        try (final var inputStream =
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(context).inputStream(file)) {
+            ByteStreams.exhaust(inputStream);
+            return true;
+        } catch (final IOException e) {
+            return false;
+        }
+    }
+
+    // Tatrak: the plaintext of a cached avatar, read through the store
+    private byte[] read(final File file) throws IOException {
+        try (final var inputStream =
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(context)
+                        .inputStream(file)) {
+            return ByteStreams.toByteArray(inputStream);
+        }
     }
 
     private ListenableFuture<Info> fetchAndStoreHttp(final HttpUrl url, final Info avatar) {
@@ -232,27 +259,30 @@ public class AvatarManager extends AbstractManager {
             throw new IOException("Body was null");
         }
         final long bytes = avatar.getBytes();
-        final long actualBytes;
         final var inputStream = ByteStreams.limit(body.byteStream(), avatar.getBytes());
-        final var randomFile = new File(context.getCacheDir(), UUID.randomUUID().toString());
-        final String actualHash;
-        try (final var fileOutputStream = new FileOutputStream(randomFile);
-                var hashingOutputStream =
-                        new HashingOutputStream(Hashing.sha1(), fileOutputStream)) {
-            actualBytes = ByteStreams.copy(inputStream, hashingOutputStream);
-            actualHash = hashingOutputStream.hash().toString();
+        // Tatrak: streamed into an encrypted writer while hashed, published only after the
+        // size and hash checks; nothing is held in memory
+        final var writer =
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(context)
+                        .create(am.cyberhayq.chat.storage.media.MediaArea.AVATARS, avatar.getId());
+        try {
+            final long actualBytes;
+            final String actualHash;
+            try (final var hashingOutputStream =
+                    new HashingOutputStream(Hashing.sha1(), writer.getOutputStream())) {
+                actualBytes = ByteStreams.copy(inputStream, hashingOutputStream);
+                actualHash = hashingOutputStream.hash().toString();
+            }
+            if (actualBytes != bytes) {
+                throw new IllegalStateException("File size did not meet expected size");
+            }
+            if (!actualHash.equals(avatar.getId())) {
+                throw new IllegalStateException("File hash did not match");
+            }
+            writer.commit();
+        } finally {
+            writer.abort(); // nothing after a commit
         }
-        if (actualBytes != bytes) {
-            throw new IllegalStateException("File size did not meet expected size");
-        }
-        if (!actualHash.equals(avatar.getId())) {
-            throw new IllegalStateException("File hash did not match");
-        }
-        final var avatarFile = FileBackend.getAvatarFile(context, avatar.getId());
-        if (moveAvatarIntoCache(randomFile, avatarFile)) {
-            return;
-        }
-        throw new IOException("Could not move avatar to avatar location");
     }
 
     private void setAvatarInfo(final Jid address, @NonNull final Info info) {
@@ -328,7 +358,7 @@ public class AvatarManager extends AbstractManager {
 
         final var cache = FileBackend.getAvatarFile(context, avatar.preferred.getId());
 
-        if (cache.exists()) {
+        if (isCached(cache)) {
             setAvatarInfo(from, avatar.preferred);
         } else if (service.isDataSaverDisabled()) {
             final var contact = getManager(RosterManager.class).getContactFromContactList(from);
@@ -371,7 +401,7 @@ public class AvatarManager extends AbstractManager {
     public void handleVCardUpdate(final Jid address, final String hash) {
         Preconditions.checkArgument(VCardUpdate.isValidSHA1(hash));
         final var avatarFile = FileBackend.getAvatarFile(context, hash);
-        if (avatarFile.exists()) {
+        if (isCached(avatarFile)) {
             setAvatar(address, hash);
         } else if (service.isDataSaverDisabled()) {
             final var future = this.fetchAndStoreVCard(address, hash);
@@ -495,28 +525,42 @@ public class AvatarManager extends AbstractManager {
     private Info resizeAndStoreAvatar(
             final Bitmap image, final Bitmap.CompressFormat format, final int quality)
             throws IOException {
-        final var randomFile = new File(context.getCacheDir(), UUID.randomUUID().toString());
-        final var fileOutputStream = new FileOutputStream(randomFile);
-        final var hashingOutputStream = new HashingOutputStream(Hashing.sha1(), fileOutputStream);
-        image.compress(format, quality, hashingOutputStream);
-        hashingOutputStream.close();
-        final var sha1 = hashingOutputStream.hash().toString();
-        final var avatarFile = FileBackend.getAvatarFile(context, sha1);
-        if (moveAvatarIntoCache(randomFile, avatarFile)) {
-            return new Info(
-                    sha1,
-                    avatarFile.length(),
-                    ImageFormat.of(format).toContentType(),
-                    image.getWidth(),
-                    image.getHeight());
-        }
-        throw new IllegalStateException(
-                String.format("Could not move file to %s", avatarFile.getAbsolutePath()));
+        // Tatrak: encoded into memory, hashed, then one encrypted publish; bytes is the plaintext length
+        final var outputStream = new ByteArrayOutputStream();
+        image.compress(format, quality, outputStream);
+        final var data = outputStream.toByteArray();
+        final var sha1 = Hashing.sha1().hashBytes(data).toString();
+        store(sha1, data);
+        return new Info(
+                sha1,
+                data.length,
+                ImageFormat.of(format).toContentType(),
+                image.getWidth(),
+                image.getHeight());
     }
 
     private Info resizeAndStoreAvatarAsHeif(final Bitmap image, final int quality)
             throws Exception {
-        final var randomFile = new File(context.getCacheDir(), UUID.randomUUID().toString());
+        final var randomFile = avatarTemporaryFile();
+        try {
+            return resizeAndStoreAvatarAsHeif(image, quality, randomFile);
+        } finally {
+            randomFile.delete();
+        }
+    }
+
+    // Tatrak: the encoder needs a file; it is plain and lives only in cache/tatrak_avatar_tmp/,
+    // emptied at start after a crash (TemporaryMedia.deleteLeftovers)
+    private File avatarTemporaryFile() throws IOException {
+        final var directory = am.cyberhayq.chat.storage.media.TemporaryMedia.avatarDirectory(context);
+        if (!directory.isDirectory() && !directory.mkdirs()) {
+            throw new IOException("Could not create the avatar encoder folder");
+        }
+        return new File(directory, UUID.randomUUID().toString());
+    }
+
+    private Info resizeAndStoreAvatarAsHeif(
+            final Bitmap image, final int quality, final File randomFile) throws Exception {
         try (final var fileOutputStream = new FileOutputStream(randomFile);
                 final var heifWriter =
                         new HeifWriter.Builder(
@@ -540,7 +584,16 @@ public class AvatarManager extends AbstractManager {
 
     private Info resizeAndStoreAvatarAsAvif(final Bitmap image, final int quality)
             throws Exception {
-        final var randomFile = new File(context.getCacheDir(), UUID.randomUUID().toString());
+        final var randomFile = avatarTemporaryFile();
+        try {
+            return resizeAndStoreAvatarAsAvif(image, quality, randomFile);
+        } finally {
+            randomFile.delete();
+        }
+    }
+
+    private Info resizeAndStoreAvatarAsAvif(
+            final Bitmap image, final int quality, final File randomFile) throws Exception {
         try (final var fileOutputStream = new FileOutputStream(randomFile);
                 final var avifWriter =
                         new AvifWriter.Builder(
@@ -578,13 +631,11 @@ public class AvatarManager extends AbstractManager {
     private Info storeAsAvatar(
             final File randomFile, final ImageFormat type, final int width, final int height)
             throws IOException {
-        final var sha1 = Files.asByteSource(randomFile).hash(Hashing.sha1()).toString();
-        final var avatarFile = FileBackend.getAvatarFile(context, sha1);
-        if (moveAvatarIntoCache(randomFile, avatarFile)) {
-            return new Info(sha1, avatarFile.length(), type.toContentType(), width, height);
-        }
-        throw new IllegalStateException(
-                String.format("Could not move file to %s", avatarFile.getAbsolutePath()));
+        // Tatrak: the encoder's plain file is read, hashed and published encrypted; the caller deletes it
+        final var data = Files.toByteArray(randomFile);
+        final var sha1 = Hashing.sha1().hashBytes(data).toString();
+        store(sha1, data);
+        return new Info(sha1, data.length, type.toContentType(), width, height);
     }
 
     private ListenableFuture<Collection<Info>> uploadAvatar(final Uri image) {
@@ -724,9 +775,7 @@ public class AvatarManager extends AbstractManager {
         final byte[] mainAvatar;
         try {
             mainAvatarInfo = Iterables.find(avatars, a -> Objects.isNull(a.getUrl()));
-            mainAvatar =
-                    Files.asByteSource(FileBackend.getAvatarFile(context, mainAvatarInfo.getId()))
-                            .read();
+            mainAvatar = read(FileBackend.getAvatarFile(context, mainAvatarInfo.getId()));
         } catch (final IOException | NoSuchElementException e) {
             return Futures.immediateFailedFuture(e);
         }
@@ -756,7 +805,7 @@ public class AvatarManager extends AbstractManager {
                         return null;
                     }
                     final var cache = FileBackend.getAvatarFile(context, pick.getId());
-                    if (cache.exists()) {
+                    if (isCached(cache)) {
                         Log.d(Config.LOGTAG, "set local avatar to " + pick.getId());
                         setAvatarInfo(getAccount().getJid().asBareJid(), pick);
                     }
@@ -786,9 +835,7 @@ public class AvatarManager extends AbstractManager {
         return Futures.transformAsync(
                 avatarThumbnailFuture,
                 info -> {
-                    final var avatar =
-                            Files.asByteSource(FileBackend.getAvatarFile(context, info.getId()))
-                                    .read();
+                    final var avatar = read(FileBackend.getAvatarFile(context, info.getId()));
                     return getManager(VCardManager.class)
                             .publishPhoto(address, info.getType(), avatar);
                 },
@@ -848,10 +895,9 @@ public class AvatarManager extends AbstractManager {
 
                     final var cache = FileBackend.getAvatarFile(context, avatar.preferred.getId());
 
-                    if (cache.exists()) {
-                        Log.d(
-                                Config.LOGTAG,
-                                "fetchAndStore. file existed " + cache.getAbsolutePath());
+                    if (isCached(cache)) {
+                        // Tatrak: no store file name in the log
+                        Log.d(Config.LOGTAG, "fetchAndStore. file existed");
                         setAvatarInfo(address, avatar.preferred);
                         return Futures.immediateVoidFuture();
                     } else {
@@ -870,21 +916,6 @@ public class AvatarManager extends AbstractManager {
                 MoreExecutors.directExecutor());
     }
 
-    private static boolean moveAvatarIntoCache(final File randomFile, final File destination) {
-        synchronized (RENAME_LOCK) {
-            if (destination.exists()) {
-                return true;
-            }
-            final var directory = destination.getParentFile();
-            if (directory != null && directory.mkdirs()) {
-                Log.d(
-                        Config.LOGTAG,
-                        "create avatar cache directory: " + directory.getAbsolutePath());
-            }
-            return randomFile.renameTo(destination);
-        }
-    }
-
     public ListenableFuture<Void> fetchAndStoreVCard(final Jid address, final String expectedHash) {
         final var future =
                 connection.getManager(VCardManager.class).retrievePhotoCacheException(address);
@@ -900,7 +931,7 @@ public class AvatarManager extends AbstractManager {
                                                 address)));
                     }
                     final var avatarFile = FileBackend.getAvatarFile(context, actualHash);
-                    if (avatarFile.exists()) {
+                    if (isCached(avatarFile)) {
                         setAvatar(address, actualHash);
                         return Futures.immediateVoidFuture();
                     }

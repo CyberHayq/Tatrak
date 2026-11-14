@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- decorView tags used by StatusBarIcons -->
+    <item name="tatrak_status_bar_owner" type="id" />
+    <item name="tatrak_compose_over" type="id" />
+</resources>

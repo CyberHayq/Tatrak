@@ -38,25 +38,30 @@
             android:id="@+id/invite"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:layout_marginVertical="@dimen/activity_vertical_margin"
-            android:layout_marginHorizontal="24dp"
+            android:layout_marginHorizontal="20dp"
+            android:layout_marginTop="24dp"
+            android:layout_marginBottom="16dp"
             android:visibility="visible">
+            <!-- Tatrak: centred text and a full-width primary share button -->
 
             <TextView
                 android:id="@+id/tap_to_share"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
+                android:gravity="center"
                 android:text="@string/tap_share_button_send_invite"
-                android:textAppearance="?textAppearanceBodyLarge" />
+                android:textAppearance="?textAppearanceBodyLarge"
+                android:textColor="?attr/colorOnSurface" />
 
             <TextView
                 android:id="@+id/scan_the_code"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_below="@+id/tap_to_share"
-                android:layout_marginTop="24sp"
+                android:layout_marginTop="16dp"
+                android:gravity="center"
                 android:text="@string/if_contact_is_nearby_use_qr"
-                android:textAppearance="?textAppearanceBodyMedium" />
+                android:textAppearance="@style/TextAppearance.Tatrak.Onboarding.Body" />
 
             <ImageView
                 android:id="@+id/qr_code"
@@ -71,14 +76,13 @@
                 android:scaleType="fitCenter" />
 
             <Button
-                style="@style/Widget.Material3.Button.TonalButton"
+                style="@style/Widget.Tatrak.Onboarding.PrimaryButton"
                 app:icon="@drawable/ic_share_24dp"
+                app:iconGravity="textStart"
                 android:id="@+id/share_button"
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_alignParentBottom="true"
-                android:layout_centerHorizontal="true"
-                android:layout_marginHorizontal="16dp"
                 android:text="@string/share_invitation" />
 
         </RelativeLayout>

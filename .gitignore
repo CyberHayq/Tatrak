@@ -9,6 +9,7 @@ src/quicksyPlaystore/res/values/push.xml
 # https://github.com/github/gitignore/blob/master/Gradle.gitignore
 .gradle/
 build/
+!/knowledge/build/
 captures/
 signing.properties
 signing.managed.properties
@@ -47,3 +48,10 @@ proguard/
 
 import-summary.txt
 .navigation/
+
+# Kotlin compiler session cache
+.kotlin/
+
+# crash/ANR reports pulled from devices (contain device data)
+android_log.txt
+__pycache__/

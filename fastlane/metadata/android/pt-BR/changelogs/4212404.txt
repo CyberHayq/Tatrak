@@ -1,2 +1,0 @@
-* Sempre mostrar o botão de chamada
-* Várias correções de erros

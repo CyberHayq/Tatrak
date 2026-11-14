@@ -1,0 +1,44 @@
+# Tatrak: ahead-of-time compile the new Compose UI and the entities its snapshots read, so the
+# first scrolls after installing are not interpreted/JIT-compiled. Compose libraries ship their
+# own profiles; profileinstaller (transitive) applies them to sideloaded and F-Droid installs.
+# Replace with a generated profile once a device is available for Macrobenchmark.
+Lam/cyberhayq/chat/**;
+HSPLam/cyberhayq/chat/**->**(**)**
+Leu/siacs/conversations/ui/ChatListFragment;
+HSPLeu/siacs/conversations/ui/ChatListFragment;->**(**)**
+Leu/siacs/conversations/ui/ChatFragment;
+HSPLeu/siacs/conversations/ui/ChatFragment;->**(**)**
+Leu/siacs/conversations/ui/ConversationsActivity;
+HSPLeu/siacs/conversations/ui/ConversationsActivity;->**(**)**
+Leu/siacs/conversations/entities/Conversation;
+HSPLeu/siacs/conversations/entities/Conversation;->**(**)**
+Leu/siacs/conversations/entities/Message;
+HSPLeu/siacs/conversations/entities/Message;->**(**)**
+HSPLeu/siacs/conversations/utils/UIHelper;->**(**)**
+HSPLeu/siacs/conversations/utils/StylingHelper;->**(**)**
+HSPLeu/siacs/conversations/services/AvatarService;->**(**)**
+# the Kotlin bridges of the other Compose screens and the code snapshots and thumbnails call
+Leu/siacs/conversations/ui/ProfileActivity;
+HSPLeu/siacs/conversations/ui/ProfileActivity;->**(**)**
+Leu/siacs/conversations/ui/CallsActivity;
+HSPLeu/siacs/conversations/ui/CallsActivity;->**(**)**
+Leu/siacs/conversations/ui/MediaViewerActivity;
+HSPLeu/siacs/conversations/ui/MediaViewerActivity;->**(**)**
+Leu/siacs/conversations/ui/MediaBrowserCompose;
+HSPLeu/siacs/conversations/ui/MediaBrowserCompose;->**(**)**
+Leu/siacs/conversations/ui/NewChatCompose;
+HSPLeu/siacs/conversations/ui/NewChatCompose;->**(**)**
+Leu/siacs/conversations/ui/SearchCompose;
+HSPLeu/siacs/conversations/ui/SearchCompose;->**(**)**
+Leu/siacs/conversations/ui/MessageSearchResults;
+HSPLeu/siacs/conversations/ui/MessageSearchResults;->**(**)**
+Leu/siacs/conversations/persistance/FileBackend;
+HSPLeu/siacs/conversations/persistance/FileBackend;->**(**)**
+Leu/siacs/conversations/utils/Emoticons;
+HSPLeu/siacs/conversations/utils/Emoticons;->**(**)**
+Leu/siacs/conversations/utils/MessageUtils;
+HSPLeu/siacs/conversations/utils/MessageUtils;->**(**)**
+Leu/siacs/conversations/entities/MucOptions;
+HSPLeu/siacs/conversations/entities/MucOptions;->**(**)**
+Leu/siacs/conversations/entities/Contact;
+HSPLeu/siacs/conversations/entities/Contact;->**(**)**

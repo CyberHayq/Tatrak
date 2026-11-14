@@ -1,0 +1,1 @@
+XMPP messenger that encrypts your messages and media on the device

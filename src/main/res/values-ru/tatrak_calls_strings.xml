@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_calls">Звонки</string>
+    <string name="tatrak_calls_missed">Пропущенные</string>
+    <string name="tatrak_calls_empty">Звонков пока нет</string>
+    <string name="tatrak_calls_no_missed">Пропущенных звонков нет</string>
+    <string name="tatrak_calls_open_chat">Открыть чат</string>
+    <string name="tatrak_call_confirm_audio">Позвонить %1$s?</string>
+    <string name="tatrak_call_confirm_video">Видеозвонок с %1$s?</string>
+    <string name="tatrak_call_confirm_yes">Позвонить</string>
+    <string name="tatrak_saved_messages">Избранное</string>
+</resources>

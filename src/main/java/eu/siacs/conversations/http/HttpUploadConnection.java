@@ -13,6 +13,7 @@ import eu.siacs.conversations.Config;
 import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.entities.Transferable;
+import eu.siacs.conversations.persistance.FileBackend;
 import eu.siacs.conversations.services.AbstractConnectionManager;
 import eu.siacs.conversations.services.DebouncedInterfaceUpdater;
 import eu.siacs.conversations.services.XmppConnectionService;
@@ -121,7 +122,8 @@ public class HttpUploadConnection
         } else {
             mime = MimeUtils.getMimeType(file);
         }
-        final long originalFileSize = file.length();
+        // Tatrak: plaintext length (the on-disk length for an OpenPGP intermediate)
+        final long originalFileSize = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(file);
         final TransportSecurity transportSecurity;
         this.delayed = delay;
         if (Config.ENCRYPT_ON_HTTP_UPLOADED
@@ -135,10 +137,11 @@ public class HttpUploadConnection
         final long totalSize = originalFileSize + (transportSecurity != null ? 16 : 0);
         this.upload = new Upload(file, totalSize, mime, transportSecurity);
         message.resetFileParams();
+        // Tatrak: the slot is asked for under the message id's name, never the stored name
         this.slotFuture =
                 connection
                         .getManager(HttpUploadManager.class)
-                        .request(upload.file(), mime, upload.totalSize());
+                        .request(FileBackend.transferName(message, file), mime, upload.totalSize(), null);
         Futures.addCallback(
                 this.slotFuture,
                 new FutureCallback<>() {

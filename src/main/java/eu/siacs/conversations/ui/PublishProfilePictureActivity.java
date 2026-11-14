@@ -68,6 +68,8 @@ public class PublishProfilePictureActivity extends XmppActivity
     public void onAvatarPublicationSucceeded() {
         runOnUiThread(
                 () -> {
+                    // Tatrak: published, so the crop is no longer read
+                    am.cyberhayq.chat.storage.media.TemporaryMedia.deleteCrop(this, this.avatarUri);
                     if (mInitialAccountSetup) {
                         Intent intent =
                                 StartConversationActivity.startOrConversationsActivity(
@@ -189,11 +191,14 @@ public class PublishProfilePictureActivity extends XmppActivity
     }
 
     public void pickAvatar(final Uri image) {
-        this.cropImage.launch(new CropImageContractOptions(image, getCropImageOptions()));
+        this.cropImage.launch(new CropImageContractOptions(image, getCropImageOptions(this)));
     }
 
-    public static CropImageOptions getCropImageOptions() {
+    public static CropImageOptions getCropImageOptions(final android.content.Context context) {
         final var cropImageOptions = new CropImageOptions();
+        // Tatrak: the cropped picture goes to a bounded temporary folder, not left in cache/
+        cropImageOptions.customOutputUri =
+                am.cyberhayq.chat.storage.media.TemporaryMedia.cropOutput(context);
         cropImageOptions.aspectRatioX = 1;
         cropImageOptions.aspectRatioY = 1;
         cropImageOptions.fixAspectRatio = true;
@@ -204,8 +209,22 @@ public class PublishProfilePictureActivity extends XmppActivity
         return cropImageOptions;
     }
 
+    // Tatrak: the crop is deleted when the screen closes, unless a publish may still read it
+    // (the start-up cleanup takes that one)
+    @Override
+    protected void onDestroy() {
+        if (isFinishing() && !publishing) {
+            am.cyberhayq.chat.storage.media.TemporaryMedia.deleteCrop(this, this.avatarUri);
+        }
+        super.onDestroy();
+    }
+
     private void onAvatarPicked(final Uri uri) {
         Log.d(Config.LOGTAG, "onAvatarPicked(" + uri + ")");
+        // Tatrak: a crop picked again replaces the previous one
+        if (!uri.equals(this.avatarUri)) {
+            am.cyberhayq.chat.storage.media.TemporaryMedia.deleteCrop(this, this.avatarUri);
+        }
         this.avatarUri = uri;
         if (xmppConnectionServiceBound) {
             loadImageIntoPreview(uri);

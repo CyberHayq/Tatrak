@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- generated with tatrak_accent_colors.xml; Ember night: the day style has no neutrals -->
+<resources>
+    <style name="ThemeOverlay.Tatrak.Accent.Ember">
+        <item name="colorPrimary">@color/tatrak_accent_ember_primary</item>
+        <item name="colorOnPrimary">@color/tatrak_accent_ember_on_primary</item>
+        <item name="colorPrimaryContainer">@color/tatrak_accent_ember_primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/tatrak_accent_ember_on_primary_container</item>
+        <item name="colorSecondary">@color/tatrak_accent_ember_secondary</item>
+        <item name="colorOnSecondary">@color/tatrak_accent_ember_on_primary</item>
+        <item name="colorSecondaryContainer">@color/tatrak_accent_ember_secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/tatrak_accent_ember_on_secondary_container</item>
+        <item name="colorTertiary">@color/tatrak_accent_ember_secondary</item>
+        <item name="colorOnTertiary">@color/tatrak_accent_ember_on_primary</item>
+        <item name="colorTertiaryContainer">@color/tatrak_accent_ember_secondary_container</item>
+        <item name="colorOnTertiaryContainer">@color/tatrak_accent_ember_on_secondary_container</item>
+        <item name="tatrakLink">@color/tatrak_accent_ember_link</item>
+        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_ember_bubble_out</item>
+        <item name="tatrakTimeOutgoing">@color/tatrak_accent_ember_time_out</item>
+        <item name="tatrakCheckRead">@color/tatrak_accent_ember_check_read</item>
+        <item name="tatrakUnreadBadge">@color/tatrak_accent_ember_badge</item>
+        <item name="tatrakAccentIn">@color/tatrak_accent_ember_accent_in</item>
+        <item name="tatrakAccentOut">@color/tatrak_accent_ember_accent_out</item>
+        <item name="android:colorBackground">@color/tatrak_accent_ember_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_accent_ember_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_accent_ember_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_accent_ember_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_accent_ember_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_accent_ember_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_accent_ember_neutral_outline</item>
+    </style>
+</resources>

@@ -517,7 +517,9 @@ public class EditAccountActivity extends OmemoActivity
         if (SignupUtils.isSupportTokenRegistry()
                 && jid != null
                 && magicCreate
-                && !jid.getDomain().equals(Jid.ofDomain(Config.MAGIC_CREATE_DOMAIN))) {
+                // Tatrak: MAGIC_CREATE_DOMAIN is null, every domain is a token-registry one
+                && (Config.MAGIC_CREATE_DOMAIN == null
+                        || !jid.getDomain().equals(Jid.ofDomain(Config.MAGIC_CREATE_DOMAIN)))) {
             final Jid preset;
             if (mAccount.isOptionSet(Account.OPTION_FIXED_USERNAME)) {
                 preset = jid.asBareJid();
@@ -1280,6 +1282,8 @@ public class EditAccountActivity extends OmemoActivity
     }
 
     private void updateAccountInformation(boolean init) {
+        // Tatrak: offer to stop requiring channel binding when the server lacks it
+        am.cyberhayq.chat.ui.setup.ChannelBindingPrompt.maybeShow(this, mAccount, xmppConnectionService);
         if (init) {
             this.binding.accountJid.getEditableText().clear();
             if (mUsernameMode) {

@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_save_warning">Сохранённая копия не зашифрована: её смогут прочитать другие приложения и облачная копия.</string>
+    <string name="tatrak_voice_plain_warning">На этом устройстве голосовое сообщение во время записи хранится незашифрованным и шифруется сразу после неё.</string>
+    <string name="tatrak_voice_record">Записать</string>
+    <string name="tatrak_voice_plain_mark">Запись пока не зашифрована</string>
+</resources>

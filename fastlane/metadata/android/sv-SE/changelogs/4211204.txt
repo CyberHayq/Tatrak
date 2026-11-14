@@ -1,2 +1,0 @@
-* Åtgärdat samtal som blir avstängda när man byter utgångsenheter
-* Uteslut alla Umidigi-enheter från samtalsintegration

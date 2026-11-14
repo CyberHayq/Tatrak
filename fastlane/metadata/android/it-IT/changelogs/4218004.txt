@@ -1,1 +1,0 @@
-* Richiedi autorizzazione quando il server XMPP è nella rete locale

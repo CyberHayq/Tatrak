@@ -1,1 +1,0 @@
-* ?register ve ?register;preauth XMPP URI parametreleri desteği eklendi

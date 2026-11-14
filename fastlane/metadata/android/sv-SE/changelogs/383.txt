@@ -1,3 +1,0 @@
-* Flytta samtalsikonen till vänster för att hålla andra verktygsikoner på en samstämmig plats
-* Visa varaktighet för samtal i samband med ljudsamtal
-* Oavgjort vid L/V-samtal (samma två personer som ringer varandra samtidigt)

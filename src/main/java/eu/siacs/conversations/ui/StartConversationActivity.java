@@ -116,9 +116,9 @@ public class StartConversationActivity extends XmppActivity
     public int conference_context_id;
     public int contact_context_id;
     private ListPagerAdapter mListPagerAdapter;
-    private final List<ListItem> contacts = new ArrayList<>();
+    final List<ListItem> contacts = new ArrayList<>();
     private ListItemAdapter mContactsAdapter;
-    private final List<ListItem> conferences = new ArrayList<>();
+    final List<ListItem> conferences = new ArrayList<>();
     private ListItemAdapter mConferenceAdapter;
     private final ArrayList<String> mActivatedAccounts = new ArrayList<>();
     private EditText mSearchEditText;
@@ -126,6 +126,9 @@ public class StartConversationActivity extends XmppActivity
     private final AtomicBoolean mOpenedFab = new AtomicBoolean(false);
     private boolean mHideOfflineContacts = false;
     private boolean createdByViewIntent = false;
+
+    /** Tatrak: the Compose "New message" screen over the hidden classic layout; see NewChatCompose. */
+    private NewChatCompose compose;
     private final MenuItem.OnActionExpandListener mOnActionExpandListener =
             new MenuItem.OnActionExpandListener() {
 
@@ -322,7 +325,7 @@ public class StartConversationActivity extends XmppActivity
             pendingViewIntent.push(intent);
             createdByViewIntent = true;
             setIntent(createLauncherIntent(this));
-        } else if (startSearching && mInitialSearchValue.peek() == null) {
+        } else if (savedInstanceState == null && startSearching && mInitialSearchValue.peek() == null) {
             mInitialSearchValue.push("");
         }
         mRequestedContactsPermission.set(
@@ -343,43 +346,60 @@ public class StartConversationActivity extends XmppActivity
                         fabBackPressedCallback.setEnabled(isOpen);
                     }
                 });
-        binding.speedDial.setOnActionSelectedListener(
-                actionItem -> {
-                    final String searchString =
-                            mSearchEditText != null ? mSearchEditText.getText().toString() : null;
-                    final String prefilled;
-                    if (isValidJid(searchString)) {
-                        prefilled = Jid.of(searchString).toString();
-                    } else {
-                        prefilled = null;
-                    }
-                    final int itemId = actionItem.getId();
-                    if (itemId == R.id.discover_public_channels) {
-                        if (QuickConversationsService.isPlayStoreFlavor()) {
-                            throw new IllegalStateException(
-                                    "Channel discovery is not available on Google Play flavor");
-                        } else {
-                            startActivity(new Intent(this, ChannelDiscoveryActivity.class));
-                        }
-                        return false;
-                    } else if (itemId == R.id.join_public_channel) {
-                        showJoinConferenceDialog(prefilled);
-                        return false;
-                    } else if (itemId == R.id.create_private_group_chat) {
-                        showCreatePrivateGroupChatDialog();
-                        return false;
-                    } else if (itemId == R.id.create_public_channel) {
-                        showPublicChannelDialog();
-                        return false;
-                    } else if (itemId == R.id.create_contact) {
-                        showCreateContactDialog(prefilled, null);
-                        return false;
-                    } else {
-                        return false;
-                    }
-                });
+        binding.speedDial.setOnActionSelectedListener(actionItem -> onFabAction(actionItem.getId()));
         final var backDispatcher = this.getOnBackPressedDispatcher();
         backDispatcher.addCallback(this, this.fabBackPressedCallback);
+        this.compose = new NewChatCompose(this);
+        this.compose.attach(binding.getRoot());
+        // Tatrak: deliver the legacy pending search to the Compose field.
+        final String initialSearch = mInitialSearchValue.pop();
+        if (initialSearch != null) this.compose.openSearch(initialSearch);
+    }
+
+    /** The speed dial's entries; also the action rows of the Compose screen. */
+    boolean onFabAction(final int itemId) {
+        final String searchString = searchNeedle();
+        final String prefilled;
+        if (isValidJid(searchString)) {
+            prefilled = Jid.of(searchString).toString();
+        } else {
+            prefilled = null;
+        }
+        if (itemId == R.id.discover_public_channels) {
+            if (QuickConversationsService.isPlayStoreFlavor()) {
+                throw new IllegalStateException(
+                        "Channel discovery is not available on Google Play flavor");
+            } else {
+                startActivity(new Intent(this, ChannelDiscoveryActivity.class));
+            }
+        } else if (itemId == R.id.join_public_channel) {
+            showJoinConferenceDialog(prefilled);
+        } else if (itemId == R.id.create_private_group_chat) {
+            showCreatePrivateGroupChatDialog();
+        } else if (itemId == R.id.create_public_channel) {
+            showPublicChannelDialog();
+        } else if (itemId == R.id.create_contact) {
+            showCreateContactDialog(prefilled, null);
+        }
+        return false;
+    }
+
+    /** The current search text: the Compose field's, or the classic search view's. */
+    String searchNeedle() {
+        if (compose != null) {
+            return compose.getNeedle();
+        }
+        return mSearchEditText != null ? mSearchEditText.getText().toString() : null;
+    }
+
+    boolean isHidingOfflineContacts() {
+        return mHideOfflineContacts;
+    }
+
+    void setHideOfflineContacts(final boolean hide) {
+        mHideOfflineContacts = hide;
+        getPreferences().edit().putBoolean("hide_offline", hide).apply();
+        filter(searchNeedle());
     }
 
     private void inflateFab(final SpeedDialView speedDialView, final @MenuRes int menuRes) {
@@ -547,7 +567,7 @@ public class StartConversationActivity extends XmppActivity
                 R.string.delete,
                 (dialog, which) -> {
                     xmppConnectionService.deleteContactOnServer(contact);
-                    filter(mSearchEditText.getText().toString());
+                    filter(searchNeedle());
                 });
         builder.create().show();
     }
@@ -579,7 +599,7 @@ public class StartConversationActivity extends XmppActivity
                     if (conversation != null) {
                         xmppConnectionService.archiveConversation(conversation);
                     }
-                    filter(mSearchEditText.getText().toString());
+                    filter(searchNeedle());
                 });
         builder.create().show();
     }
@@ -740,6 +760,10 @@ public class StartConversationActivity extends XmppActivity
 
     @Override
     public boolean onCreateOptionsMenu(final Menu menu) {
+        if (compose != null) {
+            // the Compose screen has its own search field and menu
+            return false;
+        }
         getMenuInflater().inflate(R.menu.start_conversation, menu);
         AccountUtils.showHideMenuItems(menu);
         final MenuItem menuHideOffline = menu.findItem(R.id.action_hide_offline);
@@ -778,7 +802,7 @@ public class StartConversationActivity extends XmppActivity
             mHideOfflineContacts = !item.isChecked();
             getPreferences().edit().putBoolean("hide_offline", mHideOfflineContacts).apply();
             if (mSearchEditText != null) {
-                filter(mSearchEditText.getText().toString());
+                filter(searchNeedle());
             }
             invalidateOptionsMenu();
             return true;
@@ -805,7 +829,9 @@ public class StartConversationActivity extends XmppActivity
     }
 
     private void openSearch() {
-        if (mMenuSearchView != null) {
+        if (compose != null) {
+            compose.openSearch(null);
+        } else if (mMenuSearchView != null) {
             mMenuSearchView.expandActionView();
         }
     }
@@ -977,13 +1003,10 @@ public class StartConversationActivity extends XmppActivity
         configureHomeButton();
         Intent intent = pendingViewIntent.pop();
         if (intent != null && processViewIntent(intent)) {
-            filter(null);
+            // Tatrak: preserve the Compose search while handling an invite.
+            filter(compose != null ? searchNeedle() : null);
         } else {
-            if (mSearchEditText != null) {
-                filter(mSearchEditText.getText().toString());
-            } else {
-                filter(null);
-            }
+            filter(searchNeedle());
         }
         final var fragment = getSupportFragmentManager().findFragmentByTag(FRAGMENT_TAG_DIALOG);
         if (fragment instanceof OnBackendConnected callback) {
@@ -997,6 +1020,7 @@ public class StartConversationActivity extends XmppActivity
                 && AccountUtils.hasEnabledAccounts(xmppConnectionService)
                 && this.contacts.isEmpty()
                 && this.conferences.isEmpty()
+                && compose == null
                 && mOpenedFab.compareAndSet(false, true)) {
             binding.speedDial.open();
         }
@@ -1067,7 +1091,9 @@ public class StartConversationActivity extends XmppActivity
             }
             return true;
         } else {
-            if (mMenuSearchView != null) {
+            if (compose != null) {
+                compose.openSearch(invite.uri.asJid().toString());
+            } else if (mMenuSearchView != null) {
                 mMenuSearchView.expandActionView();
                 mSearchEditText.setText("");
                 mSearchEditText.append(invite.uri.asJid().toString());
@@ -1152,6 +1178,9 @@ public class StartConversationActivity extends XmppActivity
         }
         Collections.sort(this.conferences);
         mConferenceAdapter.notifyDataSetChanged();
+        if (compose != null) {
+            compose.publish(contacts, conferences);
+        }
     }
 
     @Override
@@ -1161,8 +1190,8 @@ public class StartConversationActivity extends XmppActivity
 
     @Override
     protected void refreshUiReal() {
-        if (mSearchEditText != null) {
-            filter(mSearchEditText.getText().toString());
+        if (mSearchEditText != null || compose != null) {
+            filter(searchNeedle());
         }
         configureHomeButton();
         if (QuickConversationsService.isQuicksy()) {

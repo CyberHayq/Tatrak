@@ -1,3 +1,0 @@
-* Jingle IBB dosya aktarımı düzeltmeleri
-* Tekrarlayan düzeltmelerin veritabanını doldurmasıyla ilgili düzeltmeler
-* Last Message Correction v1.1'e geçildi

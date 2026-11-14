@@ -1,2 +1,0 @@
-* Stöd för "status för tjänsteavbrott"
-* Mindre säkerhetsfixar för att hantera flera meddelanden, användar-ID:n och stanza-ID

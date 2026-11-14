@@ -237,6 +237,8 @@ public abstract class XmppActivity extends ActionBarActivity {
     }
 
     public void connectToBackend() {
+        // Tatrak: binding must not create the service before storage becomes READY.
+        if (am.cyberhayq.chat.storage.DatabaseStorage.showGate(this)) return;
         Intent intent = new Intent(this, XmppConnectionService.class);
         intent.setAction("ui");
         try {

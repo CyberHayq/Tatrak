@@ -88,6 +88,7 @@
         </intent>
     </queries>
 
+    <!-- Tatrak: label is tatrak_launcher_label (Armenian on hy), app_name stays fixed for folder names -->
     <application
         android:name=".Conversations"
         android:allowBackup="true"
@@ -97,7 +98,7 @@
         android:fullBackupContent="@xml/backup_content"
         android:hardwareAccelerated="true"
         android:icon="@mipmap/new_launcher"
-        android:label="@string/app_name"
+        android:label="@string/tatrak_launcher_label"
         android:largeHeap="true"
         android:localeConfig="@xml/locales_config"
         android:networkSecurityConfig="@xml/network_security_configuration"
@@ -150,6 +151,9 @@
             </intent-filter>
         </receiver>
 
+        <!-- Tatrak: local database migration/recovery, not an exported entry point. -->
+        <activity android:name="am.cyberhayq.chat.storage.DatabaseStorageActivity"
+            android:exported="false" />
         <activity
             android:name=".ui.UnifiedPushDistributor"
             android:enabled="false"
@@ -211,7 +215,7 @@
         <activity
             android:name=".ui.ConversationsActivity"
             android:launchMode="singleTask"
-            android:windowSoftInputMode="stateUnchanged" />
+            android:windowSoftInputMode="stateUnchanged|adjustResize" />
         <activity
             android:name=".ui.ScanQrCodeActivity"
             android:enableOnBackInvokedCallback="false"
@@ -394,6 +398,10 @@
         <activity
             android:name=".ui.MediaBrowserActivity"
             android:label="@string/media_browser" />
+        <activity
+            android:name=".ui.MediaViewerActivity"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize"
+            android:theme="@style/Theme.Tatrak.Viewer" />
         <activity android:name=".ui.AddReactionActivity" />
 
         <provider
@@ -405,6 +413,12 @@
                 android:name="android.support.FILE_PROVIDER_PATHS"
                 android:resource="@xml/file_paths" />
         </provider>
+        <!-- Tatrak: attachments of the encrypted media store, decrypted for the app they are shared with -->
+        <provider
+            android:name="am.cyberhayq.chat.storage.media.MediaProvider"
+            android:authorities="${applicationId}.media"
+            android:exported="false"
+            android:grantUriPermissions="true" />
         <provider
             android:name=".services.BarcodeProvider"
             android:authorities="${applicationId}.barcodes"
@@ -422,6 +436,10 @@
         <activity
             android:name=".ui.ViewProfilePictureActivity"
             android:theme="@style/Theme.Conversations3.Dark" />
+        <activity android:name=".ui.ProfileActivity" />
+        <activity android:name=".ui.CallsActivity" />
+        <!-- Tatrak: first-run choice between the easy and the advanced security defaults -->
+        <activity android:name=".ui.SetupModeActivity" />
         <activity
             android:name=".ui.MucUsersActivity"
             android:label="@string/group_chat_members" />

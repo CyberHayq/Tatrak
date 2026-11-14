@@ -1,3 +1,0 @@
-* Usar o tema Material 3
-* Reorganizar configurações
-* Sincronizar estado de leitura entre dispositivos

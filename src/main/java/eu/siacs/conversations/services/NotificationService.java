@@ -914,7 +914,8 @@ public class NotificationService {
     }
 
     private void setNotificationColor(final Builder mBuilder) {
-        mBuilder.setColor(ContextCompat.getColor(mXmppConnectionService, R.color.green_600));
+        // Tatrak: brand blue instead of Conversations green
+        mBuilder.setColor(ContextCompat.getColor(mXmppConnectionService, R.color.tatrak_accent_blue_primary));
     }
 
     public void updateNotification() {
@@ -1189,6 +1190,12 @@ public class NotificationService {
         setNotificationColor(builder);
     }
 
+    // Tatrak: Config's compile-time switch, or the user's setting
+    private boolean hideMessageText() {
+        return Config.HIDE_MESSAGE_TEXT_IN_NOTIFICATION
+                || new AppSettings(mXmppConnectionService).isHideNotificationText();
+    }
+
     private Builder buildMultipleConversation(final boolean notify) {
         final Builder mBuilder =
                 new NotificationCompat.Builder(
@@ -1211,7 +1218,7 @@ public class NotificationService {
             conversation = (Conversation) messages.get(0).getConversation();
             final String name = conversation.getName().toString();
             SpannableString styledString;
-            if (Config.HIDE_MESSAGE_TEXT_IN_NOTIFICATION) {
+            if (hideMessageText()) {
                 int count = messages.size();
                 styledString =
                         new SpannableString(
@@ -1273,7 +1280,7 @@ public class NotificationService {
                                 conversation,
                                 AvatarService.getSystemUiAvatarSize(mXmppConnectionService)));
         notificationBuilder.setContentTitle(conversation.getName());
-        if (Config.HIDE_MESSAGE_TEXT_IN_NOTIFICATION) {
+        if (hideMessageText()) {
             int count = messages.size();
             notificationBuilder.setContentText(
                     mXmppConnectionService
@@ -1834,6 +1841,8 @@ public class NotificationService {
             mBuilder.setContentIntent(openIntent);
         }
         mBuilder.setWhen(0)
+                // Tatrak: re-posted on every ping and error change; alert only the first time
+                .setOnlyAlertOnce(true)
                 .setPriority(Notification.PRIORITY_MIN)
                 .setSmallIcon(connected > 0 ? R.drawable.ic_link_24dp : R.drawable.ic_link_off_24dp)
                 .setLocalOnly(true);

@@ -1,2 +1,0 @@
-* Verifiera alltid domännamn. Ingen användare kan skriva över.
-* Stöd för Roster Pre Authentication

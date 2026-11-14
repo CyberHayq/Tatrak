@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <bool name="tatrak_hide_notification_text">false</bool>
+    <string name="tatrak_hide_notification_text">Hide message text in notifications</string>
+    <string name="tatrak_hide_notification_text_summary">Notifications show only the chat name and the number of new messages. Reply and mark-as-read buttons are not shown.</string>
+</resources>

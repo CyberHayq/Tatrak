@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_chat_mention_sender">Упомянуть</string>
+    <string name="tatrak_chat_next_mention">Следующее упоминание</string>
+    <string name="tatrak_format_bold">Жирный</string>
+    <string name="tatrak_format_italic">Курсив</string>
+    <string name="tatrak_format_monospace">Моноширинный</string>
+    <string name="tatrak_format_strikethrough">Зачёркнутый</string>
+</resources>

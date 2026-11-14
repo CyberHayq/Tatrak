@@ -27,16 +27,15 @@
             android:key="show_dynamic_tags"
             android:summary="@string/pref_show_dynamic_tags_summary"
             android:title="@string/pref_show_dynamic_tags" />
-
-
-    </PreferenceCategory>
-    <PreferenceCategory android:title="@string/pref_category_operating_system">
+        <!-- Tatrak -->
         <SwitchPreferenceCompat
-            android:defaultValue="@bool/allow_screenshots"
-            android:icon="@drawable/ic_screenshot_24dp"
-            android:key="allow_screenshots"
-            android:summary="@string/pref_allow_screenshots_summary"
-            android:title="@string/pref_allow_screenshots" />
+            android:defaultValue="@bool/tatrak_history_notices"
+            android:icon="@drawable/ic_schedule_24dp"
+            android:key="tatrak_history_notices"
+            android:summary="@string/tatrak_history_notices_summary"
+            android:title="@string/tatrak_history_notices" />
+
+
     </PreferenceCategory>
     <PreferenceCategory android:title="@string/pref_input_options">
         <ListPreference

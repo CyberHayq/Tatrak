@@ -1,11 +1,81 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- Tatrak: was <external-path path="/" />, which let the provider hand out any file on shared
+    storage. Only the folders shared-storage attachments and backups live in: <public dir>/<app_name>/
+    (FileBackend.getSharedStorageLocation, getBackupDirectory), the legacy <app_name>/Media/
+    (getLegacyStorageLocation), and the folders of
+    Conversations and monocles chat that restored backups point at (ImportBackupWorker).
+    Paths are literal: rename them together with app_name (FileProviderPathsTest checks this). -->
     <external-path
-        name="external"
-        path="/" />
-    <files-path
-        name="attachments"
-        path="attachments/" />
+        name="tatrak_download"
+        path="Download/Tatrak/" />
+    <external-path
+        name="tatrak_dcim"
+        path="DCIM/Tatrak/" />
+    <external-path
+        name="tatrak_pictures"
+        path="Pictures/Tatrak/" />
+    <external-path
+        name="tatrak_movies"
+        path="Movies/Tatrak/" />
+    <external-path
+        name="tatrak_documents"
+        path="Documents/Tatrak/" />
+    <external-path
+        name="tatrak_audiobooks"
+        path="Audiobooks/Tatrak/" />
+    <external-path
+        name="tatrak_recordings"
+        path="Recordings/Tatrak/" />
+    <external-path
+        name="conversations_download"
+        path="Download/Conversations/" />
+    <external-path
+        name="conversations_dcim"
+        path="DCIM/Conversations/" />
+    <external-path
+        name="conversations_pictures"
+        path="Pictures/Conversations/" />
+    <external-path
+        name="conversations_movies"
+        path="Movies/Conversations/" />
+    <external-path
+        name="conversations_documents"
+        path="Documents/Conversations/" />
+    <external-path
+        name="conversations_audiobooks"
+        path="Audiobooks/Conversations/" />
+    <external-path
+        name="conversations_recordings"
+        path="Recordings/Conversations/" />
+    <external-path
+        name="monocles_download"
+        path="Download/monocles chat/" />
+    <external-path
+        name="monocles_dcim"
+        path="DCIM/monocles chat/" />
+    <external-path
+        name="monocles_pictures"
+        path="Pictures/monocles chat/" />
+    <external-path
+        name="monocles_movies"
+        path="Movies/monocles chat/" />
+    <external-path
+        name="monocles_documents"
+        path="Documents/monocles chat/" />
+    <external-path
+        name="monocles_audiobooks"
+        path="Audiobooks/monocles chat/" />
+    <external-path
+        name="monocles_recordings"
+        path="Recordings/monocles chat/" />
+    <external-path
+        name="tatrak_media"
+        path="Tatrak/Media/" />
+    <external-path
+        name="conversations_media"
+        path="Conversations/Media/" />
+    <!-- Tatrak: no files/attachments root: those files are shared by MediaProvider, which decrypts them -->
 
     <!-- When we call the camera app to take a picture it will be stored in this directory.
     Upon sending the picture it will be copied over to internal or external storage -->
@@ -18,4 +88,9 @@
     <cache-path
         name="recordings"
         path="Recordings" />
+    <!-- Tatrak: the avatar cropper only writes to a content:// URI; its output goes to the bounded
+    temporary folder that TemporaryMedia empties at start -->
+    <cache-path
+        name="tatrak_avatar_tmp"
+        path="tatrak_avatar_tmp/" />
 </paths>

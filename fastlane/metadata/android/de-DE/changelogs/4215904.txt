@@ -1,2 +1,0 @@
-* Fehlermeldung für Server verbessert, die TLS 1.3 nicht unterstützen
-* Probleme mit der Gerätedrehung behoben

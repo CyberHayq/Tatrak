@@ -3,13 +3,15 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Tatrak: Telegram-like row (16dp inset, round avatar, muted second line); used by the
+         backup list of ImportBackupActivity and the classic account pickers -->
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="?selectableItemBackground"
-        android:paddingStart="8dp"
-        android:paddingTop="8dp"
-        android:paddingBottom="8dp">
+        android:paddingStart="16dp"
+        android:paddingTop="10dp"
+        android:paddingBottom="10dp">
 
         <com.google.android.material.imageview.ShapeableImageView
             android:id="@+id/account_image"
@@ -17,13 +19,14 @@
             android:layout_height="48dp"
             android:layout_alignParentStart="true"
             android:contentDescription="@string/account_image_description"
-            app:shapeAppearanceOverlay="@style/ShapeAppearance.RoundedCornersLight" />
+            app:shapeAppearanceOverlay="@style/ShapeAppearance.Circular" />
 
         <LinearLayout
             android:layout_width="fill_parent"
             android:layout_height="wrap_content"
             android:layout_centerVertical="true"
             android:layout_marginStart="@dimen/avatar_item_distance"
+            android:layout_marginEnd="16dp"
             android:layout_toStartOf="@+id/tgl_account_status"
             android:layout_toEndOf="@+id/account_image"
             android:orientation="vertical">
@@ -42,7 +45,8 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:text="@string/account_status_unknown"
-                android:textAppearance="?textAppearanceBodyMedium" />
+                android:textAppearance="?textAppearanceBodyMedium"
+                android:textColor="?attr/colorOnSurfaceVariant" />
         </LinearLayout>
 
         <com.google.android.material.materialswitch.MaterialSwitch

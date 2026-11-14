@@ -1,1 +1,0 @@
-* Ses/Video görüşmeleri (XEP-0215 aracılığıyla keşfedilebilen STUN ve TURN sunucuları biçimindeki sunucu desteği gereklidir)

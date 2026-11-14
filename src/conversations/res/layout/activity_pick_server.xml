@@ -36,9 +36,9 @@
                     android:layout_alignParentBottom="true"
                     android:minHeight="256dp"
                     android:orientation="vertical"
-                    android:paddingLeft="16dp"
-                    android:paddingRight="16dp"
-                    android:paddingBottom="10dp">
+                    android:paddingHorizontal="20dp"
+                    android:paddingBottom="16dp">
+                    <!-- Tatrak: centred text, full-width primary button and accent text button -->
 
                     <Space
                         android:layout_width="match_parent"
@@ -46,33 +46,34 @@
                         android:layout_weight="1" />
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
+                        android:gravity="center"
                         android:text="@string/pick_a_server"
-                        android:textAppearance="?textAppearanceTitleLarge" />
+                        android:textAppearance="@style/TextAppearance.Tatrak.Onboarding.Title" />
 
                     <TextView
-                        android:layout_width="wrap_content"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="8dp"
-                        android:layout_marginBottom="16dp"
+                        android:layout_marginBottom="24dp"
+                        android:gravity="center"
                         android:text="@string/server_select_text"
-                        android:textAppearance="?textAppearanceBodyMedium" />
+                        android:textAppearance="@style/TextAppearance.Tatrak.Onboarding.Body" />
 
                     <Button
                         android:id="@+id/use_cim"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
+                        style="@style/Widget.Tatrak.Onboarding.PrimaryButton"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="end"
+                        android:layout_marginBottom="8dp"
                         android:text="@string/use_conversations.im" />
 
                     <Button
                         android:id="@+id/use_own_provider"
-                        style="@style/Widget.Material3.Button.TextButton"
-                        android:layout_width="wrap_content"
+                        style="@style/Widget.Tatrak.Onboarding.SecondaryButton"
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:layout_gravity="end"
                         android:text="@string/use_own_provider" />
                 </LinearLayout>
 
@@ -82,12 +83,13 @@
                     android:layout_above="@+id/linearLayout"
                     android:layout_alignParentStart="true">
 
+                    <!-- Tatrak: logo at a fixed size instead of the bitmap's own -->
                     <ImageView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
+                        android:layout_width="@dimen/tatrak_onboarding_logo"
+                        android:layout_height="@dimen/tatrak_onboarding_logo"
                         android:layout_centerHorizontal="true"
                         android:layout_centerVertical="true"
-                        android:padding="8dp"
+                        android:importantForAccessibility="no"
                         android:src="@drawable/main_logo" />
                 </RelativeLayout>
             </RelativeLayout>

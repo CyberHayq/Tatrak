@@ -31,6 +31,7 @@ package eu.siacs.conversations.ui;
 
 import static eu.siacs.conversations.ui.ConversationFragment.REQUEST_DECRYPT_PGP;
 
+import am.cyberhayq.chat.ui.chatlist.ChatSuggestions;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Activity;
@@ -51,6 +52,7 @@ import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
+import androidx.core.view.WindowCompat;
 import androidx.databinding.DataBindingUtil;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentManager;
@@ -63,6 +65,7 @@ import eu.siacs.conversations.R;
 import eu.siacs.conversations.crypto.OmemoSetting;
 import eu.siacs.conversations.databinding.ActivityConversationsBinding;
 import eu.siacs.conversations.entities.Conversation;
+import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.services.XmppConnectionService;
 import eu.siacs.conversations.ui.interfaces.OnBackendConnected;
 import eu.siacs.conversations.ui.interfaces.OnConversationArchived;
@@ -74,7 +77,9 @@ import eu.siacs.conversations.ui.util.PendingItem;
 import eu.siacs.conversations.utils.ExceptionHelper;
 import eu.siacs.conversations.xmpp.OnUpdateBlocklist;
 import java.util.Arrays;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import org.openintents.openpgp.util.OpenPgpApi;
 
 public class ConversationsActivity extends QrCodeProcessingActivity
@@ -113,6 +118,8 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     };
     private final PendingItem<Intent> pendingViewIntent = new PendingItem<>();
     private final PendingItem<ActivityResult> postponedActivityResult = new PendingItem<>();
+    // chats the user switched to the classic screen during this session
+    private final Set<String> classicConversations = new HashSet<>();
     private ActivityConversationsBinding binding;
     private boolean mActivityPaused = true;
 
@@ -159,8 +166,8 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         }
 
         if (binding.secondaryFragment != null
-                && ConversationFragment.getConversation(this) == null) {
-            final var conversation = ConversationsOverviewFragment.getSuggestion(this);
+                && getConversationInSecondary() == null) {
+            final var conversation = ChatSuggestions.first(xmppConnectionService, null);
             openConversationOrCatch(conversation, null);
         }
         showDialogsIfMainIsOverview();
@@ -171,7 +178,7 @@ public class ConversationsActivity extends QrCodeProcessingActivity
             return;
         }
         final Fragment fragment = getSupportFragmentManager().findFragmentById(R.id.main_fragment);
-        if (fragment instanceof ConversationsOverviewFragment) {
+        if (fragment instanceof ChatListFragment) {
             if (ExceptionHelper.checkForCrash(this)) {
                 return;
             }
@@ -352,6 +359,8 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         OmemoSetting.load(this);
         this.binding = DataBindingUtil.setContentView(this, R.layout.activity_conversations);
         Activities.setStatusAndNavigationBarColors(this, binding.getRoot());
+        // fragments handle insets themselves so the chat list header can extend under the status bar
+        WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
         ;
         this.getSupportFragmentManager()
                 .addOnBackStackChangedListener(this::showDialogsIfMainIsOverview);
@@ -371,7 +380,7 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     @Override
     public void onConversationSelected(Conversation conversation) {
         clearPendingViewIntent();
-        if (ConversationFragment.getConversation(this) == conversation) {
+        if (getConversationInSecondary() == conversation) {
             Log.d(
                     Config.LOGTAG,
                     "ignore onConversationSelected() because conversation is already open");
@@ -403,44 +412,96 @@ public class ConversationsActivity extends QrCodeProcessingActivity
                     Log.d(Config.LOGTAG, "not loading conversation and secondary is already empty");
                 }
             } else {
-                final ConversationFragment conversationFragment;
-                if (secondaryFragment instanceof ConversationFragment cf) {
-                    conversationFragment = cf;
-                    cf.reInit(conversation, extras == null ? new Bundle() : extras);
-                } else {
-                    final var cf = new ConversationFragment();
-                    FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
-                    fragmentTransaction.replace(R.id.secondary_fragment, cf);
-                    fragmentTransaction.runOnCommit(
-                            () -> {
-                                refreshFragment(R.id.main_fragment);
-                            });
-                    fragmentTransaction.commitAllowingStateLoss();
-                    conversationFragment = cf;
-                }
-                conversationFragment.reInit(conversation, extras == null ? new Bundle() : extras);
+                showConversation(R.id.secondary_fragment, conversation, extras, false);
             }
             mainNeedsRefresh = true;
         } else if (conversation != null) {
             mainNeedsRefresh = false;
-            final Fragment mainFragment = fragmentManager.findFragmentById(R.id.main_fragment);
-            final ConversationFragment conversationFragment;
-            if (mainFragment instanceof ConversationFragment cf) {
-                conversationFragment = cf;
-            } else {
-                conversationFragment = new ConversationFragment();
-                FragmentTransaction fragmentTransaction = fragmentManager.beginTransaction();
-                fragmentTransaction.replace(R.id.main_fragment, conversationFragment);
-                fragmentTransaction.addToBackStack(null);
-                fragmentTransaction.commitAllowingStateLoss();
-            }
-            conversationFragment.reInit(conversation, extras == null ? new Bundle() : extras);
+            showConversation(R.id.main_fragment, conversation, extras, true);
         } else {
             mainNeedsRefresh = false;
         }
         if (mainNeedsRefresh) {
             refreshFragment(R.id.main_fragment);
         }
+    }
+
+    /**
+     * Shows the conversation in the Compose {@link ChatFragment}, or in the classic {@link
+     * ConversationFragment} for what the new screen does not handle (see {@link #wantsClassic}).
+     */
+    private void showConversation(
+            @IdRes final int container,
+            final Conversation conversation,
+            @Nullable final Bundle extras,
+            final boolean onBackStack) {
+        final var fragmentManager = getSupportFragmentManager();
+        final var existing = fragmentManager.findFragmentById(container);
+        final var arguments = extras == null ? new Bundle() : extras;
+        final boolean classic = wantsClassic(conversation, extras);
+        if (classic && existing instanceof ConversationFragment conversationFragment) {
+            conversationFragment.reInit(conversation, arguments);
+            return;
+        }
+        if (!classic && existing instanceof ChatFragment chatFragment) {
+            chatFragment.reInit(conversation, arguments);
+            return;
+        }
+        if (onBackStack && existing instanceof ConversationHost) {
+            // switching between the classic and the new screen; don't stack them
+            fragmentManager.popBackStackImmediate();
+        }
+        // reordering lets the pop follow a (predictive or swipe) back gesture
+        final var transaction = fragmentManager.beginTransaction().setReorderingAllowed(true);
+        if (onBackStack && !(existing instanceof ConversationHost)) {
+            transaction.setCustomAnimations(
+                    R.animator.tatrak_chat_enter,
+                    R.animator.tatrak_list_exit,
+                    R.animator.tatrak_list_pop_enter,
+                    R.animator.tatrak_chat_pop_exit);
+        }
+        if (classic) {
+            final var conversationFragment = new ConversationFragment();
+            transaction.replace(container, conversationFragment);
+            conversationFragment.reInit(conversation, arguments);
+        } else {
+            final var chatFragment = new ChatFragment();
+            transaction.replace(container, chatFragment);
+            chatFragment.reInit(conversation, arguments);
+        }
+        if (onBackStack) {
+            transaction.addToBackStack(null);
+        } else {
+            transaction.runOnCommit(() -> refreshFragment(R.id.main_fragment));
+        }
+        transaction.commitAllowingStateLoss();
+    }
+
+    private boolean wantsClassic(final Conversation conversation, @Nullable final Bundle extras) {
+        if (classicConversations.contains(conversation.getUuid())) {
+            return true;
+        }
+        if (conversation.getNextEncryption() == Message.ENCRYPTION_PGP) {
+            return true;
+        }
+        return extras != null
+                && (extras.containsKey(EXTRA_NICK)
+                        || extras.getBoolean(EXTRA_IS_PRIVATE_MESSAGE, false)
+                        || extras.containsKey(EXTRA_POST_INIT_ACTION));
+    }
+
+    /** Called by {@link ChatFragment} for what only the classic screen can do. */
+    public void openClassicConversation(@NonNull final Conversation conversation) {
+        classicConversations.add(conversation.getUuid());
+        openConversation(conversation, null);
+    }
+
+    private @Nullable Conversation getConversationInSecondary() {
+        if (binding.secondaryFragment == null) {
+            return null;
+        }
+        final var fragment = getSupportFragmentManager().findFragmentById(R.id.secondary_fragment);
+        return fragment instanceof ConversationHost host ? host.getConversation() : null;
     }
 
     public static boolean isTabletView(final Activity activity) {
@@ -528,9 +589,9 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     private void initializeFragments() {
         final var fragmentManager = getSupportFragmentManager();
         final var fragments = fragmentManager.getFragments();
-        final var optional = Iterables.tryFind(fragments, f -> f instanceof ConversationFragment);
+        final var optional = Iterables.tryFind(fragments, f -> f instanceof ConversationHost);
         final var existing = fragmentManager.findFragmentById(R.id.main_fragment);
-        if (existing instanceof ConversationsOverviewFragment
+        if (existing instanceof ChatListFragment
                 && binding.secondaryFragment == null
                 && optional.isPresent()) {
             Log.d(Config.LOGTAG, "moving ConversationFragment from secondary to main");
@@ -548,7 +609,7 @@ public class ConversationsActivity extends QrCodeProcessingActivity
             return;
         }
         final var transaction = fragmentManager.beginTransaction();
-        transaction.replace(R.id.main_fragment, new ConversationsOverviewFragment());
+        transaction.replace(R.id.main_fragment, new ChatListFragment());
         transaction.commitAllowingStateLoss();
     }
 
@@ -556,7 +617,7 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     public void onConversationArchived(final Conversation conversation) {
         final var fragmentManager = getSupportFragmentManager();
         final Fragment mainFragment = fragmentManager.findFragmentById(R.id.main_fragment);
-        if (mainFragment instanceof ConversationFragment) {
+        if (mainFragment instanceof ConversationHost) {
             try {
                 fragmentManager.popBackStack();
             } catch (final IllegalStateException e) {
@@ -571,10 +632,10 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         }
         final Fragment secondaryFragment =
                 fragmentManager.findFragmentById(R.id.secondary_fragment);
-        if (secondaryFragment instanceof ConversationFragment conversationFragment) {
-            if (conversationFragment.getConversation() == conversation) {
+        if (secondaryFragment instanceof ConversationHost host) {
+            if (host.getConversation() == conversation) {
                 final var suggestion =
-                        ConversationsOverviewFragment.getSuggestion(this, conversation);
+                        ChatSuggestions.first(xmppConnectionService, conversation);
                 openConversation(suggestion, null);
             }
         }
@@ -583,8 +644,8 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     @Override
     public void onConversationsListItemUpdated() {
         final var fragment = getSupportFragmentManager().findFragmentById(R.id.main_fragment);
-        if (fragment instanceof ConversationsOverviewFragment overviewFragment) {
-            overviewFragment.refresh();
+        if (fragment instanceof ChatListFragment chatListFragment) {
+            chatListFragment.refresh();
         }
     }
 

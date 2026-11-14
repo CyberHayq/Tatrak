@@ -1,3 +1,0 @@
-* Oferecer geração de Convite Fácil em servidores que suportam-no 
-* Exibir GIFs enviados do Movim
-* guardar avatares em cache

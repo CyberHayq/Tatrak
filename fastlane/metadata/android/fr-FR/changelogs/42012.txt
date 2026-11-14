@@ -1,1 +1,0 @@
-* Corrige les (télé)chargements HTTP pour les utilisateurs qui ne font pas confiance aux CA du système

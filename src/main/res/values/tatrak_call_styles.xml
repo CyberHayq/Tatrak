@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Tatrak call screen: white text and icons on the gradient, in both themes. -->
+    <style name="ThemeOverlay.Tatrak.Call" parent="ThemeOverlay.Material3.Dark">
+        <item name="colorOnSurface">@android:color/white</item>
+        <item name="colorOnSurfaceVariant">#B3FFFFFF</item>
+        <item name="android:textColorPrimary">@android:color/white</item>
+        <item name="android:textColorSecondary">#B3FFFFFF</item>
+    </style>
+
+    <!-- Round in-call buttons: speaker, microphone, video, camera switch. -->
+    <style name="Widget.Tatrak.CallAction" parent="Widget.Material3.FloatingActionButton.Primary">
+        <item name="backgroundTint">#33FFFFFF</item>
+        <item name="tint">@android:color/white</item>
+        <item name="fabCustomSize">56dp</item>
+        <item name="maxImageSize">26dp</item>
+        <item name="elevation">0dp</item>
+        <item name="pressedTranslationZ">0dp</item>
+        <item name="hoveredFocusedTranslationZ">0dp</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.Circular</item>
+        <item name="rippleColor">#33FFFFFF</item>
+    </style>
+
+    <!-- Large round accept / decline / hang-up buttons. -->
+    <style name="Widget.Tatrak.CallMain" parent="Widget.Material3.FloatingActionButton.Primary">
+        <item name="tint">@android:color/white</item>
+        <item name="fabCustomSize">72dp</item>
+        <item name="maxImageSize">34dp</item>
+        <item name="elevation">0dp</item>
+        <item name="pressedTranslationZ">0dp</item>
+        <item name="hoveredFocusedTranslationZ">0dp</item>
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.Circular</item>
+        <item name="rippleColor">#33FFFFFF</item>
+    </style>
+
+    <color name="tatrak_call_red">#FFF0484E</color>
+    <color name="tatrak_call_green">#FF3FBF5A</color>
+</resources>

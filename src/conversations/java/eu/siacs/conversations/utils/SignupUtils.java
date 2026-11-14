@@ -1,6 +1,7 @@
 package eu.siacs.conversations.utils;
 
 import android.content.Context;
+import am.cyberhayq.chat.ui.setup.SetupMode;
 import android.content.Intent;
 import android.util.Log;
 import com.google.common.collect.Iterables;
@@ -13,6 +14,7 @@ import eu.siacs.conversations.ui.EditAccountActivity;
 import eu.siacs.conversations.ui.MagicCreateActivity;
 import eu.siacs.conversations.ui.ManageAccountActivity;
 import eu.siacs.conversations.ui.PickServerActivity;
+import eu.siacs.conversations.ui.SetupModeActivity;
 import eu.siacs.conversations.ui.WelcomeActivity;
 import eu.siacs.conversations.xmpp.Jid;
 import java.util.Collection;
@@ -41,6 +43,10 @@ public class SignupUtils {
     }
 
     public static Intent getSignUpIntent(final Context context, final boolean toServerChooser) {
+        if (Config.MAGIC_CREATE_DOMAIN == null) {
+            // Tatrak: the welcome and server-picker screens offer the built-in server; skip them
+            return getRedirectionIntent(context);
+        }
         final Intent intent;
         if (toServerChooser) {
             intent = new Intent(context, PickServerActivity.class);
@@ -66,7 +72,10 @@ public class SignupUtils {
                         account.isOptionSet(Account.OPTION_REGISTER));
             }
         } else if (state instanceof None) {
-            if (Config.X509_VERIFICATION) {
+            if (!SetupMode.isChosen(context)) {
+                // Tatrak: a fresh install first picks the easy or advanced security defaults
+                intent = new Intent(context, SetupModeActivity.class);
+            } else if (Config.X509_VERIFICATION) {
                 intent = new Intent(context, ManageAccountActivity.class);
             } else if (Config.MAGIC_CREATE_DOMAIN != null) {
                 intent = new Intent(context, WelcomeActivity.class);

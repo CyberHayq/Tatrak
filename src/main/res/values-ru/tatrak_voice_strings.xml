@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_voice_not_sent">Голосовое сообщение не отправлено: чат закрыли раньше, чем его удалось отправить</string>
+</resources>

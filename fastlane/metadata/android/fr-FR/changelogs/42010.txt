@@ -1,2 +1,0 @@
-* Différentes corrections de problèmes concernant le support de Tor
-* Amélioration de la compatibilité des appels avec Dino

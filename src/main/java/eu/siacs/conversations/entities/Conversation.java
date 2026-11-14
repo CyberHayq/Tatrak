@@ -568,17 +568,25 @@ public class Conversation extends AbstractEntity
     }
 
     public Message getLatestMessage() {
+        return getLatestMessage(false);
+    }
+
+    /** Tatrak: the newest message a chat list row shows; messages deleted "for me" are skipped. */
+    public Message getLatestVisibleMessage() {
+        return getLatestMessage(true);
+    }
+
+    private Message getLatestMessage(final boolean visibleOnly) {
         synchronized (this.messages) {
-            if (this.messages.isEmpty()) {
-                final var message = new Message(this, "", Message.ENCRYPTION_NONE);
-                message.setType(Message.TYPE_STATUS);
-                final var lastClear = getLastClearHistory();
-                message.setTime(
-                        Math.max(getCreated(), lastClear == null ? 0 : lastClear.timestamp()));
-                return message;
-            } else {
-                return this.messages.get(this.messages.size() - 1);
+            for (int i = this.messages.size() - 1; i >= 0; --i) {
+                final var message = this.messages.get(i);
+                if (!visibleOnly || message.getType() != Message.TYPE_HIDDEN) return message;
             }
+            final var message = new Message(this, "", Message.ENCRYPTION_NONE);
+            message.setType(Message.TYPE_STATUS);
+            final var lastClear = getLastClearHistory();
+            message.setTime(Math.max(getCreated(), lastClear == null ? 0 : lastClear.timestamp()));
+            return message;
         }
     }
 
@@ -780,6 +788,26 @@ public class Conversation extends AbstractEntity
 
     public void setPinnedOnTop(final boolean value) {
         this.attributes.pinnedOnTop = value;
+    }
+
+    /**
+     * Telegram-style archive (Tatrak): the chat stays active and only moves into the archive
+     * folder. Epoch millis of archiving, or null when not archived.
+     */
+    public @Nullable Long getTatrakArchivedAt() {
+        return this.attributes.tatrakArchivedAt;
+    }
+
+    public void setTatrakArchivedAt(@Nullable final Long value) {
+        this.attributes.tatrakArchivedAt = value;
+    }
+
+    public String getTatrakWallpaper() {
+        return this.attributes.tatrakWallpaper;
+    }
+
+    public void setTatrakWallpaper(final String value) {
+        this.attributes.tatrakWallpaper = value;
     }
 
     public int getNextEncryption() {
@@ -1115,6 +1143,13 @@ public class Conversation extends AbstractEntity
 
         @SerializedName("pinned_on_top")
         private Boolean pinnedOnTop;
+
+        @SerializedName("tatrak_archived_at")
+        private Long tatrakArchivedAt;
+
+        // Tatrak: this chat's own background (see Wallpapers), null = the app-wide one
+        @SerializedName("tatrak_wallpaper")
+        private String tatrakWallpaper;
 
         private Affiliation mucAffiliation;
         private Role mucRole;

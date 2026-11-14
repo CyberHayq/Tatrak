@@ -12,6 +12,13 @@ public class ConversationActivity extends AppCompatActivity {
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        // Tatrak: do not mistake a gated database for a new installation.
+        if (am.cyberhayq.chat.storage.DatabaseStorage.showGate(this)) return;
         startActivity(SignupUtils.getRedirectionIntent(this));
         new Handler(Looper.getMainLooper()).post(this::finish);
     }

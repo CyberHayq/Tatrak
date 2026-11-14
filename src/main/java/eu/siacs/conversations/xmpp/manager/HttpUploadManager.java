@@ -20,6 +20,7 @@ import im.conversations.android.xmpp.ExtensionFactory;
 import im.conversations.android.xmpp.model.disco.info.InfoQuery;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import im.conversations.android.xmpp.model.upload.Request;
+import im.conversations.android.xmpp.model.upload.purpose.Permanent;
 import im.conversations.android.xmpp.model.upload.purpose.Purpose;
 import java.io.File;
 import java.io.IOException;
@@ -34,8 +35,14 @@ import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.RequestBody;
 import okhttp3.Response;
+import okio.BufferedSink;
+import okio.Okio;
+import okio.Source;
 
 public class HttpUploadManager extends AbstractManager {
+
+    /** Tatrak convention: an upload component named stickers.&lt;domain&gt; holds sticker packs. */
+    public static final String STICKER_SERVICE_PREFIX = "stickers.";
 
     private final XmppConnectionService service;
 
@@ -53,8 +60,7 @@ public class HttpUploadManager extends AbstractManager {
             final String mime,
             final long size,
             @Nullable final Purpose purpose) {
-        final var result =
-                getManager(DiscoManager.class).findDiscoItemByFeature(Namespace.HTTP_UPLOAD);
+        final var result = findUploadService(false);
         if (result == null) {
             return Futures.immediateFailedFuture(
                     new IllegalStateException("No HTTP upload host found"));
@@ -62,21 +68,102 @@ public class HttpUploadManager extends AbstractManager {
         return requestHttpUpload(result.getKey(), filename, mime, size, purpose);
     }
 
+    /**
+     * Upload to the server's sticker component ({@link #STICKER_SERVICE_PREFIX}), which keeps files
+     * without expiry; falls back to the regular service when the server has none.
+     */
+    public ListenableFuture<HttpUrl> uploadSticker(final File file, final String mime) {
+        // Tatrak: a sticker file is encrypted at rest: its plaintext length and bytes are uploaded
+        final long size = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(file);
+        final var service = findUploadService(true);
+        final var slotFuture =
+                service == null
+                        ? request(file.getName(), mime, size, new Permanent())
+                        : requestHttpUpload(
+                                service.getKey(), file.getName(), mime, size, new Permanent());
+        return Futures.transformAsync(
+                slotFuture,
+                slot -> upload(storedBody(file, mime, size), slot),
+                MoreExecutors.directExecutor());
+    }
+
+    /** Tatrak: [file]'s plaintext, read through the media store whenever OkHttp sends the body. */
+    static RequestBody storedBody(final File file, final String mime, final long size) {
+        return new RequestBody() {
+            @Override
+            public long contentLength() {
+                return size;
+            }
+
+            @Override
+            public MediaType contentType() {
+                return MediaType.parse(mime);
+            }
+
+            @Override
+            public void writeTo(@NonNull final BufferedSink sink) throws IOException {
+                try (final Source source =
+                        Okio.source(
+                                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get()
+                                        .inputStream(file))) {
+                    sink.writeAll(source);
+                } catch (final java.io.FileNotFoundException e) {
+                    // its message is the path, which names the store's generation: kept out of logs
+                    throw new java.io.FileNotFoundException("the stored file is gone");
+                }
+            }
+        };
+    }
+
+    /** True when uploads land on a sticker component, i.e. links don't expire with the server's cleanup. */
+    public boolean hasStickerService() {
+        final var service = findUploadService(true);
+        return service != null && isStickerService(service.getKey());
+    }
+
+    /**
+     * The regular upload service never is the sticker component, which only takes stickers and
+     * would otherwise keep every file forever; with {@code stickers} the sticker component is
+     * preferred.
+     */
+    private Map.Entry<Jid, InfoQuery> findUploadService(final boolean stickers) {
+        final var items =
+                getManager(DiscoManager.class).findDiscoItemsByFeature(Namespace.HTTP_UPLOAD);
+        Map.Entry<Jid, InfoQuery> regular = null;
+        for (final var item : items.entrySet()) {
+            if (isStickerService(item.getKey())) {
+                if (stickers) {
+                    return item;
+                }
+            } else if (regular == null) {
+                regular = item;
+            }
+        }
+        return regular;
+    }
+
+    private static boolean isStickerService(final Jid address) {
+        return address.getDomain().toString().startsWith(STICKER_SERVICE_PREFIX);
+    }
+
     public ListenableFuture<HttpUrl> upload(
             final File file, final String mime, final Purpose purpose) {
         final var filename = file.getName();
-        final var size = file.length();
+        // Tatrak: an avatar is encrypted at rest: its plaintext length and bytes are uploaded
+        final var size = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(file);
         final var slotFuture = request(filename, mime, size, purpose);
         return Futures.transformAsync(
-                slotFuture, slot -> upload(file, mime, slot), MoreExecutors.directExecutor());
+                slotFuture,
+                slot -> upload(storedBody(file, mime, size), slot),
+                MoreExecutors.directExecutor());
     }
 
-    private ListenableFuture<HttpUrl> upload(final File file, final String mime, final Slot slot) {
+    // Tatrak: takes the body, so a sticker or an avatar can send its plaintext (see storedBody)
+    private ListenableFuture<HttpUrl> upload(final RequestBody body, final Slot slot) {
         final SettableFuture<HttpUrl> future = SettableFuture.create();
         final OkHttpClient client =
                 service.getHttpConnectionManager()
                         .buildHttpClient(slot.put, getAccount(), 0, false);
-        final var body = RequestBody.create(MediaType.parse(mime), file);
         final okhttp3.Request request =
                 new okhttp3.Request.Builder().url(slot.put).put(body).headers(slot.headers).build();
         client.newCall(request)
@@ -151,8 +238,7 @@ public class HttpUploadManager extends AbstractManager {
 
     public Service getService() {
         if (Config.ENABLE_HTTP_UPLOAD) {
-            final var entry =
-                    getManager(DiscoManager.class).findDiscoItemByFeature(Namespace.HTTP_UPLOAD);
+            final var entry = findUploadService(false);
             return entry == null ? null : new Service(entry);
         }
         return null;

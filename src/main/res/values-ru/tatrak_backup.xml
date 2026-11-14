@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_backup_format">Формат резервной копии</string>
+    <string-array name="tatrak_backup_format_entries">
+        <item>Tatrak: всё, восстанавливается только в Tatrak</item>
+        <item>Conversations: пароль защищён слабее, без фото и файлов и без данных, которые есть только в Tatrak</item>
+        <item>monocles chat: без данных, которые есть только в Tatrak</item>
+    </string-array>
+    <string name="tatrak_backup_media">Включать фото и файлы</string>
+    <string name="tatrak_backup_media_summary">Разовая копия будет содержать и фото, видео и файлы, поэтому станет намного больше. В автоматические копии и копии в формате Conversations они не попадают.</string>
+    <string name="tatrak_backup_partial_title">Резервная копия восстановлена частично</string>
+    <string name="tatrak_backup_partial_summary">Не все данные удалось восстановить. Пропущено записей: %1$d.</string>
+    <plurals name="tatrak_backup_files_left_out">
+        <item quantity="one">Не удалось прочитать %d файл, он не вошёл в копию.</item>
+        <item quantity="few">Не удалось прочитать %d файла, они не вошли в копию.</item>
+        <item quantity="many">Не удалось прочитать %d файлов, они не вошли в копию.</item>
+        <item quantity="other">Не удалось прочитать %d файла, они не вошли в копию.</item>
+    </plurals>
+</resources>

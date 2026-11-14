@@ -1,1 +1,0 @@
-* Corrigir regressão (travamento ao conectar) introduzida na versão anterior

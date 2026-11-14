@@ -53,6 +53,7 @@ public class ManageAccountActivity extends XmppActivity
     protected AtomicBoolean mInvokedAddAccount = new AtomicBoolean(false);
 
     protected Pair<Integer, Intent> mPostponedActivityResult = null;
+    private AccountsCompose compose;
 
     @Override
     public void onAccountUpdate() {
@@ -72,6 +73,9 @@ public class ManageAccountActivity extends XmppActivity
         }
         invalidateOptionsMenu();
         mAccountAdapter.notifyDataSetChanged();
+        if (compose != null) {
+            compose.publish(new ArrayList<>(accountList));
+        }
     }
 
     @Override
@@ -101,6 +105,9 @@ public class ManageAccountActivity extends XmppActivity
         binding.accountList.setOnItemClickListener(
                 (arg0, view, position, arg3) -> switchToAccount(accountList.get(position)));
         registerForContextMenu(binding.accountList);
+        // Tatrak: Compose list over the hidden classic one; menus call accountAction / menuAction
+        compose = new AccountsCompose(this);
+        compose.attach(binding.getRoot());
     }
 
     @Override
@@ -148,6 +155,9 @@ public class ManageAccountActivity extends XmppActivity
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
+        if (compose != null) {
+            return false;
+        }
         getMenuInflater().inflate(R.menu.manageaccounts, menu);
         MenuItem enableAll = menu.findItem(R.id.action_enable_all);
         MenuItem addAccount = menu.findItem(R.id.action_add_account);
@@ -170,7 +180,14 @@ public class ManageAccountActivity extends XmppActivity
 
     @Override
     public boolean onContextItemSelected(final MenuItem item) {
-        final int itemId = item.getItemId();
+        return accountAction(selectedAccount, item.getItemId())
+                || super.onContextItemSelected(item);
+    }
+
+    /** One of the {@code manageaccounts_context} actions; also called by the Compose list. */
+    boolean accountAction(final Account account, final int itemId) {
+        // the PGP flow reads selectedAccount again in onActivityResult
+        this.selectedAccount = account;
         if (itemId == R.id.mgmt_account_publish_avatar) {
             publishAvatar(selectedAccount);
             return true;
@@ -187,7 +204,7 @@ public class ManageAccountActivity extends XmppActivity
             publishOpenPGPPublicKey(selectedAccount);
             return true;
         } else {
-            return super.onContextItemSelected(item);
+            return false;
         }
     }
 
@@ -202,7 +219,16 @@ public class ManageAccountActivity extends XmppActivity
         if (MenuDoubleTabUtil.shouldIgnoreTap()) {
             return false;
         }
-        final int itemId = item.getItemId();
+        return menuAction(item.getItemId()) || super.onOptionsItemSelected(item);
+    }
+
+    // Tatrak: the Compose menu's Settings, as XmppActivity.onOptionsItemSelected does it
+    void openSettings() {
+        startActivity(new Intent(this, eu.siacs.conversations.ui.activity.SettingsActivity.class));
+    }
+
+    /** One of the {@code manageaccounts} options; also called by the Compose list. */
+    boolean menuAction(final int itemId) {
         if (itemId == R.id.action_add_account) {
             startActivity(new Intent(this, EditAccountActivity.class));
             return true;
@@ -221,7 +247,7 @@ public class ManageAccountActivity extends XmppActivity
             addAccountFromKey();
             return true;
         } else {
-            return super.onOptionsItemSelected(item);
+            return false;
         }
     }
 
@@ -292,7 +318,7 @@ public class ManageAccountActivity extends XmppActivity
         }
     }
 
-    private boolean accountsLeftToDisable() {
+    boolean accountsLeftToDisable() {
         synchronized (this.accountList) {
             for (Account account : this.accountList) {
                 if (account.isEnabled()) {
@@ -303,7 +329,7 @@ public class ManageAccountActivity extends XmppActivity
         }
     }
 
-    private boolean accountsLeftToEnable() {
+    boolean accountsLeftToEnable() {
         synchronized (this.accountList) {
             for (Account account : this.accountList) {
                 if (!account.isEnabled()) {

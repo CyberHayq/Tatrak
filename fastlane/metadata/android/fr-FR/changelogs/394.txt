@@ -1,2 +1,0 @@
-* Corrige les notifications n'apparaissant pas dans certaines conditions
-* Corrige des problèmes de compatibilité et crashs touchant les appels A/V

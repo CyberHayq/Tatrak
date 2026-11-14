@@ -3,10 +3,12 @@
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools">
 
+    <!-- Tatrak: restyled in XML only; the theme overlay gives the text fields and cards their Tatrak style -->
     <RelativeLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fitsSystemWindows="true">
+        android:fitsSystemWindows="true"
+        android:theme="@style/ThemeOverlay.Tatrak.Onboarding">
 
         <com.google.android.material.appbar.AppBarLayout
             android:id="@+id/app_bar_layout"
@@ -41,7 +43,9 @@
                     android:layout_marginLeft="@dimen/activity_horizontal_margin"
                     android:layout_marginTop="@dimen/activity_vertical_margin"
                     android:layout_marginRight="@dimen/activity_horizontal_margin"
-                    android:layout_marginBottom="@dimen/activity_vertical_margin">
+                    android:layout_marginBottom="@dimen/activity_vertical_margin"
+                    app:cardBackgroundColor="@android:color/transparent">
+                    <!-- Tatrak: the login form sits on the screen background, without a card -->
 
                     <RelativeLayout
                         android:layout_width="match_parent"
@@ -65,7 +69,7 @@
 
                             <com.google.android.material.textfield.TextInputLayout
                                 android:id="@+id/account_jid_layout"
-                                style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
+                                style="@style/Widget.Tatrak.Onboarding.TextField"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
                                 android:hint="@string/account_settings_jabber_id">
@@ -84,7 +88,7 @@
                                 android:id="@+id/account_password_layout"
                                 android:layout_width="match_parent"
                                 android:layout_height="wrap_content"
-                                android:layout_marginTop="4sp"
+                                android:layout_marginTop="8dp"
                                 android:hint="@string/password"
                                 app:endIconMode="password_toggle">
 
@@ -150,7 +154,6 @@
 
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/service_outage"
-                    style="?attr/materialCardViewElevatedStyle"
                     android:layout_width="fill_parent"
                     android:layout_height="wrap_content"
                     android:layout_marginLeft="@dimen/activity_horizontal_margin"
@@ -852,9 +855,10 @@
             android:paddingHorizontal="16dp"
             android:paddingVertical="8dp">
 
+            <!-- Tatrak: full-width primary action next to a text cancel button -->
             <Button
                 android:id="@+id/cancel_button"
-                style="@style/Widget.Material3.Button.TextButton"
+                style="@style/Widget.Tatrak.Onboarding.SecondaryButton"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_alignParentStart="true"
@@ -864,10 +868,13 @@
 
             <Button
                 android:id="@+id/save_button"
-                android:layout_width="wrap_content"
+                style="@style/Widget.Tatrak.Onboarding.PrimaryButton"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_alignParentEnd="true"
                 android:layout_centerInParent="true"
+                android:layout_marginStart="8dp"
+                android:layout_toEndOf="@id/cancel_button"
                 android:enabled="false"
                 android:text="@string/save" />
         </RelativeLayout>

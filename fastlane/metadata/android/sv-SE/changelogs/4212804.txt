@@ -1,3 +1,0 @@
-* Enklare åtkomst till anpassade aviseringsljud via "Kontaktinformation / trepunktsmenyn / Anpassade meddelanden"
-* Åtgärdat problem med direkta delningsmål på nya Android-versioner
-* Möjlighet att begränsa profilbilders synlighet för kontakter

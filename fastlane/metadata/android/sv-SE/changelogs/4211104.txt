@@ -1,3 +1,0 @@
-* Schemalägg regelbundna säkerhetskopieringar
-* Uteslut alla realme-enheter upp till Android 11 från samtalsintegration
-* Mindre gränssnittsförbättringar (Meddelandebubbla)

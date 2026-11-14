@@ -1,1 +1,0 @@
-* Melhorar integração de chamadas de Áudio/Vídeo no sistema operacional

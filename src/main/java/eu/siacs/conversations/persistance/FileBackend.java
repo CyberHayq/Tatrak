@@ -26,6 +26,7 @@ import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.LruCache;
 import androidx.annotation.StringRes;
+import androidx.annotation.VisibleForTesting;
 import androidx.core.content.FileProvider;
 import androidx.exifinterface.media.ExifInterface;
 import com.google.common.base.Optional;
@@ -38,6 +39,7 @@ import com.google.common.collect.Iterables;
 import com.google.common.io.ByteStreams;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
+import com.google.common.util.concurrent.MoreExecutors;
 import eu.siacs.conversations.AppSettings;
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
@@ -192,11 +194,27 @@ public class FileBackend {
     }
 
     public static Uri getUriForFile(final Context context, final File file) {
+        // Tatrak: an attachment of the media store is shared through MediaProvider, which decrypts it
+        final Uri stored = am.cyberhayq.chat.storage.media.MediaProvider.uriFor(context, file);
+        if (stored != null) {
+            return stored;
+        }
         try {
             return FileProvider.getUriForFile(context, getAuthority(context), file);
         } catch (final IllegalArgumentException e) {
             throw new SecurityException(e);
         }
+    }
+
+    /**
+     * Tatrak: the name an HTTP upload or a Jingle offer carries for [message]'s stored [file]: the
+     * message id plus the file's extensions, as before the media store (owner decision A). The
+     * stored name would send the install's generation id to the server and every contact.
+     */
+    public static String transferName(final Message message, final File file) {
+        final String name = file.getName();
+        final int dot = name.indexOf('.');
+        return dot < 0 ? message.getUuid() : message.getUuid() + name.substring(dot);
     }
 
     public static Optional<String> getMessageUuid(final Context context, final Uri uri) {
@@ -205,7 +223,10 @@ public class FileBackend {
         if (Strings.isNullOrEmpty(authority) || Strings.isNullOrEmpty(scheme)) {
             return Optional.absent();
         }
-        if (scheme.equals("content") && getAuthority(context).equals(authority)) {
+        // Tatrak: MediaProvider's URIs are our own too
+        if (scheme.equals("content")
+                && (getAuthority(context).equals(authority)
+                        || am.cyberhayq.chat.storage.media.MediaProvider.authority(context).equals(authority))) {
             final var uuid = uri.getQueryParameter("uuid");
             if (Strings.isNullOrEmpty(uuid)) {
                 return Optional.absent();
@@ -239,7 +260,8 @@ public class FileBackend {
     private static int calcSampleSize(File image, int size) {
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inJustDecodeBounds = true;
-        BitmapFactory.decodeFile(image.getAbsolutePath(), options);
+        // Tatrak: attachment files are read through the media store (here and below)
+        am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().decodeBitmap(image, options);
         return calcSampleSize(options, size);
     }
 
@@ -407,9 +429,17 @@ public class FileBackend {
             return cached;
         }
         final String mime = attachment.getMime();
+        // Tatrak: a file of the media store is read through MediaProvider (decrypted), not as a raw file
+        final var stored = getFile(attachment.getUri());
+        final Uri storedUri =
+                stored.isPresent()
+                        ? am.cyberhayq.chat.storage.media.MediaProvider.uriFor(
+                                mXmppConnectionService, stored.get())
+                        : null;
+        final Uri uri = storedUri != null ? storedUri : attachment.getUri();
         final Bitmap bitmap;
         if ("application/pdf".equals(mime)) {
-            bitmap = cropCenterSquarePdf(attachment.getUri(), size);
+            bitmap = cropCenterSquarePdf(uri, size);
             drawOverlay(
                     bitmap,
                     paintOverlayBlackPdf(bitmap)
@@ -417,7 +447,7 @@ public class FileBackend {
                             : R.drawable.open_pdf_white,
                     0.75f);
         } else if (mime != null && mime.startsWith("video/")) {
-            bitmap = cropCenterSquareVideo(attachment.getUri(), size);
+            bitmap = cropCenterSquareVideo(uri, size);
             drawOverlay(
                     bitmap,
                     paintOverlayBlack(bitmap)
@@ -425,7 +455,11 @@ public class FileBackend {
                             : R.drawable.play_video_white,
                     0.75f);
         } else {
-            final var preview = cropCenterSquare(attachment.getUri(), size);
+            // Tatrak: a store image is decoded by the store, which refuses one with a failed tag
+            final Bitmap decoded = storedUri != null ? getFullSizeImagePreview(stored.get(), size) : null;
+            final var preview = storedUri == null
+                    ? cropCenterSquare(uri, size)
+                    : decoded == null ? null : cropCenterSquare(rotate(decoded, getRotation(stored.get())), size);
             if (preview != null && "image/gif".equals(mime)) {
                 Bitmap withGifOverlay = preview.copy(Bitmap.Config.ARGB_8888, true);
                 drawOverlay(
@@ -451,6 +485,13 @@ public class FileBackend {
     }
 
     public void updateMediaScanner(final File file, final Runnable callback) {
+        // Tatrak: the scanner cannot index the app's private files and logs their names
+        if (file.getAbsolutePath().startsWith(mXmppConnectionService.getApplicationInfo().dataDir + "/")) {
+            if (callback != null) {
+                callback.run();
+            }
+            return;
+        }
         MediaScannerConnection.scanFile(
                 mXmppConnectionService,
                 new String[] {file.getAbsolutePath()},
@@ -591,41 +632,39 @@ public class FileBackend {
             Log.d(Config.LOGTAG, "created parent directory: " + parent.getAbsolutePath());
             mXmppConnectionService.restartFileObserver();
         }
+        // Tatrak: written through the media store; the file appears only once the copy is complete
+        final am.cyberhayq.chat.storage.media.MediaWriter writer;
         try {
-            if (file.createNewFile()) {
-                Log.d(Config.LOGTAG, "created empty file " + file.getAbsolutePath());
-            }
+            writer = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().createAttachment(file);
         } catch (final IOException e) {
             throw new FileCopyException(R.string.error_unable_to_create_temporary_file);
         }
-        try (final OutputStream os = new FileOutputStream(file);
-                final InputStream is =
-                        mXmppConnectionService.getContentResolver().openInputStream(uri)) {
+        // Tatrak: a file:// URI into the media store (a sticker) is read decrypted, never as its ciphertext
+        final var source = getFile(uri);
+        final var store = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get();
+        try (final InputStream is =
+                source.isPresent() && store.isEncrypted(source.get())
+                        ? store.inputStream(source.get())
+                        : mXmppConnectionService.getContentResolver().openInputStream(uri)) {
             if (is == null) {
                 throw new FileCopyException(R.string.error_file_not_found);
             }
             try {
-                ByteStreams.copy(is, os);
+                ByteStreams.copy(is, writer.getOutputStream());
             } catch (final IOException e) {
                 throw new FileWriterException(file);
             }
-            try {
-                os.flush();
-            } catch (final IOException e) {
-                throw new FileWriterException(file);
-            }
+            writer.commit();
         } catch (final FileNotFoundException e) {
-            cleanup(file);
             throw new FileCopyException(R.string.error_file_not_found);
         } catch (final FileWriterException e) {
-            cleanup(file);
             throw new FileCopyException(R.string.error_unable_to_create_temporary_file);
         } catch (final SecurityException | IllegalStateException | IllegalArgumentException e) {
-            cleanup(file);
             throw new FileCopyException(R.string.error_security_exception);
         } catch (final IOException e) {
-            cleanup(file);
             throw new FileCopyException(R.string.error_io_exception);
+        } finally {
+            writer.abort(); // nothing after a commit; otherwise the partial copy is gone
         }
         final var originalFile = getFile(uri);
         if (originalFile.isPresent()
@@ -640,9 +679,17 @@ public class FileBackend {
 
     public void copyFileToPrivateStorage(final Message message, final Uri uri, final String type)
             throws FileCopyException {
+        // Tatrak: a published attachment of the media store is adopted by its path, not copied
+        final var stored = getFile(uri);
+        if (stored.isPresent()
+                && stored.get().isFile()
+                && am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().sharedName(stored.get()) != null) {
+            message.setRelativeFilePath(new Message.StorageLocation(stored.get(), false));
+            return;
+        }
         final String mime =
                 MimeUtils.guessMimeTypeFromUriAndMime(mXmppConnectionService, uri, type);
-        Log.d(Config.LOGTAG, "copy " + uri.toString() + " to private storage (mime=" + mime + ")");
+        Log.d(Config.LOGTAG, "copy to private storage (mime=" + mime + ")"); // Tatrak: no stored file name in the log (it carries the generation id)
         final var file = getFile(uri);
         if (file.isPresent()
                 && new FileBackend.Cache(mXmppConnectionService).isCachedFile(file.get())) {
@@ -698,11 +745,9 @@ public class FileBackend {
             mXmppConnectionService.restartFileObserver();
         }
         InputStream is = null;
-        OutputStream os = null;
+        // Tatrak: compressed into memory and written once through the media store
+        final var os = new java.io.ByteArrayOutputStream();
         try {
-            if (!file.exists() && !file.createNewFile()) {
-                throw new FileCopyException(R.string.error_unable_to_create_temporary_file);
-            }
             is = mXmppConnectionService.getContentResolver().openInputStream(image);
             if (is == null) {
                 throw new FileCopyException(R.string.error_not_an_image_file);
@@ -731,27 +776,31 @@ public class FileBackend {
                             .getResources()
                             .getInteger(R.integer.auto_accept_filesize);
             while (!targetSizeReached) {
-                os = new FileOutputStream(file);
+                os.reset();
                 Log.d(Config.LOGTAG, "compressing image with quality " + quality);
                 boolean success = scaledBitmap.compress(Config.IMAGE_FORMAT, quality, os);
                 if (!success) {
                     throw new FileCopyException(R.string.error_compressing_image);
                 }
-                os.flush();
-                final long fileSize = file.length();
+                final long fileSize = os.size();
                 Log.d(Config.LOGTAG, "achieved file size of " + fileSize);
                 targetSizeReached = fileSize <= imageMaxSize || quality <= 50;
                 quality -= 5;
             }
             scaledBitmap.recycle();
+            final var writer =
+                    am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().createAttachment(file);
+            try {
+                os.writeTo(writer.getOutputStream());
+                writer.commit();
+            } finally {
+                writer.abort(); // nothing after a commit; otherwise the partial copy is gone
+            }
         } catch (final FileNotFoundException e) {
-            cleanup(file);
             throw new FileCopyException(R.string.error_file_not_found);
         } catch (final IOException e) {
-            cleanup(file);
             throw new FileCopyException(R.string.error_io_exception);
         } catch (SecurityException e) {
-            cleanup(file);
             throw new FileCopyException(R.string.error_security_exception_during_image_copy);
         } catch (final OutOfMemoryError e) {
             ++sampleSize;
@@ -761,7 +810,6 @@ public class FileBackend {
                 throw new FileCopyException(R.string.error_out_of_memory);
             }
         } finally {
-            close(os);
             close(is);
         }
         final var originalFile = getFile(image);
@@ -775,22 +823,9 @@ public class FileBackend {
         }
     }
 
-    private static void cleanup(final File file) {
-        try {
-            file.delete();
-        } catch (Exception e) {
-
-        }
-    }
-
     public void copyImageToPrivateStorage(File file, Uri image)
             throws FileCopyException, ImageCompressionException {
-        Log.d(
-                Config.LOGTAG,
-                "copy image ("
-                        + image.toString()
-                        + ") to private storage "
-                        + file.getAbsolutePath());
+        Log.d(Config.LOGTAG, "copy image to private storage"); // Tatrak: no stored file name in the log (it carries the generation id)
         copyImageToPrivateStorage(file, image, 0);
     }
 
@@ -822,14 +857,8 @@ public class FileBackend {
     }
 
     public Message.StorageLocation getStorageLocation(final String filename, final String mime) {
-        final var appSettings = new AppSettings(mXmppConnectionService.getApplicationContext());
-        if (appSettings.isUseSharedStorage()) {
-            final var file = getSharedStorageLocation(filename, mime);
-            return new Message.StorageLocation(file, true);
-        } else {
-            final var file = getInternalStorageLocation(filename);
-            return new Message.StorageLocation(file, false);
-        }
+        // Tatrak: the "store in shared folders" setting is gone; every attachment is in the store
+        return new Message.StorageLocation(getInternalStorageLocation(filename), false);
     }
 
     private File getSharedStorageLocation(final String filename, final String mime) {
@@ -871,9 +900,10 @@ public class FileBackend {
     }
 
     private File getInternalStorageLocation(final String filename) {
-        final var filesDir = mXmppConnectionService.getFilesDir();
-        final var attachments = new File(filesDir, "attachments");
-        return new File(attachments, filename);
+        // Tatrak: the media store names the file (tatrak_<generation>_<fileId>.<ext>); only the
+        // extension of the requested name is kept
+        return am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(mXmppConnectionService)
+                .attachmentFile(filename);
     }
 
     public List<Message.StorageLocation> inferStorageLocation(
@@ -895,7 +925,7 @@ public class FileBackend {
     public void setupRelativeFilePath(
             final Message message, final String filename, final String mime) {
         final var storageLocation = getStorageLocation(filename, mime);
-        Log.d(Config.LOGTAG, storageLocation.toString());
+        // Tatrak: the stored name carries the generation id; it stays out of logs
         message.setRelativeFilePath(storageLocation);
     }
 
@@ -916,7 +946,7 @@ public class FileBackend {
     }
 
     private int getRotation(final File file) {
-        try (final InputStream inputStream = new FileInputStream(file)) {
+        try (final InputStream inputStream = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().inputStream(file)) {
             return getRotation(inputStream);
         } catch (Exception e) {
             return 0;
@@ -993,10 +1023,10 @@ public class FileBackend {
         BitmapFactory.Options options = new BitmapFactory.Options();
         options.inSampleSize = calcSampleSize(file, size);
         try {
-            return BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+            return am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().decodeBitmap(file, options);
         } catch (OutOfMemoryError e) {
             options.inSampleSize *= 2;
-            return BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+            return am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().decodeBitmap(file, options);
         }
     }
 
@@ -1077,7 +1107,7 @@ public class FileBackend {
         final MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
         Bitmap frame;
         try {
-            metadataRetriever.setDataSource(file.getAbsolutePath());
+            metadataRetriever.setDataSource(am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().dataSource(file));
             frame = metadataRetriever.getFrameAtTime(0);
             metadataRetriever.release();
             frame = resize(frame, size);
@@ -1097,7 +1127,7 @@ public class FileBackend {
     private Bitmap getPdfDocumentPreview(final File file, final int size) {
         try {
             final ParcelFileDescriptor fileDescriptor =
-                    ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+                    am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().descriptor(file);
             final Bitmap rendered = renderPdfDocument(fileDescriptor, size, true);
             drawOverlay(
                     rendered,
@@ -1158,7 +1188,7 @@ public class FileBackend {
             }
         }
         if (file.delete()) {
-            Log.d(Config.LOGTAG, "deleted " + file.getAbsolutePath());
+            Log.d(Config.LOGTAG, "deleted a file"); // Tatrak: no stored file name in the log (it carries the generation id)
         }
     }
 
@@ -1174,10 +1204,6 @@ public class FileBackend {
         return new File(context.getCacheDir(), "/avatars/" + avatar);
     }
 
-    public Uri getAvatarUri(String avatar) {
-        return Uri.fromFile(getAvatarFile(avatar));
-    }
-
     public Bitmap cropCenterSquare(final Uri image, final int size) {
         return cropCenterSquare(mXmppConnectionService, image, size);
     }
@@ -1190,7 +1216,7 @@ public class FileBackend {
         try {
             options.inSampleSize = calcSampleSize(context, image, size);
         } catch (final Exception e) {
-            Log.d(Config.LOGTAG, "unable to calculate sample size for " + image, e);
+            Log.d(Config.LOGTAG, "unable to calculate sample size", e); // Tatrak: no stored file name in the log
             return null;
         }
         try (final InputStream is = context.getContentResolver().openInputStream(image)) {
@@ -1205,24 +1231,21 @@ public class FileBackend {
                 return cropCenterSquare(bitmap, size);
             }
         } catch (final Exception e) {
-            Log.d(Config.LOGTAG, "unable to open file " + image, e);
+            Log.d(Config.LOGTAG, "unable to open file", e); // Tatrak: no stored file name in the log (it carries the generation id)
             return null;
         }
     }
 
-    public Bitmap cropCenter(final Uri image, final int newHeight, final int newWidth) {
+    // Tatrak: only avatars come here; they are encrypted at rest and decoded through the media store
+    public Bitmap cropCenter(final File image, final int newHeight, final int newWidth) {
         if (image == null) {
             return null;
         }
-        InputStream is = null;
         try {
             BitmapFactory.Options options = new BitmapFactory.Options();
             options.inSampleSize = calcSampleSize(image, Math.max(newHeight, newWidth));
-            is = mXmppConnectionService.getContentResolver().openInputStream(image);
-            if (is == null) {
-                return null;
-            }
-            Bitmap source = BitmapFactory.decodeStream(is, null, options);
+            Bitmap source =
+                    am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().decodeBitmap(image, options);
             if (source == null) {
                 return null;
             }
@@ -1246,10 +1269,6 @@ public class FileBackend {
             return dest;
         } catch (SecurityException e) {
             return null; // android 6.0 with revoked permissions for example
-        } catch (IOException e) {
-            return null;
-        } finally {
-            close(is);
         }
     }
 
@@ -1280,10 +1299,6 @@ public class FileBackend {
             input.recycle();
         }
         return output;
-    }
-
-    private int calcSampleSize(final Uri image, int size) throws IOException, SecurityException {
-        return calcSampleSize(mXmppConnectionService, image, size);
     }
 
     private static int calcSampleSize(final Context context, final Uri image, int size)
@@ -1324,7 +1339,7 @@ public class FileBackend {
             final boolean video = mime != null && mime.startsWith("video/");
             final boolean audio = mime != null && mime.startsWith("audio/");
             final boolean pdf = "application/pdf".equals(mime);
-            body.append('|').append(file.length());
+            body.append('|').append(am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().length(file));
             if (ambiguous) {
                 try {
                     final Dimensions dimensions = getVideoDimensions(file);
@@ -1379,9 +1394,10 @@ public class FileBackend {
     }
 
     private int getMediaRuntime(final File file) {
-        try {
-            final MediaMetadataRetriever mediaMetadataRetriever = new MediaMetadataRetriever();
-            mediaMetadataRetriever.setDataSource(file.toString());
+        // Tatrak: the retriever and the store reader are released on every path
+        final MediaMetadataRetriever mediaMetadataRetriever = new MediaMetadataRetriever();
+        try (final var source = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().dataSource(file)) {
+            mediaMetadataRetriever.setDataSource(source);
             final String value =
                     mediaMetadataRetriever.extractMetadata(
                             MediaMetadataRetriever.METADATA_KEY_DURATION);
@@ -1391,13 +1407,23 @@ public class FileBackend {
             return Integer.parseInt(value);
         } catch (final Exception e) {
             return 0;
+        } finally {
+            releaseQuietly(mediaMetadataRetriever);
+        }
+    }
+
+    private static void releaseQuietly(final MediaMetadataRetriever retriever) {
+        try {
+            retriever.release();
+        } catch (final Exception e) {
+            Log.d(Config.LOGTAG, "unable to release media metadata retriever", e);
         }
     }
 
     private Dimensions getImageDimensions(File file) {
         final BitmapFactory.Options options = new BitmapFactory.Options();
         options.inJustDecodeBounds = true;
-        BitmapFactory.decodeFile(file.getAbsolutePath(), options);
+        am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().decodeBitmap(file, options);
         final int rotation = getRotation(file);
         final boolean rotated = rotation == 90 || rotation == 270;
         final int imageHeight = rotated ? options.outWidth : options.outHeight;
@@ -1407,22 +1433,27 @@ public class FileBackend {
 
     private Dimensions getVideoDimensions(final File file) throws NotAVideoFile, IOException {
         MediaMetadataRetriever metadataRetriever = new MediaMetadataRetriever();
-        try {
-            metadataRetriever.setDataSource(file.getAbsolutePath());
-        } catch (RuntimeException e) {
-            throw new NotAVideoFile(e);
+        // Tatrak: the retriever and the store reader are released on every path
+        try (final var source = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().dataSource(file)) {
+            try {
+                metadataRetriever.setDataSource(source);
+            } catch (RuntimeException e) {
+                throw new NotAVideoFile(e);
+            }
+            return getVideoDimensions(metadataRetriever);
+        } finally {
+            releaseQuietly(metadataRetriever);
         }
-        return getVideoDimensions(metadataRetriever);
     }
 
     private Dimensions getPdfDocumentDimensions(final File file) {
         final ParcelFileDescriptor fileDescriptor;
         try {
-            fileDescriptor = ParcelFileDescriptor.open(file, ParcelFileDescriptor.MODE_READ_ONLY);
+            fileDescriptor = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().descriptor(file);
             if (fileDescriptor == null) {
                 return new Dimensions(0, 0);
             }
-        } catch (final FileNotFoundException e) {
+        } catch (final IOException e) { // Tatrak: also a file the store refuses
             return new Dimensions(0, 0);
         }
         try {
@@ -1463,55 +1494,87 @@ public class FileBackend {
         if (Strings.isNullOrEmpty(avatar)) {
             return null;
         }
-        return cropCenterSquare(mXmppConnectionService, getAvatarUri(avatar), size);
+        // Tatrak: avatars are encrypted at rest and decoded through the media store
+        final var file = getAvatarFile(avatar);
+        final var bitmap = getFullSizeImagePreview(file, size);
+        return bitmap == null ? null : cropCenterSquare(rotate(bitmap, getRotation(file)), size);
     }
 
-    public ListenableFuture<List<Void>> saveInternalToExternal(
+    // Tatrak: one Boolean per file (saved or not) instead of Void. successfulAsList gives null for
+    // a failed save, and a saved Void is null too, so the screens counted every file as saved
+    public ListenableFuture<List<Boolean>> saveInternalToExternal(
             final Collection<Message.StorageLocation> storageLocations) {
         final var internalOnly =
                 Collections2.filter(storageLocations, sl -> sl != null && !sl.sharedStorage());
         final var futures =
                 Collections2.transform(
-                        internalOnly, sl -> saveInternalToExternal(Objects.requireNonNull(sl)));
+                        internalOnly, sl -> saved(saveInternalToExternal(Objects.requireNonNull(sl))));
         return Futures.successfulAsList(futures);
+    }
+
+    // Tatrak: true when the save succeeded, false (and a log line) when it failed
+    public static ListenableFuture<Boolean> saved(final ListenableFuture<Void> save) {
+        return Futures.catching(
+                Futures.transform(save, v -> true, MoreExecutors.directExecutor()),
+                Exception.class,
+                e -> {
+                    Log.e(Config.LOGTAG, "could not save attachment", e);
+                    return false;
+                },
+                MoreExecutors.directExecutor());
     }
 
     public ListenableFuture<Void> saveInternalToExternal(
             final Message.StorageLocation storageLocation) {
         Preconditions.checkArgument(!storageLocation.sharedStorage());
         final var internal = storageLocation.file();
-        final var external =
-                getSharedStorageLocation(internal.getName(), MimeUtils.getMimeType(internal));
-        if (external.exists() && internal.length() == external.length()) {
-            Log.i(Config.LOGTAG, "file is already available on shared storage");
-            updateMediaScanner(external);
-            return Futures.immediateVoidFuture();
-        }
-        final var parent = external.getParentFile();
+        // Tatrak: never the stored name (it carries the install's generation id) but the readable
+        // one MediaProvider shows; a taken name gets " (1)", nothing is skipped or overwritten
+        final var wanted =
+                getSharedStorageLocation(
+                        am.cyberhayq.chat.storage.media.MediaProvider.displayName(
+                                mXmppConnectionService, internal),
+                        MimeUtils.getMimeType(internal));
+        final var parent = wanted.getParentFile();
         if (parent != null && parent.mkdirs()) {
             Log.d(Config.LOGTAG, "created parent directory: " + parent.getAbsolutePath());
             mXmppConnectionService.restartFileObserver();
         }
         return Futures.submit(
                 () -> {
+                    final File external;
                     try {
-                        if (external.createNewFile()) {
-                            Log.d(
-                                    Config.LOGTAG,
-                                    "created empty file " + external.getAbsolutePath());
-                        }
+                        external = createFreeName(wanted);
                     } catch (final IOException e) {
                         throw new IllegalStateException(e);
                     }
-                    try (final var is = new FileInputStream(internal);
+                    try (final var is = am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().inputStream(internal);
                             final var os = new FileOutputStream(external)) {
                         ByteStreams.copy(is, os);
                     } catch (final IOException e) {
+                        // a copy of a file that failed its tag is not left behind in part
+                        if (external.delete()) {
+                            Log.d(Config.LOGTAG, "deleted partial copy " + external.getAbsolutePath());
+                        }
                         throw new IllegalStateException(e);
                     }
                     updateMediaScanner(external);
                 },
                 XmppConnectionService.FILE_ATTACHMENT_EXECUTOR);
+    }
+
+    /** Tatrak: creates [wanted], or the first of "name (1).ext", "name (2).ext", ... that is free. */
+    @VisibleForTesting
+    static File createFreeName(final File wanted) throws IOException {
+        final String name = wanted.getName();
+        final int dot = name.lastIndexOf('.');
+        final String base = dot > 0 ? name.substring(0, dot) : name;
+        final String extension = dot > 0 ? name.substring(dot) : "";
+        File candidate = wanted;
+        for (int n = 1; !candidate.createNewFile(); n++) {
+            candidate = new File(wanted.getParentFile(), base + " (" + n + ")" + extension);
+        }
+        return candidate;
     }
 
     public static class Cache {

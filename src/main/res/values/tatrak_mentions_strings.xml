@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- tap on a sender's avatar in a group puts the nick into the message -->
+    <string name="tatrak_chat_mention_sender">Mention</string>
+    <!-- round button above "scroll down": jumps to the next unread message that mentions you -->
+    <string name="tatrak_chat_next_mention">Next mention</string>
+    <!-- text selection menu of the message field (XEP-0393 styling) -->
+    <string name="tatrak_format_bold">Bold</string>
+    <string name="tatrak_format_italic">Italic</string>
+    <string name="tatrak_format_monospace">Monospace</string>
+    <string name="tatrak_format_strikethrough">Strikethrough</string>
+</resources>

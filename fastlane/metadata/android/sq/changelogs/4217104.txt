@@ -1,3 +1,0 @@
-* Shfaq kapele në konferenca publike që i kanë ato
-* Ndreqje vithisjeje, kur ndryshohet model përdorimi pakete OMEMO
-* Ndreqje vithisjeje kur ndahet adresë XMPP Quicksy me të tjerë

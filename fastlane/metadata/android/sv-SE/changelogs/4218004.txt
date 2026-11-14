@@ -1,1 +1,0 @@
-* Begär tillåtelse när XMPP-servern finns på det lokala nätverket

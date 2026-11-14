@@ -1,2 +1,0 @@
-* Åtgärdat reaktioner på filer som tagits emot via P2P
-* Förbättrat URI-matchning
