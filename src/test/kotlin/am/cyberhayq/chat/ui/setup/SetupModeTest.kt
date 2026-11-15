@@ -39,6 +39,7 @@ class SetupModeTest {
         assertTrue(SetupMode.isChosen(context))
         assertTrue(preferences.getBoolean(AppSettings.BLIND_TRUST_BEFORE_VERIFICATION, false))
         assertTrue(preferences.getBoolean(AppSettings.TRUST_SYSTEM_CA_STORE, false))
+        assertFalse(preferences.getBoolean(AppSettings.REQUIRE_CHANNEL_BINDING, true))
         assertEquals("easy", preferences.getString(SetupMode.PREF, null))
     }
 
@@ -47,6 +48,7 @@ class SetupModeTest {
         SetupMode.ADVANCED.apply(preferences)
         assertFalse(preferences.getBoolean(AppSettings.BLIND_TRUST_BEFORE_VERIFICATION, true))
         assertFalse(preferences.getBoolean(AppSettings.TRUST_SYSTEM_CA_STORE, true))
+        assertTrue(preferences.getBoolean(AppSettings.REQUIRE_CHANNEL_BINDING, false))
         assertEquals("advanced", preferences.getString(SetupMode.PREF, null))
     }
 

@@ -71,7 +71,7 @@
     <string name="tatrak_setup_title">Как вы хотите начать?</string>
     <string name="tatrak_setup_subtitle">Это можно изменить позже в Настройки → Безопасность.</string>
     <string name="tatrak_setup_easy_title">Простой</string>
-    <string name="tatrak_setup_easy_text">Рекомендуется. Новые ключи OMEMO собеседников принимаются автоматически, пока вы их не проверите, а системным центрам сертификации доверяется.</string>
+    <string name="tatrak_setup_easy_text">Новые ключи OMEMO собеседников принимаются автоматически, пока вы их не проверите, а системным центрам сертификации доверяется.</string>
     <string name="tatrak_setup_advanced_title">Расширенный</string>
     <string name="tatrak_setup_advanced_text">Ключи OMEMO остаются недоверенными, пока вы их не проверите, а системным центрам сертификации не доверяется: каждый сертификат сервера вы подтверждаете сами.</string>
     <string name="tatrak_cb_title">Сервер не поддерживает привязку канала</string>

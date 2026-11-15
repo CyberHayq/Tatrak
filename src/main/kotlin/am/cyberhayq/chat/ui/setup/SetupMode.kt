@@ -15,15 +15,18 @@ enum class SetupMode(
     val autoTrustOmemo: Boolean,
     /** Whether the system's CA certificates are accepted for server connections. */
     val trustSystemCa: Boolean,
+    /** Whether a login fails when the server offers no channel binding (owner, 2026-11-15). */
+    val requireChannelBinding: Boolean,
 ) {
-    EASY("easy", autoTrustOmemo = true, trustSystemCa = true),
-    ADVANCED("advanced", autoTrustOmemo = false, trustSystemCa = false);
+    EASY("easy", autoTrustOmemo = true, trustSystemCa = true, requireChannelBinding = false),
+    ADVANCED("advanced", autoTrustOmemo = false, trustSystemCa = false, requireChannelBinding = true);
 
     fun apply(preferences: SharedPreferences) {
         preferences
             .edit()
             .putBoolean(AppSettings.BLIND_TRUST_BEFORE_VERIFICATION, autoTrustOmemo)
             .putBoolean(AppSettings.TRUST_SYSTEM_CA_STORE, trustSystemCa)
+            .putBoolean(AppSettings.REQUIRE_CHANNEL_BINDING, requireChannelBinding)
             .putString(PREF, key)
             .apply()
     }

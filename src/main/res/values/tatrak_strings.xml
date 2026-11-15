@@ -71,7 +71,7 @@
     <string name="tatrak_setup_title">How would you like to start?</string>
     <string name="tatrak_setup_subtitle">You can change this later in Settings → Security.</string>
     <string name="tatrak_setup_easy_title">Easy</string>
-    <string name="tatrak_setup_easy_text">Recommended. New OMEMO keys of your contacts are trusted automatically until you verify them, and the system\'s certificate authorities are trusted.</string>
+    <string name="tatrak_setup_easy_text">New OMEMO keys of your contacts are trusted automatically until you verify them, and the system\'s certificate authorities are trusted.</string>
     <string name="tatrak_setup_advanced_title">Advanced</string>
     <string name="tatrak_setup_advanced_text">OMEMO keys stay untrusted until you verify them, and the system\'s certificate authorities are not trusted: you approve each server certificate yourself.</string>
     <string name="tatrak_cb_title">Server does not support channel binding</string>
