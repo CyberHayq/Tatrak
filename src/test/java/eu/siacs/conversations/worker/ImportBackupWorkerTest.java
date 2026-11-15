@@ -1077,7 +1077,7 @@ public class ImportBackupWorkerTest {
         db.execSQL("create table conversations (uuid text primary key, name text, accountUuid text)");
         db.execSQL("create table messages (uuid text primary key, conversationUuid text, type integer, status integer,"
                 + " body text, encryption integer, axolotl_fingerprint text, tatrak_source_encryption integer,"
-                + " tatrak_source_fingerprint text)");
+                + " tatrak_source_fingerprint text, tatrak_time_received integer)");
         db.execSQL("create table identities (account text, name text, ownkey integer, fingerprint text,"
                 + " certificate blob, trust text, active number, last_activation number, key text,"
                 + " unique (account, name, fingerprint) on conflict ignore)");
@@ -1279,6 +1279,93 @@ public class ImportBackupWorkerTest {
                 ImportBackupWorker.caption("mirror: https://up.example/a.jpg.bak " + url, url, null));
         assertNull(ImportBackupWorker.caption("aesgcm://up.example/a.jpg#key", url, null));
         assertNull(ImportBackupWorker.caption(url + "|1000", url, null));
+    }
+
+    /** A monocles backup with one message per values tail, imported into a fresh stage. */
+    private StagingWorker importTimedMessages(final String app, final List<String> messages) throws Exception {
+        for (final String table : new String[] {"messages", "identities", "sessions", "prekeys", "signed_prekeys"}) {
+            db.execSQL("drop table if exists " + table);
+        }
+        db.execSQL("delete from accounts");
+        final var rows = new java.util.ArrayList<>(omemoBackup(false).subList(0, 2)); // the account and the chat
+        rows.addAll(messages);
+        return importBackupFile(ImportBackupWorker.OmemoImport.FULL, backupFile(app, rows));
+    }
+
+    private static String timedMessage(final String uuid, final String timeReceived) {
+        return "{\"table\":\"messages\",\"values\":{\"uuid\":\"" + uuid + "\",\"conversationUuid\":\"c1\","
+                + "\"type\":\"0\",\"status\":\"0\",\"body\":\"hi\",\"encryption\":\"0\"" + timeReceived + "}}";
+    }
+
+    @Test
+    public void monoclesTimeReceivedBecomesTatrakTimeReceived() throws Exception {
+        final long farFuture = System.currentTimeMillis() + java.util.concurrent.TimeUnit.DAYS.toMillis(30);
+        final var worker = importTimedMessages("monocles chat", List.of(
+                timedMessage("m1", ",\"timeReceived\":\"1700000000123\""),
+                timedMessage("m2", ",\"timeReceived\":1700000000124"), // a number, not the usual text
+                timedMessage("m3", ",\"timeReceived\":\"0\""), // monocles' unknown
+                timedMessage("m4", ""),
+                timedMessage("m5", ",\"timeReceived\":null"),
+                timedMessage("m6", ",\"timeReceived\":\"yesterday\""),
+                timedMessage("m7", ",\"timeReceived\":\"-5\""),
+                timedMessage("m8", ",\"timeReceived\":\"99999999999999999999\""),
+                timedMessage("m9", ",\"timeReceived\":\"" + farFuture + "\""),
+                // a crafted file with both: Tatrak's own column wins
+                timedMessage("m10", ",\"timeReceived\":\"1\",\"tatrak_time_received\":\"1700000000125\""),
+                // monocles stamps its own messages too; Tatrak keeps a time only for received ones
+                timedMessage("m11", ",\"timeReceived\":\"1700000000126\"").replace("\"status\":\"0\"", "\"status\":\"2\""),
+                timedMessage("m12", ",\"timeReceived\":\"1700000000127\"").replace(",\"status\":\"0\"", ""),
+                // JSON values the generic reader cannot take as a long
+                timedMessage("m13", ",\"timeReceived\":true"),
+                timedMessage("m14", ",\"timeReceived\":1700000000123.5"),
+                timedMessage("m15", ",\"timeReceived\":99999999999999999999"),
+                timedMessage("m16", ",\"tatrak_time_received\":[1]"),
+                // Tatrak's own column wins even when it is null
+                timedMessage("m17", ",\"tatrak_time_received\":null,\"timeReceived\":\"1700000000128\"")));
+        // a bad value never costs the message
+        assertEquals(17, DatabaseUtils.queryNumEntries(db, "messages"));
+        assertEquals("1700000000123", column("tatrak_time_received", "m1"));
+        assertEquals("1700000000124", column("tatrak_time_received", "m2"));
+        for (final String dropped : new String[] {"m3", "m4", "m5", "m6", "m7", "m8", "m9", "m11", "m12", "m13", "m14", "m15", "m16", "m17"}) {
+            assertNull(dropped, column("tatrak_time_received", dropped));
+        }
+        assertEquals("1700000000125", column("tatrak_time_received", "m10"));
+        final String preview = worker.previewText();
+        assertFalse(preview, preview.contains("timeReceived"));
+        assertFalse(preview, preview.contains("tatrak_time_received"));
+    }
+
+    @Test
+    public void timeReceivedRoundTripsThroughEachExportFormat() throws Exception {
+        final String[][] cases = {
+            {eu.siacs.conversations.AppSettings.BACKUP_FORMAT_TATRAK, "Tatrak", "1700000000123"},
+            {eu.siacs.conversations.AppSettings.BACKUP_FORMAT_MONOCLES, "monocles chat", "1700000000123"},
+            {eu.siacs.conversations.AppSettings.BACKUP_FORMAT_CONVERSATIONS, "Conversations", null}, // Conversations has no such column
+        };
+        for (final String[] format : cases) {
+            final var exported = new java.util.ArrayList<String>();
+            try (var source = SQLiteDatabase.create(null)) {
+                source.execSQL("create table messages (uuid text, conversationUuid text, type integer, status integer,"
+                        + " body text, encryption integer, tatrak_time_received integer)");
+                source.execSQL("insert into messages values ('m1', 'c1', 0, 0, 'hi', 0, 1700000000123)");
+                source.execSQL("insert into messages values ('m2', 'c1', 0, 2, 'mine', 0, 1700000000124)"); // crafted
+                try (var cursor = source.rawQuery("select * from messages order by uuid", null)) {
+                    while (cursor.moveToNext()) {
+                        final var text = new java.io.StringWriter();
+                        try (var writer = new com.google.gson.stream.JsonWriter(text)) {
+                            ExportBackupWorker.writeMessage(cursor, format[0], new java.util.HashMap<>(), writer);
+                        }
+                        exported.add(text.toString());
+                    }
+                }
+            }
+            final String m1 = exported.get(0);
+            assertEquals(m1, eu.siacs.conversations.AppSettings.BACKUP_FORMAT_TATRAK.equals(format[0]), m1.contains("\"tatrak_time_received\""));
+            assertEquals(m1, eu.siacs.conversations.AppSettings.BACKUP_FORMAT_MONOCLES.equals(format[0]), m1.contains("\"timeReceived\""));
+            importTimedMessages(format[1], exported);
+            assertEquals(format[0], format[2], column("tatrak_time_received", "m1"));
+            assertNull(format[0], column("tatrak_time_received", "m2"));
+        }
     }
 
     @Test

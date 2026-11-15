@@ -1036,6 +1036,16 @@ public class ImportBackupWorker extends Worker {
                 if (jsonReader.peek() == JsonToken.NULL) {
                     jsonReader.nextNull();
                     contentValues.putNull(name);
+                } else if (Message.TIME_RECEIVED.equals(name) || "timeReceived".equals(name)) {
+                    // Tatrak: read as text, timeReceived() drops a bad value instead of failing the
+                    // import
+                    final JsonToken token = jsonReader.peek();
+                    if (token == JsonToken.NUMBER || token == JsonToken.STRING) {
+                        contentValues.put(name, jsonReader.nextString());
+                    } else {
+                        jsonReader.skipValue();
+                        contentValues.putNull(name);
+                    }
                 } else if (jsonReader.peek() == JsonToken.NUMBER) {
                     contentValues.put(name, jsonReader.nextLong());
                 } else {
@@ -1084,6 +1094,13 @@ public class ImportBackupWorker extends Worker {
             if (occupantId != null) contentValues.put(Message.OCCUPANT_ID, occupantId);
             contentValues.remove("occupant_id");
             restoreFilePath(contentValues);
+            // monocles' timeReceived is Tatrak's TIME_RECEIVED; a Tatrak backup carries the column itself
+            final Object received = contentValues.containsKey(Message.TIME_RECEIVED)
+                    ? contentValues.get(Message.TIME_RECEIVED) : contentValues.get("timeReceived");
+            contentValues.remove("timeReceived");
+            // as on this device, only a message from someone else has one (monocles stamps its own too)
+            final boolean incoming = Integer.valueOf(Message.STATUS_RECEIVED).equals(contentValues.getAsInteger(Message.STATUS));
+            contentValues.put(Message.TIME_RECEIVED, incoming ? timeReceived(received, System.currentTimeMillis()) : null);
         }
         for (final String name : new java.util.ArrayList<>(contentValues.keySet())) {
             if (!columns.get(table).contains(name)) {
@@ -1172,6 +1189,23 @@ public class ImportBackupWorker extends Worker {
         }
         if (OMEMO_TABLE_LIST.contains(table) && !importOmemoRow(table, contentValues, account)) return;
         insert(db, table, contentValues);
+    }
+
+    /**
+     * Tatrak: a time received from a backup, or null (unknown) for anything but a positive epoch
+     * ms that is not after {@code now} by more than a day of clock difference between devices: 0,
+     * a negative, unparsable or far-future value is dropped, never a reason to fail the import.
+     */
+    @VisibleForTesting
+    @Nullable
+    static Long timeReceived(@Nullable final Object value, final long now) {
+        final Long time = integral(value);
+        return time != null && time > 0 && time <= now + java.util.concurrent.TimeUnit.DAYS.toMillis(1) ? time : null;
+    }
+
+    @Nullable
+    private static Long integral(@Nullable final Object value) {
+        return value == null ? null : com.google.common.primitives.Longs.tryParse(String.valueOf(value));
     }
 
     /**

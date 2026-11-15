@@ -291,6 +291,28 @@ class ChatScreenshotTest {
     fun chatLongPressMenuNearTop() =
         capture("chat_menu_top", darkTheme = false, longPress = "Hey! Did you push") { privateChat(it) }
 
+    /** A received message with a known time received: "Sent" and "Received" above the actions. */
+    @Test
+    fun chatLongPressMenuReceived() {
+        // a past year, so the year shows and the text does not depend on today's date
+        capture("chat_menu_received", darkTheme = false, longPress = "flag works now") { s ->
+            privateChat(s).let { st ->
+                st.copy(
+                    items =
+                        st.items.map {
+                            if (it is MessageItem && it.key == "m5")
+                                it.copy(sentAt = at("2025-11-14T21:03:10"), receivedAt = at("2025-11-14T21:03:15"))
+                            else it
+                        }
+                )
+            }
+        }
+        compose.onNodeWithText("Received", substring = true).assertExists()
+    }
+
+    private fun at(time: String) =
+        java.time.LocalDateTime.parse(time).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
+
     /** A long press on a link opens the menu with reactions; the link's own tap must not eat it. */
     @Test
     fun longPressOnLinkOpensMenu() {

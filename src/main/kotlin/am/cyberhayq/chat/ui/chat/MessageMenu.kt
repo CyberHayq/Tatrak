@@ -1,5 +1,7 @@
 package am.cyberhayq.chat.ui.chat
 
+import android.content.Context
+import android.text.format.DateFormat
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.EaseOutQuint
@@ -36,6 +38,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
@@ -46,12 +49,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
 import eu.siacs.conversations.entities.Reaction
+import java.text.SimpleDateFormat
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
+import java.util.Date
+import java.util.Locale
 import kotlinx.coroutines.flow.StateFlow
 
 /**
@@ -243,6 +254,15 @@ private fun MenuActions(item: MessageItem, actions: ChatActions, run: ((String) 
     ) {
         // scrolls when a long list does not fit a small window
         Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
+            if (item.receivedAt != null) {
+                // Tatrak: like Telegram's "read at" row; informational, not clickable
+                val context = LocalContext.current
+                val locale = LocalConfiguration.current.locales[0]
+                fun time(epochMs: Long) = receiptTime(context, locale, epochMs)
+                MenuInfo(stringResource(R.string.tatrak_chat_sent_at, time(item.sentAt)))
+                MenuInfo(stringResource(R.string.tatrak_chat_received_at, time(item.receivedAt)))
+                HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
+            }
             val can = item.actions
             if (can.canReply) MenuEntry(R.drawable.ic_reply_24dp, R.string.reply, run(actions::reply))
             if (can.canCopy) MenuEntry(R.drawable.tatrak_chat_ic_copy_24dp, R.string.copy_to_clipboard, run(actions::copy))
@@ -333,4 +353,26 @@ private fun MenuEntry(icon: Int, label: Int, onClick: () -> Unit) {
         Spacer(Modifier.width(18.dp))
         Text(stringResource(label), fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface)
     }
+}
+
+@Composable
+private fun MenuInfo(text: String) {
+    Text(
+        text,
+        fontSize = 13.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
+    )
+}
+
+/**
+ * Date and time with seconds in the device locale and 12/24-hour setting; the year only when it
+ * is not the current one.
+ */
+internal fun receiptTime(context: Context, locale: Locale, epochMs: Long): String {
+    val zone = ZoneId.systemDefault()
+    val year = if (Instant.ofEpochMilli(epochMs).atZone(zone).year == LocalDate.now(zone).year) "" else "y"
+    val time = if (DateFormat.is24HourFormat(context)) "Hmmss" else "hmmssa"
+    // SimpleDateFormat: it takes every symbol the ICU skeleton lookup may return
+    return SimpleDateFormat(DateFormat.getBestDateTimePattern(locale, "${year}dMMM$time"), locale).format(Date(epochMs))
 }

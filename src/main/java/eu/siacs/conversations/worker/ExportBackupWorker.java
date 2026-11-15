@@ -703,6 +703,11 @@ public class ExportBackupWorker extends Worker {
             if (monocles && Message.REPLY_TO.equals(name)) {
                 replyTo = cursor.getString(j); // monocles keeps it as payloads XML
             }
+            if (monocles && Message.TIME_RECEIVED.equals(name)) {
+                // monocles' own column; it reads a NULL as timeSent
+                writer.name("timeReceived").value(cursor.getString(j));
+                continue;
+            }
             if (!exported(name, format)) continue;
             writer.name(name);
             String value = cursor.getString(j);

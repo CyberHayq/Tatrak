@@ -78,7 +78,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
 
     private static final String DATABASE_NAME = "history";
     // Tatrak: public so DatabaseStorage accepts every schema this build can write
-    public static final int DATABASE_VERSION = 60; // Tatrak: 60 adds Message.CAPTION
+    public static final int DATABASE_VERSION = 60; // Tatrak: 60 adds Message.CAPTION and Message.TIME_RECEIVED
 
     private static boolean requiresMessageIndexRebuild = false;
     private static DatabaseBackend instance = null;
@@ -584,6 +584,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
         db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_encryption INTEGER");
         db.execSQL("ALTER TABLE messages ADD COLUMN tatrak_source_fingerprint TEXT");
         db.execSQL("ALTER TABLE messages ADD COLUMN " + Message.CAPTION + " TEXT"); // Tatrak
+        db.execSQL("ALTER TABLE messages ADD COLUMN " + Message.TIME_RECEIVED + " INTEGER"); // Tatrak
         // Tatrak: the master key of encrypted media is made only here, with a new database; there
         // is no upgrade step, so a database that lacks it never gets a replacement key
         am.cyberhayq.chat.storage.media.MediaKeyTable.create(db);
@@ -1199,6 +1200,9 @@ public class DatabaseBackend extends SQLiteOpenHelper {
         }
         if (oldVersion < 60 && newVersion >= 60) {
             db.execSQL("ALTER TABLE messages ADD COLUMN " + Message.CAPTION + " TEXT"); // Tatrak
+            // Tatrak: added to version 60 without a new version (no installs to upgrade, owner
+            // 2026-11-15); a database already at 60 lacks it and must be recreated
+            db.execSQL("ALTER TABLE messages ADD COLUMN " + Message.TIME_RECEIVED + " INTEGER");
         }
     }
 
@@ -1329,8 +1333,28 @@ public class DatabaseBackend extends SQLiteOpenHelper {
     }
 
     public void createMessage(Message message) {
+        stampTimeReceived(message, System.currentTimeMillis()); // Tatrak
         SQLiteDatabase db = this.getWritableDatabase();
         db.insert(Message.TABLENAME, null, message.getContentValues());
+    }
+
+    /**
+     * Tatrak: every message from someone else is first stored through createMessage (MessageParser
+     * for live, carbon and MAM messages, Jingle files and calls). Our own messages, also those sent
+     * from another device of ours, keep null: a carbon or MAM copy of one has the status of a
+     * message sent here (STATUS_SEND), so only the parser could tell them apart. A message to our
+     * own address from another device of ours is STATUS_RECEIVED, so the chat with ourselves is
+     * excluded.
+     */
+    @androidx.annotation.VisibleForTesting
+    static void stampTimeReceived(final Message message, final long now) {
+        final var conversation = message.getConversation();
+        final var account = conversation.getAccount();
+        final boolean self = conversation.getMode() == eu.siacs.conversations.entities.Conversational.MODE_SINGLE
+                && account != null && account.getJid().asBareJid().equals(conversation.getAddress().asBareJid());
+        if (message.getStatus() == Message.STATUS_RECEIVED && message.getTimeReceived() == null && !self) {
+            message.setTimeReceived(now);
+        }
     }
 
     public void createAccount(Account account) {

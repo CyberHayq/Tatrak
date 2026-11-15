@@ -101,4 +101,7 @@
     <string name="tatrak_delete_for_me">Удалить только у меня</string>
     <string name="tatrak_delete_for_me_confirm">Удалить сообщение с этого устройства? У остальных оно останется.</string>
     <string name="tatrak_message_deleted">Сообщение удалено</string>
+    <!-- long-press menu of a received message; %1$s is a date and time with seconds -->
+    <string name="tatrak_chat_sent_at">Отправлено %1$s</string>
+    <string name="tatrak_chat_received_at">Получено %1$s</string>
 </resources>

@@ -108,6 +108,8 @@ public class Message extends AbstractEntity
     public static final String RETRACT_ATTEMPT = "tatrakRetractAttempt";
     // Tatrak: text shown under a file or image (from monocles backups); null if none
     public static final String CAPTION = "tatrak_caption";
+    // Tatrak: epoch ms when this device first stored a received message; null if unknown or not received
+    public static final String TIME_RECEIVED = "tatrak_time_received";
     public static final String ME_COMMAND = "/me ";
 
     public static final String ERROR_MESSAGE_CANCELLED = "eu.siacs.conversations.cancelled";
@@ -143,6 +145,7 @@ public class Message extends AbstractEntity
     private ReplyTo replyTo;
     private long retractAttempt = 0;
     private String caption; // Tatrak: see CAPTION
+    private Long timeReceived; // Tatrak: see TIME_RECEIVED
 
     private Boolean isGeoUri = null;
     private Boolean isEmojisOnly = null;
@@ -309,6 +312,8 @@ public class Message extends AbstractEntity
         message.replyTo = ReplyTo.fromString(cursor.getString(cursor.getColumnIndexOrThrow(REPLY_TO)));
         message.retractAttempt = cursor.getLong(cursor.getColumnIndexOrThrow(RETRACT_ATTEMPT));
         message.caption = cursor.getString(cursor.getColumnIndexOrThrow(CAPTION));
+        final int timeReceived = cursor.getColumnIndexOrThrow(TIME_RECEIVED);
+        message.timeReceived = cursor.isNull(timeReceived) ? null : cursor.getLong(timeReceived);
         return message;
     }
 
@@ -399,6 +404,7 @@ public class Message extends AbstractEntity
         values.put(REPLY_TO, ReplyTo.toString(this.replyTo));
         values.put(RETRACT_ATTEMPT, retractAttempt);
         values.put(CAPTION, caption);
+        values.put(TIME_RECEIVED, timeReceived);
         return values;
     }
 
@@ -918,6 +924,15 @@ public class Message extends AbstractEntity
 
     public void setCaption(final String caption) {
         this.caption = caption;
+    }
+
+    /** Tatrak: see {@link #TIME_RECEIVED}. */
+    public Long getTimeReceived() {
+        return timeReceived;
+    }
+
+    public void setTimeReceived(final Long timeReceived) {
+        this.timeReceived = timeReceived;
     }
 
     public long getRetractAttempt() {

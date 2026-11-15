@@ -211,6 +211,13 @@ data class MessageItem(
     val reply: ReplyHeader? = null,
     /** Tatrak: text under the attachment (Message.CAPTION), whatever state the attachment is in. */
     val caption: AnnotatedString? = null,
+    /**
+     * Tatrak: epoch ms when this device stored a received message (Message.TIME_RECEIVED); null for
+     * own messages and when unknown. Raw so only the open menu formats it, with [sentAt] beside it.
+     */
+    val receivedAt: Long? = null,
+    /** Message.getTimeSent when [receivedAt] is known; 0 when the menu shows no times. */
+    val sentAt: Long = 0L,
 ) : ChatItem {
     override val contentType: Int
         get() = kind.ordinal * 2 + if (isOutgoing) 1 else 0
@@ -683,6 +690,7 @@ object ChatSnapshot {
             val showSender = isGroup && !outgoing && position.isStart
             val showAvatar = isGroup && !outgoing && position.isEnd
             val name = if (showSender || showAvatar) UIHelper.getMessageDisplayName(message) else null
+            val receivedAt = if (outgoing) null else message.timeReceived
             val base =
                 MessageItem(
                     key = message.uuid,
@@ -707,6 +715,8 @@ object ChatSnapshot {
                     reactions = reactions(message),
                     actions = actions(message),
                     reply = replyHeader(message),
+                    receivedAt = receivedAt,
+                    sentAt = if (receivedAt != null) message.timeSent else 0L,
                 )
             // Tatrak: after content(), so no attachment state (deleted, downloading, cancelled) hides it
             val caption = message.caption

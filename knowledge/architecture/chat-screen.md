@@ -179,6 +179,13 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   too tall. Before 2026-10-31 a copy was centred while the original stayed visible, which looked
   like a duplicate. One vibration only: `combinedClickable` vibrates on long press by itself
   (Compose foundation 1.7+), the extra manual one is gone.
+- Sent / received times (2026-11-15, owner): for a received message whose time received is known
+  (`Message.getTimeReceived()`, column `tatrak_time_received`), the menu starts with two
+  non-clickable secondary lines, "Sent <date, time>" (`getTimeSent`) and "Received <date, time>",
+  then a divider, like Telegram's "read at" row. `MessageItem.receivedAt` / `sentAt` carry the raw
+  epoch ms (null / 0 for own messages and unknown times), so only the open menu formats them
+  (`receiptTime`: ICU skeleton `dMMM` + seconds via `DateFormat.getBestDateTimePattern`, the
+  device's 12/24-hour setting, the year only when not the current one).
 - Retractions (XEP-0424) of OMEMO messages need proof: the retraction must be encrypted with the
   message's key (or come from one of our own trusted devices), else the message stays and the
   bubble shows "Unverified request to delete this message" (`MessageItem.retractUnverified`, from

@@ -146,7 +146,7 @@ public class IndividualMessage extends Message {
         } catch (IllegalArgumentException e) {
             trueCounterpart = null;
         }
-        return new IndividualMessage(
+        final Message message = new IndividualMessage(
                 conversation,
                 cursor.getString(cursor.getColumnIndexOrThrow(UUID)),
                 cursor.getString(cursor.getColumnIndexOrThrow(CONVERSATION)),
@@ -173,5 +173,9 @@ public class IndividualMessage extends Message {
                 cursor.getString(cursor.getColumnIndexOrThrow(BODY_LANGUAGE)),
                 cursor.getString(cursor.getColumnIndexOrThrow(OCCUPANT_ID)),
                 Reaction.fromString(cursor.getString(cursor.getColumnIndexOrThrow(REACTIONS))));
+        // Tatrak: same as Message.fromCursor
+        final int timeReceived = cursor.getColumnIndexOrThrow(TIME_RECEIVED);
+        message.setTimeReceived(cursor.isNull(timeReceived) ? null : cursor.getLong(timeReceived));
+        return message;
     }
 }

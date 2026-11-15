@@ -35,11 +35,11 @@ public class CompatibleBackupTest {
     public void columnsPerFormat() {
         final String[] columns = {
             Message.REPLY_TO, Message.SHARED_STORAGE, Message.RETRACT_ATTEMPT, "tatrak_source_encryption", Message.BODY,
-            Message.CAPTION
+            Message.CAPTION, Message.TIME_RECEIVED // monocles gets it renamed, see writeMessage
         };
-        final boolean[] tatrak = {true, true, true, true, true, true};
-        final boolean[] conversations = {false, true, false, false, true, false};
-        final boolean[] monocles = {false, false, false, false, true, false};
+        final boolean[] tatrak = {true, true, true, true, true, true, true};
+        final boolean[] conversations = {false, true, false, false, true, false, false};
+        final boolean[] monocles = {false, false, false, false, true, false, false};
         for (int i = 0; i < columns.length; i++) {
             assertEquals(columns[i], tatrak[i], ExportBackupWorker.exported(columns[i], TATRAK));
             assertEquals(columns[i], conversations[i], ExportBackupWorker.exported(columns[i], CONVERSATIONS));

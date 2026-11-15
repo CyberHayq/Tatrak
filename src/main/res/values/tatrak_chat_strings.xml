@@ -99,4 +99,7 @@
     <string name="tatrak_delete_for_me">Delete only for me</string>
     <string name="tatrak_delete_for_me_confirm">Delete this message from this device? Others keep it.</string>
     <string name="tatrak_message_deleted">Message deleted</string>
+    <!-- long-press menu of a received message; %1$s is a date and time with seconds -->
+    <string name="tatrak_chat_sent_at">Sent %1$s</string>
+    <string name="tatrak_chat_received_at">Received %1$s</string>
 </resources>
