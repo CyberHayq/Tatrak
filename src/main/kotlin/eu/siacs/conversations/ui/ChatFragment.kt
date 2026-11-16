@@ -8,6 +8,9 @@ import am.cyberhayq.chat.ui.chat.ChatActions
 import am.cyberhayq.chat.ui.chat.ChatScreen
 import am.cyberhayq.chat.ui.chat.ChatViewModel
 import am.cyberhayq.chat.ui.chat.LocalSwipeBack
+import am.cyberhayq.chat.ui.media.SaveResult
+import am.cyberhayq.chat.ui.chat.LocalSwipeMethod
+import am.cyberhayq.chat.ui.chat.SwipeMethod
 import am.cyberhayq.chat.ui.chat.MentionCandidate
 import am.cyberhayq.chat.ui.chat.MessageFocus
 import am.cyberhayq.chat.ui.chat.highlightInConference
@@ -50,6 +53,7 @@ import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.platform.ComposeView
@@ -326,7 +330,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             ComposeView(requireContext()).apply {
                 setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
                 setContent {
-                    CompositionLocalProvider(LocalSwipeBack provides layout) {
+                    val swipeMethod = SwipeMethod.remember()
+                    SideEffect { layout.dragEnabled = swipeMethod == SwipeMethod.TELEGRAM }
+                    CompositionLocalProvider(LocalSwipeBack provides layout, LocalSwipeMethod provides swipeMethod) {
                         TatrakTheme {
                             val palette = currentTextPalette()
                             LaunchedEffect(palette) { viewModel.setPalette(palette) }
@@ -1061,6 +1067,33 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         )
     }
 
+    /**
+     * ConversationFragment.onContactPictureLongClicked, "Contact details" / "Account details" (group:
+     * MucDetailsContextMenuHelper's, by the sender's real JID): the key screens highlight the
+     * message's OMEMO key. Unlike the group helper, our own group message also passes the key to the
+     * account screen, so it is highlighted there too. Only an OMEMO fingerprint is tappable.
+     */
+    override fun openMessageKey(uuid: String) {
+        val message = message(uuid) ?: return
+        val fingerprint = message.fingerprint ?: return
+        val account = message.conversation.account
+        val contact =
+            when {
+                message.status > Message.STATUS_RECEIVED -> null
+                message.conversation is Conversation && message.conversation.mode == Conversational.MODE_MULTI -> {
+                    val realJid = (message.conversation as Conversation).mucOptions.getUserOrStub(message).realJid
+                    // an anonymous sender: the classic menu opens nothing either
+                    realJid?.let { account.roster.getContact(it) } ?: return
+                }
+                else -> message.contact
+            }
+        if (contact == null || contact.isSelf) {
+            requireXmppActivity().switchToAccount(account, fingerprint)
+        } else {
+            requireXmppActivity().switchToContactDetails(contact, fingerprint)
+        }
+    }
+
     /** ConversationFragment.showErrorMessage. */
     override fun showError(uuid: String) {
         val message = message(uuid) ?: return
@@ -1369,15 +1402,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         if (storageLocation == null || storageLocation.sharedStorage()) return
         Futures.addCallback(
             service.fileBackend.saveInternalToExternal(storageLocation),
-            object : FutureCallback<Void?> {
-                override fun onSuccess(result: Void?) {
+            object : FutureCallback<File> {
+                override fun onSuccess(result: File) {
                     val context = context ?: return
-                    Toast.makeText(
-                            context,
-                            context.resources.getQuantityString(R.plurals.attachments_saved, 1, 1),
-                            Toast.LENGTH_LONG,
-                        )
-                        .show()
+                    Toast.makeText(context, SaveResult.message(context, listOf(result)), Toast.LENGTH_LONG).show()
                 }
 
                 override fun onFailure(t: Throwable) {
@@ -1556,9 +1584,21 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     /** XEP-0424 "delete for everyone". */
     private fun retract(message: Message) {
         val manager = message.conversation.account.xmppConnection?.getManager(ModerationManager::class.java)
+        val location = message.relativeFilePath.takeIf { message.isFileOrImage }
         if (manager?.retract(message) != true) {
             Toast.makeText(activity, R.string.tatrak_retract_failed, Toast.LENGTH_SHORT).show()
+        } else {
+            warnKeptFile(location)
         }
+    }
+
+    /** A file outside the app's store (an imported backup's) stays with the message gone: the user deletes it. */
+    private fun warnKeptFile(location: Message.StorageLocation?) {
+        if (location == null || !location.sharedStorage()) return
+        MaterialAlertDialogBuilder(requireContext())
+            .setMessage(getString(R.string.tatrak_shared_file_kept, location.file().absolutePath))
+            .setPositiveButton(R.string.ok, null)
+            .show()
     }
 
     /** Only this device: nothing is sent, the others keep the message. */
@@ -1569,8 +1609,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         // an upload would still send the file, a download would write it after the row is gone
         message.transferable?.cancel()
         val location = message.relativeFilePath
+        val hadFile = message.isFileOrImage // the hidden row below is no file message any more
         // the attachment goes too, unless another message still shows it
-        if (message.isFileOrImage && location != null &&
+        if (hadFile && location != null && !location.sharedStorage() &&
             db.getMessagesWithFile(location.file()).none { it != message.uuid }) {
             service.fileBackend.deleteFile(message)
         }
@@ -1590,6 +1631,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         service.updateConversationUi()
         (activity as? ConversationsActivity)?.onConversationsListItemUpdated()
         refresh()
+        if (hadFile) warnKeptFile(location)
     }
 
     /** ConversationFragment.cancelTransmission. */

@@ -60,13 +60,16 @@ public class SaveToSharedTest {
             final File stored = writer.commit();
             final var location = new Message.StorageLocation(stored, false);
 
-            service.getFileBackend().saveInternalToExternal(location).get();
-            service.getFileBackend().saveInternalToExternal(location).get();
+            final File firstSave = service.getFileBackend().saveInternalToExternal(location).get();
+            final File secondSave = service.getFileBackend().saveInternalToExternal(location).get();
             final String[] saved = pictures.list();
             Arrays.sort(saved);
             assertEquals(2, saved.length);
             final String first = am.cyberhayq.chat.storage.media.MediaProvider.displayName(service, stored);
             assertArrayEquals(new String[] {first.replace(".jpg", " (1).jpg"), first}, saved);
+            // the "Saved as" toast names what was written
+            assertEquals(first, firstSave.getName());
+            assertEquals(first.replace(".jpg", " (1).jpg"), secondSave.getName());
             for (final String name : saved) {
                 assertFalse(name, name.contains(generation) || name.contains("tatrak_"));
                 assertArrayEquals(photo, Files.readAllBytes(new File(pictures, name).toPath()));

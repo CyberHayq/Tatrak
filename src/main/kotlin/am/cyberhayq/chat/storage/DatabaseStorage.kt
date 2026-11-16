@@ -42,7 +42,7 @@ import org.json.JSONObject
 
 /** Owns selection of the complete history/push pair before any application helper can open. */
 object DatabaseStorage {
-    enum class State { STARTING, MIGRATION_REQUIRED, WORKING, READY, RECOVERY_REQUIRED }
+    enum class State { STARTING, WORKING, READY, RECOVERY_REQUIRED }
     data class Generation(val id: String, val directory: File, val key: ByteArray) {
         fun history() = File(directory, "history.db")
         fun push() = File(directory, "push.db")
@@ -116,102 +116,32 @@ object DatabaseStorage {
             val generation = load(context, readSelector(active))
             verifyPair(generation)
             selected = generation
-            cleanupLegacy(context, generation)
+            dropPreview(context, generation)
             discardOrphans(context, generation)
             ready(context)
             return
         }
-        val history = context.getDatabasePath("history")
-        if (history.exists()) {
-            state = State.MIGRATION_REQUIRED
-            notifyRequired(context)
-            return
-        }
+        // A plaintext database of a build before encryption is never opened: no such install exists.
         val artifacts = base.listFiles().orEmpty().any { it.name != "imports" } ||
-            listOf("history-wal", "history-journal", "unified-push-distributor",
+            listOf("history", "history-wal", "history-journal", "unified-push-distributor",
                 "unified-push-distributor-wal", "unified-push-distributor-journal")
                 .any { context.getDatabasePath(it).exists() } ||
             store().aliases().toList().any { it.startsWith(PREFIX) }
         check(!artifacts) { "Ambiguous initial storage" }
         val generation = createGeneration(context)
         initializeEmpty(context, generation)
-        activate(context, generation, false)
-    }
-
-    @JvmStatic @Synchronized fun migrate(context: Context) {
-        if (state != State.MIGRATION_REQUIRED) return
-        state = State.WORKING
-        execute(context) {
-            val sources = listOf(context.getDatabasePath("history"), context.getDatabasePath("unified-push-distributor"))
-            val required = sources.sumOf { f ->
-                listOf(f, File(f.path + "-wal"), File(f.path + "-journal")).sumOf { it.length() }
-            }
-            // Leave room for the complete pair and temporary SQLCipher/SQLite allocation.
-            check(root(context).usableSpace > required * 3 + 32L * 1024 * 1024) { "Insufficient space" }
-            val generation = createGeneration(context)
-            exportPlaintext(sources[0], generation.history(), generation)
-            if (sources[1].exists()) exportPlaintext(sources[1], generation.push(), generation)
-            else {
-                check(!File(sources[1].path + "-wal").exists() && !File(sources[1].path + "-journal").exists())
-                UnifiedPushDatabase.isolated(context, generation.push().path, generation.password()).use { it.writableDatabase }
-            }
-            // Upgrade only the disposable encrypted copy, never the source database.
-            DatabaseBackend.isolated(context, generation.history().path, generation.password()).use { it.writableDatabase }
-            activate(context, generation, true)
-        }
-    }
-
-    private fun exportPlaintext(source: File, destination: File, generation: Generation) {
-        check(source.isFile && !destination.exists())
-        // ATTACH inherits the source open flags, which deliberately forbid creating the source.
-        SQLiteDatabase.openDatabase(destination.path, generation.password(), null,
-            SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.CREATE_IF_NECESSARY, PRESERVE, null).use { }
-        SQLiteDatabase.openDatabase(source.path, null as ByteArray?, null,
-            SQLiteDatabase.OPEN_READWRITE, PRESERVE, null).use { db ->
-            db.execSQL("PRAGMA temp_store=MEMORY")
-            db.rawQuery("PRAGMA wal_checkpoint(TRUNCATE)", null).use { c ->
-                check(c.moveToFirst() && c.getInt(0) == 0) { "Busy source" }
-            }
-            val version = scalar(db, "PRAGMA user_version").toInt()
-            val tables = tableCounts(db)
-            db.execSQL("ATTACH DATABASE ? AS encrypted KEY ?",
-                arrayOf(destination.path, String(generation.password(), Charsets.US_ASCII)))
-            try {
-                db.rawQuery("SELECT sqlcipher_export('encrypted')", null).use { it.moveToFirst() }
-                db.execSQL("PRAGMA encrypted.user_version=$version")
-            } finally { db.execSQL("DETACH DATABASE encrypted") }
-            open(destination, generation.password()).use { copy ->
-                check(copy.version == version && tableCounts(copy) == tables) { "Export differs" }
-                // Repair only the derived index in the encrypted copy, never the source.
-                if (tables.containsKey("messages_index")) {
-                    copy.execSQL("INSERT INTO messages_index(messages_index) VALUES('rebuild')")
-                }
-                validate(copy)
-            }
-        }
-        syncFile(destination)
+        activate(context, generation)
     }
 
     @JvmStatic fun open(file: File, password: ByteArray): SQLiteDatabase =
         SQLiteDatabase.openDatabase(file.path, password, null, SQLiteDatabase.OPEN_READWRITE, PRESERVE, null)
             .apply { execSQL("PRAGMA temp_store=MEMORY") }
 
-    private fun tableCounts(db: SQLiteDatabase): Map<String, Long> {
-        val counts = linkedMapOf<String, Long>()
-        db.rawQuery("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'", null).use { c ->
-            while (c.moveToNext()) {
-                val name = c.getString(0)
-                counts[name] = scalar(db, "SELECT count(*) FROM \"${name.replace("\"", "\"\"")}\"").toLong()
-            }
-        }
-        return counts
-    }
-
     private fun validate(db: SQLiteDatabase) {
         check(scalar(db, "PRAGMA integrity_check") == "ok")
         db.rawQuery("PRAGMA cipher_integrity_check", null).use { check(!it.moveToFirst()) }
         db.rawQuery("PRAGMA foreign_key_check", null).use { check(!it.moveToFirst()) }
-        if (tableCounts(db).containsKey("messages_index")) {
+        if (scalar(db, "SELECT count(*) FROM sqlite_master WHERE type='table' AND name='messages_index'") != "0") {
             db.execSQL("INSERT INTO messages_index(messages_index) VALUES('integrity-check')")
         }
     }
@@ -314,11 +244,11 @@ object DatabaseStorage {
     }
 
     @JvmStatic @Synchronized fun recoverImport(context: Context, generation: Generation) {
-        val admitted = state == State.RECOVERY_REQUIRED || state == State.MIGRATION_REQUIRED
+        val admitted = state == State.RECOVERY_REQUIRED
         try {
             check(admitted)
             state = State.WORKING
-            activate(context, generation, false)
+            activate(context, generation)
         } catch (failure: Exception) {
             // Decided here, before the state lets a retry or a fresh start change the selectors.
             // Also for a refused call: a second commit of a stage that is already active must
@@ -346,14 +276,14 @@ object DatabaseStorage {
         open(generation.push(), generation.password()).use(::validate)
     }
 
-    private fun activate(context: Context, generation: Generation, removeLegacy: Boolean) {
+    private fun activate(context: Context, generation: Generation) {
         // Before the files are synced and any selector names the generation: its media key gets
-        // the generation's id (a migrated database has no key table and stays without one).
+        // the generation's id (a database without the key table stays without one).
         open(generation.history(), generation.password()).use { MediaKeyTable.bindOwn(it, generation.id) }
         validatePair(generation)
         syncFile(generation.history()); syncFile(generation.push())
         durableWrite(File(generation.directory, "metadata"),
-            JSONObject().put("version", 1).put("cleanupLegacy", removeLegacy).toString().toByteArray())
+            JSONObject().put("version", 1).toString().toByteArray())
         syncDirectory(generation.directory)
         val base = root(context)
         writeSelector(File(base, "commit"), generation.id)
@@ -361,28 +291,17 @@ object DatabaseStorage {
         check(File(base, "commit").delete()); syncDirectory(base)
         verifyPair(generation)
         selected = generation
-        cleanupLegacy(context, generation)
+        dropPreview(context, generation)
         ready(context)
     }
 
-    private fun cleanupLegacy(context: Context, generation: Generation) {
-        val metadata = File(generation.directory, "metadata")
-        val json = JSONObject(metadata.readText())
-        require(json.getInt("version") == 1)
-        if (!json.getBoolean("cleanupLegacy")) return
-        try {
-            for (name in listOf("history", "unified-push-distributor")) {
-                val source = context.getDatabasePath(name)
-                for (file in listOf(source, File(source.path + "-wal"), File(source.path + "-shm"), File(source.path + "-journal"))) {
-                    if (file.exists()) check(file.delete())
-                }
-                source.parentFile?.let(::syncDirectory)
-            }
-            durableWrite(metadata, json.put("cleanupLegacy", false).toString().toByteArray())
-        } catch (_: Exception) {
-            // Keep the selected encrypted pair authoritative; retry cleanup on the next start.
-            error = context.getString(R.string.tatrak_storage_cleanup)
-        }
+    // A recovery import's stage becomes active with its plaintext preview (JID, account id); nothing reads it after.
+    private fun dropPreview(context: Context, generation: Generation) {
+        val preview = File(generation.directory, "preview")
+        if (confirmedAbsent(preview)) return
+        // not fatal: the warning shows and the next start tries again
+        val removed = preview.delete() && runCatching { syncDirectory(generation.directory) }.isSuccess
+        if (!removed) error = context.getString(R.string.tatrak_storage_cleanup)
     }
 
     @JvmStatic @Synchronized fun retry(context: Context) {
@@ -397,7 +316,7 @@ object DatabaseStorage {
         execute(context) {
             val generation = createGeneration(context)
             initializeEmpty(context, generation)
-            activate(context, generation, false)
+            activate(context, generation)
         }
     }
 

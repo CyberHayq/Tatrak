@@ -193,10 +193,9 @@ internal class NewChatCompose(private val activity: StartConversationActivity) :
         )
     }
 
+    // the Contacts screen too opens the chat, as Telegram does; the profile is in the long-press menu
     override fun openContact(key: String) {
-        val contact = contacts[key] ?: return
-        if (contactsOnly && !contact.isSelf) contactMenu(key, NewChatMenu.DETAILS)
-        else activity.openConversationForContact(contact)
+        activity.openConversationForContact(contacts[key] ?: return)
     }
 
     override fun openGroup(key: String) {

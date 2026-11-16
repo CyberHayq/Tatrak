@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reversible fault checks on already-migrated, backed-up Tatrak debug emulator data."""
+"""Reversible fault checks on encrypted, backed-up Tatrak debug emulator data."""
 import hashlib
 import pathlib
 import subprocess

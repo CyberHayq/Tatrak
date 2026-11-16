@@ -528,7 +528,8 @@ public class ModerationManager extends AbstractManager {
         // with the body, so the text and its search index entry are gone from disk too
         getDatabase().updateMessage(message, true);
         this.service.getNotificationService().clear(message);
-        if (hadFile && location != null) {
+        // Tatrak: a file outside the app's store (sharedStorage, from an imported backup) is not ours to delete
+        if (hadFile && location != null && !location.sharedStorage()) {
             deleteUnusedFile(location.file());
         }
         this.service.updateConversationUi();
@@ -548,7 +549,8 @@ public class ModerationManager extends AbstractManager {
     private void deleteAssociatedFile(final eu.siacs.conversations.entities.Message message) {
         if (message.isFileOrImage()) {
             final var storageLocation = message.getRelativeFilePath();
-            if (storageLocation == null) {
+            // Tatrak: a file outside the app's store is not ours to delete
+            if (storageLocation == null || storageLocation.sharedStorage()) {
                 return;
             }
             deleteUnusedFile(storageLocation.file());

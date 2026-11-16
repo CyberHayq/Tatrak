@@ -2,14 +2,7 @@
     <string name="tatrak_storage_title">Local data protection</string>
     <string name="tatrak_storage_action">Open Tatrak to finish setup or recover local data.</string>
     <string name="tatrak_storage_working">Preparing encrypted storage. Messages are paused until it is ready. Please wait.</string>
-    <string name="tatrak_storage_migration">Tatrak will encrypt your message database and local notification settings. Photos and other files are not included. Make an encrypted backup first, or choose to continue without one. Messages will pause during migration.</string>
-    <string name="tatrak_storage_backup">Save a backup first</string>
-    <string name="tatrak_storage_continue">Continue</string>
-    <string name="tatrak_storage_without_backup">Continue without a fresh backup? A separate export is your recovery copy if local data becomes unavailable.</string>
-    <string name="tatrak_storage_exporting">Saving encrypted backup…</string>
-    <string name="tatrak_storage_backup_done">Backup saved. Continue with database encryption?</string>
-    <string name="tatrak_storage_backup_failed">Backup was not completed. Migration has not started. Retry, or explicitly choose to continue without a backup.</string>
-    <string name="tatrak_storage_failed">Local storage could not be opened or migrated. The original files have been kept. Retry, restore an encrypted backup, or explicitly start fresh while retaining the old files.</string>
+    <string name="tatrak_storage_failed">Local storage could not be opened. The original files have been kept. Retry, restore an encrypted backup, or explicitly start fresh while retaining the old files.</string>
     <string name="tatrak_storage_cleanup">Encrypted storage is active, but some old files still need cleanup.</string>
     <string name="tatrak_storage_retry">Retry</string>
     <string name="tatrak_storage_fresh">Start fresh</string>

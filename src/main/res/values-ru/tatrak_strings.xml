@@ -40,23 +40,11 @@
     <string name="tatrak_accent_pink">Розовый</string>
     <string name="tatrak_accent_orange">Оранжевый</string>
     <string name="tatrak_accent_red">Красный</string>
-    <string name="tatrak_accent_ember">Жар</string>
-    <string name="tatrak_accent_steel">Сталь</string>
-    <string name="tatrak_accent_crimson">Кармин</string>
-    <string name="tatrak_accent_gold">Золото</string>
-    <string name="tatrak_accent_teal">Бирюза</string>
-    <string name="tatrak_accent_forest">Лес</string>
-    <string name="tatrak_accent_copper">Медь</string>
+    <string name="tatrak_accent_gold">Золотой</string>
     <string name="tatrak_appearance">Оформление</string>
     <string name="tatrak_appearance_summary">Тема, цвет акцента, обои чатов</string>
     <string name="tatrak_appearance_theme">Тема</string>
     <string name="tatrak_appearance_accent">Цвет акцента</string>
-    <string name="tatrak_appearance_accent_signature">Фирменные</string>
-    <string name="tatrak_appearance_accent_editor">Палитры редакторов</string>
-    <string name="tatrak_accent_onedark">One Dark</string>
-    <string name="tatrak_accent_dracula">Dracula</string>
-    <string name="tatrak_appearance_elegant">Элегантная тёмная</string>
-    <string name="tatrak_appearance_elegant_summary">Спокойные графитовые поверхности и мягкий светлый текст ночью; у фирменных тем остаётся своя палитра</string>
     <string name="tatrak_appearance_dynamic_summary">Цвета из обоев телефона; акцент тогда не используется</string>
     <string name="tatrak_appearance_preview_in">Доброе утро! 👋</string>
     <string name="tatrak_appearance_preview_out">Привет! Новые обои отлично смотрятся.</string>
@@ -88,4 +76,5 @@
     <string name="tatrak_style_slate_sea_summary">Холодные сланцевые поверхности, морской акцент, скруглённые аватары</string>
     <string name="tatrak_style_dynamic_note">Пока включены динамические цвета, цвета берутся из системы; форма аватаров применяется</string>
     <string name="tatrak_attachments_saved_partly">Сохранено медиафайлов: %1$d из %2$d</string>
+    <string name="tatrak_attachment_saved_as">Сохранено как %1$s</string>
 </resources>

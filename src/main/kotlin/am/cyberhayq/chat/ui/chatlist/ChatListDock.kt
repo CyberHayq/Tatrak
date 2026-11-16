@@ -128,7 +128,8 @@ internal fun ChatListBottomBar(
 
 @Composable
 private fun RowScope.DockItem(icon: Int, label: String, selected: Boolean, onClick: () -> Unit) {
-    val color = if (selected) MaterialTheme.colorScheme.primary else TatrakTheme.chatColors.onTopBarMuted
+    // link: the accent fitted to read on the bar (gen_accents.py); primary is only 3:1 there for light accents
+    val color = if (selected) TatrakTheme.chatColors.link else TatrakTheme.chatColors.onTopBarMuted
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier =

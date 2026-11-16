@@ -1073,7 +1073,7 @@ public class XmppConnectionService extends Service {
     @SuppressLint("TrulyRandom")
     @Override
     public void onCreate() {
-        // Tatrak: startup migration is isolated from XMPP and all service writers.
+        // Tatrak: opening the encrypted storage is isolated from XMPP and all service writers.
         if (!am.cyberhayq.chat.storage.DatabaseStorage.isReady()) {
             am.cyberhayq.chat.storage.DatabaseStorage.notifyRequired(this);
             stopSelf();

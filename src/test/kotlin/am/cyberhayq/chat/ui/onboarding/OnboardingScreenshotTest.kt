@@ -77,7 +77,7 @@ class OnboardingScreenshotTest {
 
     @Test
     @Config(qualifiers = "+night")
-    fun welcomeEmberDark() = capture(welcome(activity(Accent.EMBER)), "onboarding_welcome_ember_dark")
+    fun welcomeAmoledDark() = capture(welcome(activity(Accent.GOLD, R.style.ThemeOverlay_Tatrak_Amoled)), "onboarding_welcome_amoled_dark")
 
     @Test
     fun welcomeSlateLight() =
@@ -85,10 +85,10 @@ class OnboardingScreenshotTest {
 
     @Test
     @Config(qualifiers = "+night")
-    fun welcomeSlateElegantDark() =
+    fun welcomeSlateGraphiteDark() =
         capture(
-            welcome(activity(Accent.SEA, R.style.ThemeOverlay_Tatrak_SlateSea_Elegant)),
-            "onboarding_welcome_slate_elegant_dark",
+            welcome(activity(Accent.SEA, R.style.ThemeOverlay_Tatrak_SlateSea_Graphite)),
+            "onboarding_welcome_slate_graphite_dark",
         )
 
     @Test

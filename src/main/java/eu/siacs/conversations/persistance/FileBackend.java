@@ -1502,7 +1502,7 @@ public class FileBackend {
 
     // Tatrak: one Boolean per file (saved or not) instead of Void. successfulAsList gives null for
     // a failed save, and a saved Void is null too, so the screens counted every file as saved
-    public ListenableFuture<List<Boolean>> saveInternalToExternal(
+    public ListenableFuture<List<File>> saveInternalToExternal(
             final Collection<Message.StorageLocation> storageLocations) {
         final var internalOnly =
                 Collections2.filter(storageLocations, sl -> sl != null && !sl.sharedStorage());
@@ -1512,19 +1512,20 @@ public class FileBackend {
         return Futures.successfulAsList(futures);
     }
 
-    // Tatrak: true when the save succeeded, false (and a log line) when it failed
-    public static ListenableFuture<Boolean> saved(final ListenableFuture<Void> save) {
+    // Tatrak: the saved file when the save succeeded, null (and a log line) when it failed
+    public static ListenableFuture<File> saved(final ListenableFuture<File> save) {
         return Futures.catching(
-                Futures.transform(save, v -> true, MoreExecutors.directExecutor()),
+                save,
                 Exception.class,
                 e -> {
                     Log.e(Config.LOGTAG, "could not save attachment", e);
-                    return false;
+                    return null;
                 },
                 MoreExecutors.directExecutor());
     }
 
-    public ListenableFuture<Void> saveInternalToExternal(
+    // Tatrak: yields the file written, whose name may have " (1)" added, for the "Saved as" toast
+    public ListenableFuture<File> saveInternalToExternal(
             final Message.StorageLocation storageLocation) {
         Preconditions.checkArgument(!storageLocation.sharedStorage());
         final var internal = storageLocation.file();
@@ -1559,6 +1560,7 @@ public class FileBackend {
                         throw new IllegalStateException(e);
                     }
                     updateMediaScanner(external);
+                    return external;
                 },
                 XmppConnectionService.FILE_ATTACHMENT_EXECUTOR);
     }

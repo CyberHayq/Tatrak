@@ -1,6 +1,7 @@
 package am.cyberhayq.chat.ui.chat
 
 import am.cyberhayq.chat.ui.theme.Accent
+import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.app.Application
@@ -38,6 +39,9 @@ import androidx.compose.ui.text.TextRange
 import eu.siacs.conversations.utils.UIHelper
 import eu.siacs.conversations.entities.Message
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.test.SemanticsNodeInteraction
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
@@ -68,21 +72,26 @@ class ChatScreenshotTest {
 
     private val voice = MutableStateFlow(VoicePlayback("voice-1", true, 7_000, 19_000))
 
-    /** Slate and Sea (style tokens): ordinary accent = Sea, a house keeps its own surfaces by night and Slate shows by day. */
+    /** Slate and Sea (style tokens): Sea by default, any other accent over the same slate surfaces; three night backgrounds. */
     @Test fun chatSlateLight() = capture("chat_slate_light", darkTheme = false, accent = Accent.SEA, style = TatrakStyle.SLATE_SEA) { privateChat(it) }
 
     @Test @Config(qualifiers = "+night")
     fun chatSlateDark() = capture("chat_slate_dark", darkTheme = true, accent = Accent.SEA, style = TatrakStyle.SLATE_SEA) { privateChat(it) }
 
     @Test @Config(qualifiers = "+night")
-    fun chatSlateElegantDark() =
-        capture("chat_slate_elegant_dark", darkTheme = true, accent = Accent.SEA, style = TatrakStyle.SLATE_SEA, elegant = true) { privateChat(it) }
-
-    @Test fun chatSlateEmberLight() =
-        capture("chat_slate_ember_light", darkTheme = false, accent = Accent.EMBER, style = TatrakStyle.SLATE_SEA) { privateChat(it) }
+    fun chatSlateGraphiteDark() =
+        capture("chat_slate_graphite_dark", darkTheme = true, accent = Accent.SEA, style = TatrakStyle.SLATE_SEA, nightBackground = NightBackground.GRAPHITE) {
+            privateChat(it)
+        }
 
     @Test @Config(qualifiers = "+night")
-    fun chatSlateSteelDark() = capture("chat_slate_steel_dark", darkTheme = true, accent = Accent.STEEL, style = TatrakStyle.SLATE_SEA) { privateChat(it) }
+    fun chatSlateAmoledDark() =
+        capture("chat_slate_amoled_dark", darkTheme = true, accent = Accent.SEA, style = TatrakStyle.SLATE_SEA, nightBackground = NightBackground.AMOLED) {
+            privateChat(it)
+        }
+
+    @Test fun chatSlateGoldLight() =
+        capture("chat_slate_gold_light", darkTheme = false, accent = Accent.GOLD, style = TatrakStyle.SLATE_SEA) { privateChat(it) }
 
     @Test fun chatLight() {
         capture("chat_light", darkTheme = false) { privateChat(it) }
@@ -216,9 +225,6 @@ class ChatScreenshotTest {
     fun chatWallpaperPatternDark() = capture("chat_wallpaper_pattern_dark", darkTheme = true) { privateChat(it).copy(wallpaper = "default#bubbles") }
 
     @Test
-    fun chatEmberDark() = capture("chat_ember_dark", darkTheme = true, accent = Accent.EMBER) { privateChat(it) }
-
-    @Test
     fun chatGoldLight() = capture("chat_gold_light", darkTheme = false, accent = Accent.GOLD) { privateChat(it) }
 
     @Test
@@ -310,6 +316,35 @@ class ChatScreenshotTest {
         compose.onNodeWithText("Received", substring = true).assertExists()
     }
 
+    /** An OMEMO message: method, trust and the fingerprint, whose tap opens the key list. */
+    @Test
+    fun chatLongPressMenuKey() {
+        val opened = mutableListOf<String>()
+        val actions = object : ChatActions by FakeActions {
+            override fun openMessageKey(uuid: String) { opened += uuid }
+        }
+        val fingerprint = "3f2a9c41 b7e0d58a 61c4f9e2 0d7b3a68\n9e15c2f7 a4d860b3 c7f21e95 58b0a4d6"
+        capture("chat_menu_key", darkTheme = false, actions = actions, longPress = "flag works now") { s ->
+            privateChat(s).let { st ->
+                st.copy(
+                    items =
+                        st.items.map {
+                            if (it is MessageItem && it.key == "m5")
+                                it.copy(
+                                    sentAt = at("2025-11-14T21:03:10"),
+                                    receivedAt = at("2025-11-14T21:03:15"),
+                                    encryptionKey = KeyInfo(R.string.encryption_choice_omemo, R.string.tatrak_chat_key_verified, fingerprint),
+                                )
+                            else it
+                        }
+                )
+            }
+        }
+        compose.onNodeWithText("OMEMO · verified ✓").assertExists()
+        compose.onNodeWithText(fingerprint).performClick()
+        assertEquals(listOf("m5"), opened)
+    }
+
     private fun at(time: String) =
         java.time.LocalDateTime.parse(time).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
 
@@ -339,6 +374,39 @@ class ChatScreenshotTest {
             }
         }
         return opened
+    }
+
+    // Telegram: a flat leftward swipe replies; rightward or about 22° off horizontal it does not (the list scrolls)
+    @Test fun telegramSwipeLeftReplies() = assertEquals(listOf("m7"), swipe(SwipeMethod.TELEGRAM, dx = -10f, dy = 0f))
+
+    @Test fun telegramSwipeRightDoesNotReply() = assertEquals(emptyList<String>(), swipe(SwipeMethod.TELEGRAM, dx = 10f, dy = 0f))
+
+    // a system cancel (e.g. the window loses the touch) past the trigger must not send the reply
+    @Test fun telegramCancelDoesNotReply() = assertEquals(emptyList<String>(), swipe(SwipeMethod.TELEGRAM, dx = -10f, dy = 0f, cancel = true))
+
+    @Test fun telegramDiagonalDoesNotReply() = assertEquals(emptyList<String>(), swipe(SwipeMethod.TELEGRAM, dx = -10f, dy = 4f))
+
+    // Signal: rightward replies, also about 22° off horizontal (ItemTouchHelper takes up to 45°); leftward does not
+    @Test fun signalSwipeRightReplies() = assertEquals(listOf("m7"), swipe(SwipeMethod.SIGNAL, dx = 10f, dy = 0f))
+
+    @Test fun signalDiagonalReplies() = assertEquals(listOf("m7"), swipe(SwipeMethod.SIGNAL, dx = 10f, dy = 4f))
+
+    @Test fun signalSwipeLeftDoesNotReply() = assertEquals(emptyList<String>(), swipe(SwipeMethod.SIGNAL, dx = -10f, dy = 0f))
+
+    /** Drags message m7 in ten steps of ([dx], [dy]) dp; returns the messages replied to. */
+    private fun swipe(method: SwipeMethod, dx: Float, dy: Float, cancel: Boolean = false): List<String> {
+        val replied = mutableListOf<String>()
+        val actions = object : ChatActions by FakeActions {
+            override fun reply(uuid: String) { replied += uuid }
+        }
+        capture("chat_swipe", darkTheme = false, actions = actions, swipe = method, act = {
+            compose.onNodeWithText("Sure, 10 works").performTouchInput {
+                down(center)
+                repeat(10) { moveBy(Offset(dx.dp.toPx(), dy.dp.toPx())) }
+                if (cancel) cancel() else up()
+            }
+        }) { privateChat(it) }
+        return replied
     }
 
     @Test
@@ -453,12 +521,12 @@ class ChatScreenshotTest {
     }
 
     @Test
-    fun chatHouses() {
-        var accent by mutableStateOf(Accent.STEEL)
+    fun chatAccentsAndNights() {
+        var accent by mutableStateOf(Accent.BLUE)
         var dark by mutableStateOf(false)
-        var elegant by mutableStateOf(false)
+        var night by mutableStateOf(NightBackground.BLUE_GREY)
         compose.setContent {
-            TatrakTheme(darkTheme = dark, accent = accent, elegant = elegant) {
+            TatrakTheme(darkTheme = dark, accent = accent, nightBackground = night) {
                 val chat = privateChat(Samples(currentTextPalette()))
                 ChatScreen(
                     state = chat,
@@ -472,16 +540,11 @@ class ChatScreenshotTest {
                 )
             }
         }
-        for (house in Accent.entries.filter { (it.signature || it.palette) && it != Accent.EMBER }) for (night in listOf(false, true)) {
-            compose.runOnIdle { accent = house; dark = night }
+        // every accent by day and under each night background (Telegram style)
+        for (option in Accent.entries) for (mode in listOf(null) + NightBackground.entries) {
+            compose.runOnIdle { accent = option; dark = mode != null; night = mode ?: NightBackground.BLUE_GREY }
             compose.waitForIdle()
-            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_${house.key}_${if (night) "dark" else "light"}.png")
-        }
-        // the opt-in elegant night: ordinary accents take it, a house keeps its own surfaces
-        for (option in listOf(Accent.BLUE, Accent.GREEN, Accent.PINK, Accent.EMBER)) {
-            compose.runOnIdle { accent = option; dark = true; elegant = true }
-            compose.waitForIdle()
-            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_elegant_${option.key}_dark.png")
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_accent_${option.key}_${mode?.key ?: "day"}.png")
         }
     }
 
@@ -495,14 +558,16 @@ class ChatScreenshotTest {
         accent: Accent = Accent.BLUE,
         previews: List<String> = emptyList(),
         style: TatrakStyle = TatrakStyle.TELEGRAM,
-        elegant: Boolean = false,
+        nightBackground: NightBackground = NightBackground.BLUE_GREY,
         act: () -> Unit = {},
         actions: ChatActions = FakeActions,
         mentions: MentionTracker? = null,
+        swipe: SwipeMethod = SwipeMethod.TELEGRAM,
         state: @Composable (Samples) -> ChatState,
     ) {
         compose.setContent {
-            TatrakTheme(darkTheme = darkTheme, style = style, accent = accent, elegant = elegant) {
+            TatrakTheme(darkTheme = darkTheme, style = style, accent = accent, nightBackground = nightBackground) {
+              CompositionLocalProvider(LocalSwipeMethod provides swipe) {
                 val samples = Samples(currentTextPalette())
                 val chat = state(samples)
                 ChatScreen(
@@ -516,6 +581,7 @@ class ChatScreenshotTest {
                     previews = previews,
                     seenMentions = mentions?.seen.orEmpty(),
                 )
+              }
             }
         }
         if (longPress != null) {

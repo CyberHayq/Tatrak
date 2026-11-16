@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_night_background">Ночной фон</string>
+    <string name="tatrak_night_background_blue_grey">Сине-серый</string>
+    <string name="tatrak_night_background_graphite">Графитовый</string>
+    <string name="tatrak_night_background_amoled">Чёрный (AMOLED)</string>
+</resources>

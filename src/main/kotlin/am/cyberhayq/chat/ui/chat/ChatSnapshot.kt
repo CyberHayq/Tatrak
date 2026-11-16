@@ -15,6 +15,7 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import com.google.common.base.Objects
 import eu.siacs.conversations.Config
+import eu.siacs.conversations.crypto.axolotl.FingerprintStatus
 import eu.siacs.conversations.R
 import eu.siacs.conversations.entities.Contact
 import eu.siacs.conversations.entities.Conversation
@@ -218,10 +219,36 @@ data class MessageItem(
     val receivedAt: Long? = null,
     /** Message.getTimeSent when [receivedAt] is known; 0 when the menu shows no times. */
     val sentAt: Long = 0L,
+    /** Tatrak: the key line of the long-press menu; null for call records. */
+    val encryptionKey: KeyInfo? = null,
 ) : ChatItem {
     override val contentType: Int
         get() = kind.ordinal * 2 + if (isOutgoing) 1 else 0
 }
+
+/**
+ * How a message was encrypted, for the long-press menu: the method (CryptoHelper.encryptionTypeToText),
+ * the OMEMO key's trust and its fingerprint as two lines of four 8-digit groups.
+ */
+@Immutable
+data class KeyInfo(@StringRes val method: Int, @StringRes val trust: Int? = null, val fingerprint: String? = null)
+
+/** The menu's trust word for an OMEMO key; [own]: the key of this device. */
+@StringRes
+internal fun keyTrustLabel(status: FingerprintStatus?, own: Boolean): Int =
+    when {
+        own -> R.string.tatrak_chat_key_this_device
+        status == null -> R.string.tatrak_chat_key_unknown
+        status.isVerified -> R.string.tatrak_chat_key_verified
+        status.isCompromised -> R.string.tatrak_chat_key_compromised
+        status.isTrusted -> R.string.tatrak_chat_key_trusted
+        else -> R.string.tatrak_chat_key_untrusted
+    }
+
+/** An OMEMO fingerprint ("05" + 64 hex digits) as two lines of four 8-digit groups. */
+internal fun fingerprintLines(fingerprint: String): String =
+    // "05" is the key type byte, left out as the classic key screens do
+    fingerprint.substring(2).chunked(8).chunked(4).joinToString("\n") { it.joinToString(" ") }
 
 /** [targetKey] is null when the answered message isn't loaded or no longer exists. */
 @Immutable
@@ -691,6 +718,9 @@ object ChatSnapshot {
             val showAvatar = isGroup && !outgoing && position.isEnd
             val name = if (showSender || showAvatar) UIHelper.getMessageDisplayName(message) else null
             val receivedAt = if (outgoing) null else message.timeReceived
+            val trust =
+                if (encryption == Message.ENCRYPTION_AXOLOTL) conversation.account.axolotlService?.getFingerprintTrust(message.fingerprint)
+                else null
             val base =
                 MessageItem(
                     key = message.uuid,
@@ -703,7 +733,7 @@ object ChatSnapshot {
                         timeFormat.format(Instant.ofEpochMilli(message.timeSent).atZone(zone)),
                     statusText = statusText(message),
                     status = if (outgoing) deliveryStatus(message) else DeliveryStatus.NONE,
-                    security = security(message),
+                    security = security(message, trust),
                     edited = showsEdited(message),
                     senderName = if (showSender) name else null,
                     senderColor = if (name != null) UIHelper.getColorForName(name) else 0,
@@ -717,6 +747,7 @@ object ChatSnapshot {
                     reply = replyHeader(message),
                     receivedAt = receivedAt,
                     sentAt = if (receivedAt != null) message.timeSent else 0L,
+                    encryptionKey = if (message.type == Message.TYPE_RTP_SESSION) null else keyInfo(message, trust),
                 )
             // Tatrak: after content(), so no attachment state (deleted, downloading, cancelled) hides it
             val caption = message.caption
@@ -1014,15 +1045,30 @@ object ChatSnapshot {
                 else -> DeliveryStatus.NONE
             }
 
-        private fun security(message: Message): Security {
+        /** [status]: AxolotlService.getFingerprintTrust of an OMEMO message's key, else null. */
+        private fun security(message: Message, status: FingerprintStatus?): Security {
             val encryption = message.encryption
             if (encryption == Message.ENCRYPTION_NONE) return Security.NONE
-            if (encryption == Message.ENCRYPTION_AXOLOTL) {
-                val status =
-                    conversation.account.axolotlService?.getFingerprintTrust(message.fingerprint)
-                if (status != null && status.isVerified) return Security.VERIFIED
-            }
+            if (status != null && status.isVerified) return Security.VERIFIED
             return Security.ENCRYPTED
+        }
+
+        private val ownFingerprint by lazy { conversation.account.axolotlService?.ownFingerprint }
+
+        /** [axolotl]: the trust looked up for an ENCRYPTION_AXOLOTL message (maybe null), reused here. */
+        private fun keyInfo(message: Message, axolotl: FingerprintStatus?): KeyInfo {
+            val method = CryptoHelper.encryptionTypeToText(message.encryption)
+            val fingerprint = message.fingerprint
+            if (method != R.string.encryption_choice_omemo || fingerprint == null || fingerprint.length <= 2) {
+                return KeyInfo(method)
+            }
+            // looked up already for ENCRYPTION_AXOLOTL (a null is not cached, so not again); a message
+            // that failed to decrypt can still name its key
+            val status =
+                if (message.encryption == Message.ENCRYPTION_AXOLOTL) axolotl
+                else conversation.account.axolotlService?.getFingerprintTrust(fingerprint)
+            val trust = keyTrustLabel(status, own = fingerprint == ownFingerprint)
+            return KeyInfo(method, trust, fingerprintLines(fingerprint))
         }
 
         private fun reactions(message: Message): List<ReactionChip> {

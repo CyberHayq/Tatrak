@@ -104,4 +104,14 @@
     <!-- long-press menu of a received message; %1$s is a date and time with seconds -->
     <string name="tatrak_chat_sent_at">Отправлено %1$s</string>
     <string name="tatrak_chat_received_at">Получено %1$s</string>
+    <string name="tatrak_shared_file_kept">Файл не удалён: он лежит вне хранилища Tatrak. Если он больше не нужен, удалите его сами:\n%1$s</string>
+    <!-- long-press menu: "OMEMO · verified"; %1$s the encryption method, %2$s the key's trust -->
+    <string name="tatrak_chat_key_line">%1$s · %2$s</string>
+    <string name="tatrak_chat_key_verified">проверен ✓</string>
+    <string name="tatrak_chat_key_trusted">доверен, не проверен</string>
+    <string name="tatrak_chat_key_untrusted">не доверен</string>
+    <string name="tatrak_chat_key_compromised">скомпрометирован</string>
+    <string name="tatrak_chat_key_this_device">это устройство</string>
+    <string name="tatrak_chat_key_unknown">неизвестный ключ</string>
+    <string name="tatrak_chat_key_open">Показать ключ в списке ключей</string>
 </resources>

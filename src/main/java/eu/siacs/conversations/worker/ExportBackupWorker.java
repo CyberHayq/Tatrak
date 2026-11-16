@@ -259,12 +259,7 @@ public class ExportBackupWorker extends Worker {
         final Context context = getApplicationContext();
         final var appSettings = new AppSettings(context);
         final var backupLocation = appSettings.getBackupLocation();
-        // Tatrak: the optional pre-migration export uses a separate legacy reader, with no writers.
-        final boolean beforeMigration = getInputData().getBoolean("tatrak_before_migration", false);
-        final var database = beforeMigration
-                ? DatabaseBackend.legacyForExport(context)
-                : DatabaseBackend.getInstance(context);
-        try {
+        final var database = DatabaseBackend.getInstance(context);
         if (AppSettings.BACKUP_FORMAT_CONVERSATIONS.equals(format) && hasImportedPq(database)) {
             final var notice = getNotification().setContentText(context.getString(R.string.tatrak_backup_compatible_pq))
                     .setProgress(0, 0, false);
@@ -272,9 +267,6 @@ public class ExportBackupWorker extends Worker {
             throw new IOException("PQ provenance requires native backup format");
         }
         final var accounts = database.getAccounts();
-        if (beforeMigration && accounts.stream().anyMatch(a -> Strings.nullToEmpty(a.getPassword()).trim().isEmpty())) {
-            throw new IOException("An account has no export password");
-        }
 
         int count = 0;
         final int max = accounts.size();
@@ -282,7 +274,6 @@ public class ExportBackupWorker extends Worker {
         Log.d(Config.LOGTAG, "starting backup for " + max + " accounts");
         for (final Account account : accounts) {
             if (isStopped()) {
-                if (beforeMigration) throw new IOException("Export cancelled");
                 Log.d(Config.LOGTAG, "ExportBackupWorker has stopped. Returning what we have");
                 return locations.build();
             }
@@ -301,16 +292,13 @@ public class ExportBackupWorker extends Worker {
             try {
                 uri = export(database, account, password, backupLocation, max, count);
             } catch (final WorkStoppedException e) {
-                if (beforeMigration) throw new IOException("Export cancelled");
                 Log.d(Config.LOGTAG, "ExportBackupWorker has stopped. Returning what we have");
                 return locations.build();
             }
             locations.add(uri);
             count++;
         }
-        if (beforeMigration && accounts.isEmpty()) throw new IOException("No exportable accounts");
         return locations.build();
-        } finally { if (beforeMigration) database.close(); }
     }
 
     private Uri export(

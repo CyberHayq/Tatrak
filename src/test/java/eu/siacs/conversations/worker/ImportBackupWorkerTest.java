@@ -939,6 +939,43 @@ public class ImportBackupWorkerTest {
         assertNull(ImportBackupWorker.confinedPath(context, attachments + "/tatrak_" + GENERATION + "_" + "ab".repeat(16) + ".jpg.pgp", known));
     }
 
+    @Test
+    public void aDotDotPathOutOfAttachmentsIsSharedAndAnUnsentFileWaitsForTheUser() throws IOException {
+        db.execSQL("create table messages (uuid text primary key, type integer, body text, status integer,"
+                + " relativeFilePath text, sharedStorage integer)");
+        final Application context = ApplicationProvider.getApplicationContext();
+        final java.io.File attachments = new java.io.File(context.getFilesDir(), "attachments");
+        // from attachments up to the root, then into shared storage: the app must not take it for its own file
+        final int depth = attachments.getCanonicalPath().split("/").length - 1;
+        final String external = android.os.Environment.getExternalStorageDirectory().getCanonicalPath();
+        final String escaping = attachments.getAbsolutePath() + "/" + "../".repeat(depth) + external.substring(1) + "/DCIM/x.jpg";
+        final java.util.Set<String> known = java.util.Set.of(GENERATION);
+        assertEquals(external + "/DCIM/x.jpg", ImportBackupWorker.confinedPath(context, escaping, known));
+        assertEquals(attachments.getAbsolutePath() + "/x.jpg",
+                ImportBackupWorker.confinedPath(context, attachments.getAbsolutePath() + "/sub/../x.jpg", known));
+        importMedia(mediaWorker(context), account("a1"), conversation("c1"),
+                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m1\",\"type\":1,\"status\":" + eu.siacs.conversations.entities.Message.STATUS_WAITING
+                        + ",\"relativeFilePath\":\"" + escaping + "\",\"sharedStorage\":0}}",
+                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m2\",\"type\":0,\"body\":\"hi\",\"status\":"
+                        + eu.siacs.conversations.entities.Message.STATUS_WAITING + "}}",
+                // no path: the file would be found by the uuid
+                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m3\",\"type\":2,\"status\":"
+                        + eu.siacs.conversations.entities.Message.STATUS_UNSEND + "}}");
+        assertEquals(eu.siacs.conversations.entities.Message.STATUS_SEND_FAILED, DatabaseUtils.longForQuery(db, "select status from messages where uuid='m3'", null));
+        // a bare legacy name is a file in the shared media folders, never ours to delete
+        importMedia(mediaWorker(context), account("a3"), conversation("c3"),
+                "{\"table\":\"messages\",\"values\":{\"uuid\":\"m4\",\"type\":1,\"relativeFilePath\":\"victim.jpg\",\"sharedStorage\":0}}");
+        assertEquals(1, DatabaseUtils.longForQuery(db, "select sharedStorage from messages where uuid='m4'", null));
+        // a uuid is a legacy file name: one that leaves the folder fails the import
+        assertThrows(IOException.class, () -> importMedia(mediaWorker(context), account("a2"), conversation("c2"),
+                "{\"table\":\"messages\",\"values\":{\"uuid\":\"../../DCIM/x.jpg\",\"type\":2}}"));
+        assertEquals(external + "/DCIM/x.jpg", DatabaseUtils.stringForQuery(db, "select relativeFilePath from messages where uuid='m1'", null));
+        assertEquals(1, DatabaseUtils.longForQuery(db, "select sharedStorage from messages where uuid='m1'", null));
+        assertEquals(eu.siacs.conversations.entities.Message.STATUS_SEND_FAILED, DatabaseUtils.longForQuery(db, "select status from messages where uuid='m1'", null));
+        // a text message still goes out after the import, as before
+        assertEquals(eu.siacs.conversations.entities.Message.STATUS_WAITING, DatabaseUtils.longForQuery(db, "select status from messages where uuid='m2'", null));
+    }
+
     // Generated OMEMO fixtures: real legacy (libsignal) identity keys, in the order and shape the
     // apps export them (values as text). Both formats carry legacy OMEMO 0.3 state; monocles adds
     // its OMEMO2 (PQ) tables, its own OMEMO2 key and its contacts' OMEMO2 keys in `identities`.

@@ -7,6 +7,8 @@ import am.cyberhayq.chat.ui.chat.ChatScreenTheme
 import am.cyberhayq.chat.ui.chat.ChatWallpaper
 import am.cyberhayq.chat.ui.chat.WallpaperGrid
 import am.cyberhayq.chat.ui.theme.Accent
+import am.cyberhayq.chat.ui.theme.AvatarShape
+import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import androidx.annotation.StringRes
@@ -26,6 +28,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -61,13 +64,15 @@ fun AppearanceScreen(
     dynamicColorsAvailable: Boolean,
     dynamicColors: Boolean,
     onDynamicColors: (Boolean) -> Unit,
-    elegantDark: Boolean,
-    onElegantDark: (Boolean) -> Unit,
+    nightBackground: NightBackground,
+    onNightBackground: (NightBackground) -> Unit,
     accent: Accent,
     onAccent: (Accent) -> Unit,
     wallpaper: String?,
     onWallpaper: (String) -> Unit,
     onWallpaperPhoto: () -> Unit,
+    avatarShape: AvatarShape = AvatarShape.effective(style, null),
+    onAvatarShape: (AvatarShape) -> Unit = {},
 ) {
     // Text without a colour would fall back to black outside a Surface (unreadable in the dark theme)
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
@@ -77,10 +82,11 @@ fun AppearanceScreen(
                 .verticalScroll(rememberScrollState())
                 .navigationBarsPadding()
         ) {
+            val dynamic = dynamicColorsAvailable && dynamicColors
             Preview(wallpaper)
             Section(R.string.tatrak_appearance_style)
-            StyleCards(style, accent, ChatScreenTheme.colors.isDark, elegantDark && !(dynamicColorsAvailable && dynamicColors), onStyle)
-            if (dynamicColorsAvailable && dynamicColors) {
+            StyleCards(style, accent, ChatScreenTheme.colors.isDark, if (dynamic) NightBackground.BLUE_GREY else nightBackground, onStyle)
+            if (dynamic) {
                 Text(
                     stringResource(R.string.tatrak_style_dynamic_note),
                     fontSize = 13.sp,
@@ -89,31 +95,26 @@ fun AppearanceScreen(
                 )
             }
             Section(R.string.tatrak_appearance_theme)
-            for ((value, label) in themes) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier =
-                        Modifier.fillMaxWidth()
-                            .selectable(selected = value == theme, role = Role.RadioButton) { onTheme(value) }
-                            .padding(horizontal = 8.dp),
-                ) {
-                    RadioButton(selected = value == theme, onClick = null, modifier = Modifier.padding(12.dp))
-                    Text(label, fontSize = 16.sp)
-                }
-            }
-            // dynamic colours win over the elegant night, so the switch (and its stored value) stays out of the way
-            if (!(dynamicColorsAvailable && dynamicColors)) {
-                SwitchRow(R.string.tatrak_appearance_elegant, R.string.tatrak_appearance_elegant_summary, elegantDark, onElegantDark)
-            }
+            for ((value, label) in themes) RadioRow(label, value == theme) { onTheme(value) }
             if (dynamicColorsAvailable) {
                 SwitchRow(R.string.pref_dynamic_colors, R.string.tatrak_appearance_dynamic_summary, dynamicColors, onDynamicColors)
             }
+            // dynamic colours win over the night background, so the choice (and its stored value) stays out of the way
+            if (!dynamic) {
+                Section(R.string.tatrak_night_background)
+                for ((option, label) in
+                    listOf(
+                        NightBackground.BLUE_GREY to R.string.tatrak_night_background_blue_grey,
+                        NightBackground.GRAPHITE to R.string.tatrak_night_background_graphite,
+                        NightBackground.AMOLED to R.string.tatrak_night_background_amoled,
+                    )) RadioRow(stringResource(label), option == nightBackground) { onNightBackground(option) }
+            }
+            Section(R.string.tatrak_avatar_shape)
+            for ((option, label) in listOf(AvatarShape.ROUND to R.string.tatrak_avatar_shape_round, AvatarShape.SQUARE to R.string.tatrak_avatar_shape_square)) {
+                RadioRow(stringResource(label), option == avatarShape) { onAvatarShape(option) }
+            }
             Section(R.string.tatrak_appearance_accent)
-            AccentRow(Accent.entries.filter { !it.signature && !it.palette }, accent, dynamicColors, onAccent)
-            Section(R.string.tatrak_appearance_accent_editor)
-            AccentRow(Accent.entries.filter { it.palette }, accent, dynamicColors, onAccent)
-            Section(R.string.tatrak_appearance_accent_signature)
-            AccentRow(Accent.entries.filter { it.signature }, accent, dynamicColors, onAccent)
+            AccentRow(accent, dynamicColors, onAccent)
             Section(R.string.tatrak_wallpaper)
             WallpaperGrid(wallpaper, forChat = false, onPick = { it?.let(onWallpaper) }, onPhoto = onWallpaperPhoto)
         }
@@ -138,33 +139,50 @@ private fun SwitchRow(@StringRes title: Int, @StringRes summary: Int, checked: B
 }
 
 @Composable
-private fun AccentRow(options: List<Accent>, accent: Accent, dynamicColors: Boolean, onAccent: (Accent) -> Unit) {
-    FlowRow(
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-        // classic screens follow the system colours then; the accent would be half-applied
-        modifier = Modifier.padding(horizontal = 20.dp, vertical = 8.dp).alpha(if (dynamicColors) 0.4f else 1f),
+private fun RadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        modifier = Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(horizontal = 8.dp),
     ) {
-        for (option in options) {
+        RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(12.dp))
+        Text(label, fontSize = 16.sp)
+    }
+}
+
+/** The nine accents as 48 dp touch targets (40 dp circles): one line where they fit, wrapping on a narrow phone. */
+@Composable
+private fun AccentRow(accent: Accent, dynamicColors: Boolean, onAccent: (Accent) -> Unit) {
+    FlowRow(
+        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
+        // classic screens follow the system colours then; the accent would be half-applied
+        modifier = Modifier.fillMaxWidth().selectableGroup().padding(horizontal = 16.dp, vertical = 8.dp).alpha(if (dynamicColors) 0.4f else 1f),
+    ) {
+        for (option in Accent.entries) {
             val name = stringResource(option.label)
-            val glyph = contentOn(option.swatch)
             Box(
                 contentAlignment = Alignment.Center,
                 modifier =
                     Modifier.size(48.dp)
-                        .clip(CircleShape)
-                        .background(option.swatch)
-                        .then(
-                            if (option == accent) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
-                            else Modifier
-                        )
                         .selectable(selected = option == accent, enabled = !dynamicColors, role = Role.RadioButton) {
                             onAccent(option)
                         }
                         .semantics { contentDescription = name },
             ) {
-                if (option == accent) {
-                    Icon(painterResource(R.drawable.ic_check_24dp), contentDescription = null, tint = glyph)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier =
+                        Modifier.size(40.dp)
+                            .clip(CircleShape)
+                            .background(option.swatch)
+                            .then(
+                                if (option == accent) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape)
+                                else Modifier
+                            ),
+                ) {
+                    if (option == accent) {
+                        Icon(painterResource(R.drawable.ic_check_24dp), contentDescription = null, tint = contentOn(option.swatch), modifier = Modifier.size(20.dp))
+                    }
                 }
             }
         }

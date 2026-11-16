@@ -154,8 +154,8 @@ class MediaViewerActivity : XmppActivity(), ViewerActions {
         if (locations.isEmpty()) return
         Futures.addCallback(
             fileBackend.saveInternalToExternal(locations),
-            object : FutureCallback<List<Boolean?>> {
-                override fun onSuccess(result: List<Boolean?>) {
+            object : FutureCallback<List<File?>> {
+                override fun onSuccess(result: List<File?>) {
                     Toast.makeText(applicationContext, SaveResult.message(applicationContext, result), Toast.LENGTH_LONG)
                         .show()
                 }

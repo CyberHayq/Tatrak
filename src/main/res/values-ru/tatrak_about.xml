@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_about_header">Tatrak • безопасность заложена в основу.\nСквозное шифрование OMEMO, зашифрованные база и медиа на устройстве, открытый протокол XMPP.\n\nCopyright © 2026 CyberHayq\nИсходный код: https://github.com/CyberHayq/Tatrak\n\nОснован на Conversations, copyright © 2014-2026 Daniel Gultsch\nhttps://codeberg.org/iNPUTmice/Conversations</string>
+</resources>

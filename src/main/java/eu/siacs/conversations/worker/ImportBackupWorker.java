@@ -731,8 +731,9 @@ public class ImportBackupWorker extends Worker {
             values.putNull(Message.RELATIVE_FILE_PATH);
         } else {
             values.put(Message.RELATIVE_FILE_PATH, confined);
-            // only files in our own folder may be deleted with the message or the account
-            if (confined.startsWith("/") && !confined.startsWith(attachments(getApplicationContext()).getAbsolutePath() + "/")) {
+            // only files in our own folder may be deleted with the message or the account; a bare
+            // legacy name lives in the shared media folders (FileBackend.getLegacyFileForFilename)
+            if (!confined.startsWith(attachments(getApplicationContext()).getAbsolutePath() + "/")) {
                 values.put(Message.SHARED_STORAGE, 1);
             }
         }
@@ -754,15 +755,19 @@ public class ImportBackupWorker extends Worker {
         }
         try {
             final String canonical = new File(resolved).getCanonicalPath();
-            if (canonical.startsWith(attachments(context).getCanonicalPath() + File.separator)) {
+            // Tatrak: the checked path is returned, never the backup's spelling: a "../" path that
+            // starts in attachments must not pass as an own file the app later deletes
+            final String own = attachments(context).getCanonicalPath() + File.separator;
+            if (canonical.startsWith(own)) {
+                final String checked = attachments(context).getAbsolutePath() + File.separator + canonical.substring(own.length());
                 // an encrypted file opens only with the key of the generation in its name; a
                 // tatrak_ name of any other form opens never
                 final String name = canonical.substring(canonical.lastIndexOf('/') + 1);
-                if (!name.startsWith("tatrak_")) return resolved;
+                if (!name.startsWith("tatrak_")) return checked;
                 final String generation = am.cyberhayq.chat.storage.media.EncryptedMediaStore.generationOf(name);
-                return generation != null && generations.contains(generation) ? resolved : null;
+                return generation != null && generations.contains(generation) ? checked : null;
             }
-            if (canonical.startsWith(android.os.Environment.getExternalStorageDirectory().getCanonicalPath() + File.separator)) return resolved;
+            if (canonical.startsWith(android.os.Environment.getExternalStorageDirectory().getCanonicalPath() + File.separator)) return canonical;
         } catch (final IOException e) {
             return null;
         }
@@ -850,8 +855,7 @@ public class ImportBackupWorker extends Worker {
                 return failure(Reason.GENERIC);
             }
             if (!DatabaseStorage.isReady()) {
-                if (DatabaseStorage.state() != DatabaseStorage.State.RECOVERY_REQUIRED
-                        && DatabaseStorage.state() != DatabaseStorage.State.MIGRATION_REQUIRED) {
+                if (DatabaseStorage.state() != DatabaseStorage.State.RECOVERY_REQUIRED) {
                     return failure(Reason.GENERIC);
                 }
                 // Explicit recovery activation only; normal import never replaces a readable pair.
@@ -1119,6 +1123,11 @@ public class ImportBackupWorker extends Worker {
                 && Strings.isNullOrEmpty(contentValues.getAsString("uuid"))) {
             throw new IOException("Missing row identity");
         }
+        // Tatrak: a message without a file path finds its file by the uuid (FileBackend.getLegacyFileForFilename)
+        if (Message.TABLENAME.equals(table)) {
+            final String uuid = contentValues.getAsString("uuid");
+            if (uuid.contains("/") || uuid.contains("\\") || uuid.startsWith(".")) throw new IOException("Bad row identity");
+        }
         if (Account.TABLENAME.equals(table)) {
             if (importAccount != null) throw new IOException("Multiple account rows");
             importAccount = contentValues.getAsString(Account.UUID);
@@ -1171,6 +1180,18 @@ public class ImportBackupWorker extends Worker {
                 omitted(R.string.tatrak_backup_omit_pq_sessions);
             } else if (encryption != null && (encryption < 0 || encryption > 7)) {
                 omitted(R.string.tatrak_backup_omit_encryption); return;
+            }
+            // Tatrak: an unsent file would be uploaded on its own after the import, from whatever
+            // path the backup names (or, with no path, the legacy file named after the uuid); it
+            // waits as failed until the user resends it
+            final Integer pending = contentValues.getAsInteger(Message.STATUS);
+            final Integer fileType = contentValues.getAsInteger(Message.TYPE);
+            if (pending != null && (pending == Message.STATUS_UNSEND || pending == Message.STATUS_WAITING
+                    || pending == Message.STATUS_OFFERED)
+                    && ((fileType != null && (fileType == Message.TYPE_IMAGE || fileType == Message.TYPE_FILE
+                            || fileType == Message.TYPE_PRIVATE_FILE))
+                        || !Strings.isNullOrEmpty(contentValues.getAsString(Message.RELATIVE_FILE_PATH)))) {
+                contentValues.put(Message.STATUS, Message.STATUS_SEND_FAILED);
             }
         }
         if (Conversation.TABLENAME.equals(table)) {

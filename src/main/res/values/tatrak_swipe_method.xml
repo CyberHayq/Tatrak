@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_swipe_method">Swipe to reply</string>
+    <string-array name="tatrak_swipe_method_entries">
+        <item>Telegram: swipe left to reply, swipe right to close the chat</item>
+        <item>Signal: swipe right to reply, only the system back gesture closes the chat</item>
+    </string-array>
+    <string-array name="tatrak_swipe_method_values" translatable="false">
+        <item>telegram</item>
+        <item>signal</item>
+    </string-array>
+</resources>

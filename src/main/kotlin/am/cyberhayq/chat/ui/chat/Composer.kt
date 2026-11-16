@@ -139,6 +139,7 @@ import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.LiveRegionMode
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.liveRegion
@@ -479,68 +480,75 @@ private fun InputRow(
                     tint = colors.onSurfaceVariant,
                 )
             }
+        }
+        if (previews.isEmpty()) {
             val interactions = remember { MutableInteractionSource() }
             val pressed by interactions.collectIsPressedAsState()
             // tapping the field brings the keyboard back in place of the panel
             LaunchedEffect(pressed) { if (pressed) onEmojiOpen(false) }
-            BasicTextField(
-                value = input,
-                onValueChange = onInputChange,
-                textStyle = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, color = colors.onSurface, fontFamily = LocalTatrakFont.current),
-                cursorBrush = SolidColor(colors.primary),
-                maxLines = 6,
-                keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
-                interactionSource = interactions,
-                modifier =
-                    Modifier.weight(1f)
-                        .padding(vertical = 14.dp)
-                        .focusRequester(focus)
-                        // the system selection toolbar, after Cut / Copy / Paste / Select all
-                        .appendTextContextMenuComponents {
-                            if (currentInput.selection.collapsed) return@appendTextContextMenuComponents
-                            separator()
-                            for ((marker, label) in styles) {
-                                item(key = marker, label = label) {
-                                    onInputChange(currentInput.wrapSelection(marker))
-                                    close()
+            // kept at zero width under a recording: dropping the field would drop the focus and the
+            // keyboard, and the composer falling under the held mic counted as a slide up to the lock
+            Box(if (recording.active) Modifier.width(0.dp).clearAndSetSemantics {} else Modifier.weight(1f)) {
+                BasicTextField(
+                    value = input,
+                    // typing into the hidden field would turn the mic into Send and end the recording
+                    onValueChange = { if (!recording.active) onInputChange(it) },
+                    textStyle = TextStyle(fontSize = 17.sp, lineHeight = 22.sp, color = colors.onSurface, fontFamily = LocalTatrakFont.current),
+                    cursorBrush = SolidColor(colors.primary),
+                    maxLines = 6,
+                    keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
+                    interactionSource = interactions,
+                    modifier =
+                        Modifier.fillMaxWidth()
+                            .padding(vertical = 14.dp)
+                            .focusRequester(focus)
+                            // the system selection toolbar, after Cut / Copy / Paste / Select all
+                            .appendTextContextMenuComponents {
+                                if (currentInput.selection.collapsed) return@appendTextContextMenuComponents
+                                separator()
+                                for ((marker, label) in styles) {
+                                    item(key = marker, label = label) {
+                                        onInputChange(currentInput.wrapSelection(marker))
+                                        close()
+                                    }
                                 }
                             }
-                        }
-                        // hardware keyboard, as EditMessage.onKeyDown: Enter (or Ctrl+Enter) sends,
-                        // Shift+Enter is a new line, Ctrl+Up edits the last own message; Tab picks the
-                        // first "@" suggestion
-                        .onPreviewKeyEvent { event ->
-                            if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                            val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
-                            when {
-                                enter && !event.isShiftPressed && (event.isCtrlPressed || enterIsSend) -> {
-                                    actions.send()
-                                    true
+                            // hardware keyboard, as EditMessage.onKeyDown: Enter (or Ctrl+Enter) sends,
+                            // Shift+Enter is a new line, Ctrl+Up edits the last own message; Tab picks the
+                            // first "@" suggestion
+                            .onPreviewKeyEvent { event ->
+                                if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                                val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
+                                when {
+                                    enter && !event.isShiftPressed && (event.isCtrlPressed || enterIsSend) -> {
+                                        actions.send()
+                                        true
+                                    }
+                                    event.key == Key.DirectionUp && event.isCtrlPressed -> actions.editLast()
+                                    event.key == Key.Tab && currentMentions != null -> {
+                                        currentMentions?.let { it.pick(it.matches.first()) }
+                                        true
+                                    }
+                                    else -> false
                                 }
-                                event.key == Key.DirectionUp && event.isCtrlPressed -> actions.editLast()
-                                event.key == Key.Tab && currentMentions != null -> {
-                                    currentMentions?.let { it.pick(it.matches.first()) }
-                                    true
-                                }
-                                else -> false
+                            },
+                    decorationBox = { field ->
+                        Box {
+                            if (input.text.isEmpty()) {
+                                Text(
+                                    composer.hint,
+                                    fontSize = 17.sp,
+                                    color = colors.onSurfaceVariant,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                             }
-                        },
-                decorationBox = { field ->
-                    Box {
-                        if (input.text.isEmpty()) {
-                            Text(
-                                composer.hint,
-                                fontSize = 17.sp,
-                                color = colors.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis,
-                            )
+                            field()
                         }
-                        field()
-                    }
-                },
-            )
-            if (!editing) {
+                    },
+                )
+            }
+            if (!recording.active && !editing) {
                 IconButton(onClick = onAttach, modifier = Modifier.padding(bottom = 1.dp)) {
                     Icon(
                         painterResource(R.drawable.ic_attach_file_24dp),

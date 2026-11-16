@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_avatar_shape">Форма аватаров</string>
+    <string name="tatrak_avatar_shape_round">Круглые</string>
+    <string name="tatrak_avatar_shape_square">Скруглённый квадрат</string>
+</resources>

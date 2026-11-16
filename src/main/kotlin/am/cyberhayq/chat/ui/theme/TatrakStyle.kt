@@ -44,9 +44,27 @@ val LocalAvatarShape = staticCompositionLocalOf<Shape> { CircleShape }
 /** Where the online dot / selection check sits: pushed into the corner of a rounded square. */
 val LocalAvatarDotOffset = staticCompositionLocalOf { 0.dp }
 
-internal fun avatarShapeOf(style: TatrakStyle): Shape = if (style == TatrakStyle.SLATE_SEA) RoundedCornerShape(percent = 36) else CircleShape
+/** Shape of the real avatars, picked in Appearance; while none was ever chosen it follows the style. */
+enum class AvatarShape(val key: String) {
+    ROUND("round"),
+    SQUARE("square");
 
-internal fun avatarDotOffsetOf(style: TatrakStyle): Dp = if (style == TatrakStyle.SLATE_SEA) 3.dp else 0.dp
+    companion object {
+        const val KEY = "tatrak_avatar_shape"
+
+        fun effective(style: TatrakStyle, key: String?): AvatarShape =
+            entries.firstOrNull { it.key == key } ?: if (style == TatrakStyle.SLATE_SEA) SQUARE else ROUND
+
+        fun set(context: Context, shape: AvatarShape) =
+            PreferenceManager.getDefaultSharedPreferences(context).edit().putString(KEY, shape.key).apply()
+
+        @Composable fun remember(style: TatrakStyle): AvatarShape = effective(style, rememberStringPreference(KEY))
+    }
+}
+
+internal fun avatarShapeOf(shape: AvatarShape): Shape = if (shape == AvatarShape.SQUARE) RoundedCornerShape(percent = 36) else CircleShape
+
+internal fun avatarDotOffsetOf(shape: AvatarShape): Dp = if (shape == AvatarShape.SQUARE) 3.dp else 0.dp
 
 /** The style in force, provided by [TatrakTheme]; composables read this instead of the preference (one listener, and tests pass `style` to the theme). */
 val LocalTatrakStyle = staticCompositionLocalOf { TatrakStyle.TELEGRAM }

@@ -1,14 +1,14 @@
 ---
 type: Runbook
 title: Encrypted local database implementation and checks
-description: Working-tree SQLCipher migration, recovery, portable backup boundaries and reproducible native checks.
-tags: [database, encryption, sqlcipher, keystore, migration, testing]
+description: SQLCipher generations, recovery, portable backup boundaries and reproducible native checks.
+tags: [database, encryption, sqlcipher, keystore, testing]
 status: draft
 generated: { by: codex, at: 2026-11-02 }
 sources:
   - id: storage
     resource: ../../src/main/kotlin/am/cyberhayq/chat/storage/DatabaseStorage.kt
-    title: Generation selection, migration and key wrapping
+    title: Generation selection and key wrapping
   - id: native-checks
     resource: ../../src/debug/java/am/cyberhayq/chat/storage/StorageInstrumentation.java
     title: Debug-only native assertions
@@ -19,6 +19,38 @@ sources:
     resource: ../egm/local-db-encryption/design_draft.md
     title: Design history and accepted requirements
 ---
+
+## Static security audit (2026-11-16)
+
+Codex Security scan `6aa0d51f-25c9-4091-86a2-394e5a7c4b6d` reviewed the local DB feature at
+`892458959`, including key wrapping, both helpers, selectors, migration/recovery, import/export
+and OS backup. Independent reviews resumed on `gpt-6.1-sol` high after the previous Astra quota
+interruption. The parent rechecked the reported issue and material architecture claims.
+This was source review only: no build, tests, emulator, benchmark or fault injection ran.
+
+One low-severity metadata finding: `ImportBackupWorker.writePreview` writes the JID, account UUID
+and import summary as plaintext JSON beside the encrypted staging DB. Recovery activates that
+stage and retains the preview. A private-file copy reveals these metadata; no password, DB key
+or message-body disclosure was established. Normal merge attempts to delete its stage. Keeping
+the preview in the encrypted DB would also protect the consent-waiting interval; deleting it
+only after recovery would not. Fixed in part (2026-11-16): `DatabaseStorage.dropPreview` deletes
+it once the generation is active; the consent-waiting interval is still plaintext.
+
+Current production schema is **60**, minSdk **26**, and native backup format **1001** is supported.
+The historical evidence below is not a current test result. `StorageInstrumentation.java` now
+asserts the current `DatabaseBackend.DATABASE_VERSION` (a fixed 59 until 2026-11-16); the native
+runner has not been run since. One-off monocles-format export can include media; the older blanket statement about
+compatible exports below is too broad. Native backups carry generation media keys, including
+when files are omitted; the owner-accepted cross-account consequence remains as documented in
+the attachment design.
+
+Unreproduced stage-disposal/activation and concurrent `ATTACH` risks, native/platform gaps and
+offline reference-comparison limits are recorded in risks. The sealed
+report and original reviewer JSON live outside the repository under
+`~/.codex/state/plugins/codex-security/scans/tatrak/8924589593103c2857387be9ce73818baf76d8b6_20261115T212511Z_57sa3s20/`.
+The scan initially could not save artifacts because `~/.codex` was group-writable; removing only
+group write (0775 to 0755) satisfied the plugin's parent-directory check. No source fix or commit
+was made.
 
 ## Fetched-main update (2026-11-07)
 
@@ -33,31 +65,23 @@ voice files, thumbnails, other caches, shared preferences and WorkManager's own 
 are outside this encryption boundary. OMEMO/OpenPGP wire encryption is unchanged.
 
 Each generation is a UUID directory under `noBackupFilesDir/tatrak-databases`, with
-`history.db`, `push.db`, a wrapped `key` and versioned cleanup metadata. One random
+`history.db`, `push.db`, a wrapped `key` and versioned activation metadata. One random
 32-byte key opens both databases as an ASCII SQLCipher raw hex key. A generation-specific
 Android Keystore AES-256-GCM key wraps it; blob layout is version byte 1, IV 12 bytes,
 ciphertext 32 bytes and tag 16 bytes, with AAD `tatrak-db-key-v1`. No app password,
 authentication binding or mandatory StrongBox is introduced. Keystore protection does
 not prevent code executing as Tatrak from obtaining the database key.
 
-Cold startup admits no normal database helpers until a complete keyed pair opens. An old
-plaintext history leads to a foreground migration screen. It offers an encrypted logical
-export or explicit continuation without a fresh export; failed/cancelled export does not
-start migration. Processing is paused during migration. Legacy SQLCipher readers keep the
-source schema version; only the encrypted destination is upgraded.
-
-Migration checkpoints the source WAL, exports each source into an encrypted generation,
-checks table row counts, database/cipher integrity, foreign keys and FTS integrity, then
-syncs files and directories. Destination files are created before ATTACH because its flags
-inherit the source's deliberately non-creating open mode. The conservative free-space
-preflight reserves three times the existing DB/journal/WAL size plus 32 MiB; it is not a
-measured worst-case guarantee, and later I/O errors still fail closed.
+Cold startup admits no normal database helpers until a complete keyed pair opens. A clean
+install creates and activates an empty generation. The one-way migration from the plaintext
+databases of builds before encryption (migration screen, optional pre-migration export,
+`migrate`, legacy cleanup) was removed on 2026-11-16: the owner confirmed no such install exists.
+A leftover plaintext `history` without an active selector counts as an ambiguous initial state and
+leads to the recovery screen; it is never opened.
 
 A checksummed `commit` intent precedes the atomic `active` pointer. Both refer to one whole
 generation; startup completes a validated pending intent rather than guessing among
-candidate folders. Plaintext sources and known sidecars are removed only after activation
-and a keyed reopen. Cleanup failure leaves the encrypted pair authoritative, reports a
-notification and retries at the next start. Deleting files does not guarantee secure flash
+candidate folders. Deleting files does not guarantee secure flash
 erasure. Abandoned encrypted staging directories can require later cleanup after a crash.
 
 A bad/missing key or malformed selection blocks normal access; there is no automatic key
@@ -71,8 +95,7 @@ back into the stage.
 No Direct Boot support is added; background access requires the first device unlock.
 
 The schema 59 upgrade replaces the FTS4 external-content deletion trigger and rebuilds
-its derived index. Migration compares row counts before repairing only the encrypted copy's
-index; old plaintext is unchanged.
+its derived index.
 
 # Portable backup boundary
 
@@ -122,7 +145,7 @@ python3 tools/test-storage/recovery_checks.py $SERIAL
 ```
 
 Require both `PASS` and `INSTRUMENTATION_CODE: -1`; shell/adb exit zero alone does not prove
-instrumentation success. The runner migrates existing plaintext data if necessary. Import
+instrumentation success. Import
 checks create disabled synthetic accounts, temporary private encrypted exports and owned
 stages, then remove their fixtures and restore backup preferences. It never clears app data.
 The fault script restores the original key blob and selector in a `finally` block. Do not
@@ -138,7 +161,7 @@ optimized benchmark assemblies succeeded. The test JVM prints an uncaught-except
 NPE warning despite a successful task and zero failing XML cases; native assertions and UI
 smoke checks are separate evidence. Chat/PQ and recovery screenshots were inspected.
 
-API 31 and API 37 x86_64 native migration checks retained existing account/message counts,
+Historical (before the migration was removed on 2026-11-16): API 31 and API 37 x86_64 native migration checks retained existing account/message counts,
 opened both keyed schemas, rejected wrong keys without altering the disposable DB, checked
 wrapped-key length and encrypted headers and confirmed plaintext cleanup. Native checks passed 50 assertions per emulator, including a legacy schema 57 fixture
 with a stale FTS index: migration repaired only the encrypted copy, upgraded it to 59 and

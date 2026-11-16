@@ -54,6 +54,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
 import eu.siacs.conversations.entities.Reaction
@@ -250,7 +251,8 @@ private fun MenuActions(item: MessageItem, actions: ChatActions, run: ((String) 
         shape = RoundedCornerShape(14.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 6.dp,
-        modifier = modifier.widthIn(min = 200.dp, max = 260.dp).padding(horizontal = TailWidth),
+        // wider when it shows a fingerprint, so a line of four groups does not wrap
+        modifier = modifier.widthIn(min = 200.dp, max = if (item.encryptionKey?.fingerprint != null) 300.dp else 260.dp).padding(horizontal = TailWidth),
     ) {
         // scrolls when a long list does not fit a small window
         Column(Modifier.verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
@@ -261,6 +263,9 @@ private fun MenuActions(item: MessageItem, actions: ChatActions, run: ((String) 
                 fun time(epochMs: Long) = receiptTime(context, locale, epochMs)
                 MenuInfo(stringResource(R.string.tatrak_chat_sent_at, time(item.sentAt)))
                 MenuInfo(stringResource(R.string.tatrak_chat_received_at, time(item.receivedAt)))
+            }
+            item.encryptionKey?.let { MenuKey(it, run(actions::openMessageKey)) }
+            if (item.receivedAt != null || item.encryptionKey != null) {
                 HorizontalDivider(Modifier.padding(vertical = 6.dp), color = MaterialTheme.colorScheme.outlineVariant)
             }
             val can = item.actions
@@ -362,6 +367,24 @@ private fun MenuInfo(text: String) {
         fontSize = 13.sp,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         modifier = Modifier.padding(horizontal = 18.dp, vertical = 4.dp),
+    )
+}
+
+/** "OMEMO · verified ✓" and, for OMEMO, the key's fingerprint, which opens the key list. */
+@Composable
+private fun MenuKey(key: KeyInfo, onOpen: () -> Unit) {
+    val method = stringResource(key.method)
+    MenuInfo(if (key.trust == null) method else stringResource(R.string.tatrak_chat_key_line, method, stringResource(key.trust)))
+    val fingerprint = key.fingerprint ?: return
+    Text(
+        fingerprint,
+        fontSize = 11.sp,
+        fontFamily = FontFamily.Monospace,
+        color = MaterialTheme.colorScheme.primary,
+        modifier =
+            Modifier.fillMaxWidth()
+                .clickable(onClickLabel = stringResource(R.string.tatrak_chat_key_open), onClick = onOpen)
+                .padding(horizontal = 18.dp, vertical = 4.dp),
     )
 }
 

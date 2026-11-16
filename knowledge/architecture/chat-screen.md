@@ -56,8 +56,10 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   show as sent, not proof of delivery to another participant. Receipts and markers depend on
   the other client and its privacy settings.
 - The drawer's Contacts screen reuses the new-chat roster and search but shows contacts only.
-  Tapping a contact opens the existing details screen for editing; the call button uses
-  `RtpCallStarter` and creates a conversation if necessary, as the existing call flow requires.
+  Tapping a contact opens the chat, as in New message and in Telegram (until 2026-11-16 it opened
+  the details screen, which has no way to the chat); the details screen is in the long-press menu;
+  the call button uses `RtpCallStarter` and creates a conversation if necessary, as the existing
+  call flow requires.
 - All feed models are stable according to the Compose compiler report; every restartable
   composable in the app's Kotlin code is skippable (build with `-PcomposeReports`).
 - Robustness (review of 2026-10-30): read markers are ignored while a snapshot of the
@@ -80,7 +82,11 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   starts a locked recording. The file goes through `commitAttachments` (trust check included).
   Leaving the screen discards a running recording, like `RecordingActivity.onStop`.
   While the mic is held a padlock pill floats above it (`LockHint`, a `Popup`), rising with the
-  finger and closing at the lock distance.
+  finger and closing at the lock distance. The text field stays composed at zero width under the
+  recording row (2026-11-16), so an open keyboard stays open: before, removing the field dropped
+  the focus and the keyboard, the composer fell under the held finger, and the finger's position
+  relative to the moved mic read as a slide up to the lock. Typing into the hidden field is
+  ignored, since it would turn the mic into Send and end the recording.
 - Replies (XEP-0461): sending keeps the XEP-0393 quote in the body as the XEP-0428 fallback
   and adds `<reply>` (stanza-id in channels, message id otherwise, the `ReactionManager` rule).
   Bubbles show a header with the answered message's sender and first line instead of the quote;
@@ -186,6 +192,22 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   epoch ms (null / 0 for own messages and unknown times), so only the open menu formats them
   (`receiptTime`: ICU skeleton `dMMM` + seconds via `DateFormat.getBestDateTimePattern`, the
   device's 12/24-hour setting, the year only when not the current one).
+- Message key (2026-11-16, owner, option A): under the times (or first, when there are none) the
+  menu names the encryption, `MessageItem.encryptionKey` (`KeyInfo`): the method from
+  `CryptoHelper.encryptionTypeToText` ("Clear text", "OpenPGP", "OMEMO", imported PQ history) and,
+  for an OMEMO message with `Message.getFingerprint()`, the key's trust ("this device" for the own
+  fingerprint, else from `AxolotlService.getFingerprintTrust`: verified ✓, trusted not verified, not
+  trusted, compromised, unknown key) and the fingerprint without the `05` type byte as two lines of
+  four 8-digit groups in monospace. The trust lookup is done once per message in the snapshot and
+  also feeds the bubble's lock (`security`). Tapping the fingerprint calls
+  `ChatActions.openMessageKey`: `ChatFragment` repeats `ConversationFragment.onContactPictureLongClicked`
+  ("Contact details" / "Account details"; in a group the sender's real JID, as
+  `MucDetailsContextMenuHelper`), so `ContactDetailsActivity` or `EditAccountActivity` opens with
+  the key highlighted. PGP shows only the method, not tappable: the classic code keeps no
+  per-message PGP key, and the contact's current one could be taken for it. `keyTrustLabel` and
+  `fingerprintLines` are top-level functions so they are unit-tested without an account connection.
+  Call records get no key line. `ContactDetailsActivity` lists the message's key even when it is
+  inactive and inactive devices are hidden (Tatrak edit). The menu is up to 300 dp wide when it shows a fingerprint.
 - Retractions (XEP-0424) of OMEMO messages need proof: the retraction must be encrypted with the
   message's key (or come from one of our own trusted devices), else the message stays and the
   bubble shows "Unverified request to delete this message" (`MessageItem.retractUnverified`, from
@@ -268,13 +290,40 @@ gestures at once. Now `SwipeBackLayout`, while attached and `swipeEnabled`, regi
 release. So during the edge gesture the system shows its arrow and the chat does not move; on
 release the normal 300 ms pop plays; a cancelled gesture changes nothing. Compose BackHandlers
 (emoji panel, recording discard, message menu) keep priority because the release still goes
-through the dispatcher. This is the owner's choice (as in Forkgram classic and monocles); a
+through the dispatcher. The keyboard's own back callback sits at `PRIORITY_DEFAULT`, below ours,
+so before 2026-11-16 a back gesture with the keyboard up closed the chat; the callback now hides
+the keyboard first when the `ime` inset is visible. This is the owner's choice (as in Forkgram classic and monocles); a
 Telegram-style 56 dp peek (capping the progress passed on to the FragmentManager) was built,
 worked on the emulator and was dropped for it. Below API 34 the code path is off and system back
 stays the plain dispatcher back.
 
 Areas with their own horizontal drags opt out with `Modifier.swipeBackExclusion()`; the emoji
 panel and recording block it entirely with `BlockSwipeBack(active)`.
+
+## Swipe to reply: Telegram or Signal method
+
+`MessageRow` (`ui/chat/MessageBubble.kt`) runs its own pointer loop instead of
+`detectHorizontalDragGestures`, which claimed any drag whose horizontal part passed the touch
+slop (up to about 45°) and so turned slightly diagonal scrolls into replies. The rule comes from
+`SwipeMethod` (`ui/chat/SwipeMethod.kt`, preference `tatrak_swipe_method` in Interface settings),
+read once per chat in `ChatFragment` and passed down as `LocalSwipeMethod`:
+
+| | Telegram (default) | Signal |
+|---|---|---|
+| Source | `ChatActivity.java` (`21f7d10`) | `ConversationItemSwipeCallback`, `ConversationSwipeAnimationHelper` (`515db93`) |
+| Direction | left | right |
+| Starts after | 0.4 cm (25 dp) | touch slop (`ItemTouchHelper`) |
+| Angle | `abs(dx) / 3 > abs(dy)` (about 18°) | `abs(dx) > abs(dy)` (45°) |
+| Reply on release past / bubble max | 56 / 80 dp (Telegram: 50 / 80) | 64 / 96 dp |
+| Swipe-back drag | on | off (`SwipeBackLayout.dragEnabled`); only the system back gesture |
+
+Both give the gesture up once the vertical movement passes the touch slop, where the list claims
+it (it sees the events after the row in the Main pass), and both leave it to a child that consumed
+it first (voice seek bar). In the Signal method the system back callback stays registered, so the
+edge gesture still plays the normal pop on release. Simplified: Signal's resistance curve past the
+trigger (`BubblePositionInterpolator`) is linear here, and neither method checks that the list is
+not still flinging (Telegram requires `SCROLL_STATE_IDLE`). Tests: `ChatScreenshotTest`
+`telegram*` / `signal*` swipe cases.
 
 ## Classic view fallback
 

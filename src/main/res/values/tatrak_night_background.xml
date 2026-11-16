@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_night_background">Night background</string>
+    <string name="tatrak_night_background_blue_grey">Blue-grey</string>
+    <string name="tatrak_night_background_graphite">Graphite</string>
+    <string name="tatrak_night_background_amoled">AMOLED black</string>
+</resources>

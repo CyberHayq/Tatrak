@@ -18,6 +18,7 @@ import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.LocalTatrakStyle
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
 import am.cyberhayq.chat.ui.theme.contentOn
+import am.cyberhayq.chat.ui.theme.fabFill
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -385,8 +386,8 @@ fun ChatListScreen(
                         FloatingActionButton(
                             onClick = actions::newChat,
                             shape = CircleShape,
-                            containerColor = MaterialTheme.colorScheme.secondary,
-                            contentColor = contentOn(MaterialTheme.colorScheme.secondary),
+                            containerColor = fabFill(MaterialTheme.colorScheme.primary),
+                            contentColor = Color.White,
                             modifier = Modifier.navigationBarsPadding(),
                         ) {
                             Icon(

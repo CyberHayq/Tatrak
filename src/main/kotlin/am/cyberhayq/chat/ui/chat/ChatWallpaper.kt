@@ -257,7 +257,7 @@ fun ChatWallpaper(spec: String?, dark: Boolean, modifier: Modifier = Modifier) {
     val preset = Wallpapers.preset(spec)
     if (preset != null) {
         val colors =
-            if (preset.id == Wallpapers.DEFAULT) listOf(TatrakTheme.chatColors.chatBackground) // follows the theme (houses: their own)
+            if (preset.id == Wallpapers.DEFAULT) listOf(TatrakTheme.chatColors.chatBackground) // follows the theme (style and night background)
             else if (!dark) preset.day
             else preset.night
         val brush =

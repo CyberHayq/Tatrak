@@ -2485,7 +2485,7 @@ public class ConversationFragment extends XmppFragment
                 future,
                 new FutureCallback<>() {
                     @Override
-                    public void onSuccess(Void result) {
+                    public void onSuccess(java.io.File result) { // Tatrak: the save now yields the written file
                         final var context = getContext();
                         if (context == null) {
                             return;

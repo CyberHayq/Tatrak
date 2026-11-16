@@ -69,6 +69,7 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputScope
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.Layout
 import androidx.compose.ui.layout.layout
@@ -97,6 +98,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import kotlin.math.abs
 import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
@@ -110,8 +112,8 @@ internal val BubbleRadius = 17.dp
 internal val BubbleRadiusSmall = 6.dp
 internal val TailWidth = 6.dp
 private val AvatarSize = 34.dp
-private val SwipeThreshold = 56.dp
-private val SwipeMax = 80.dp
+// Telegram: 0.4 cm before a swipe-to-reply starts
+private val SwipeStartSlop = 25.dp
 private val MediaMaxWidth = 270.dp
 // the family is null (system font) outside Slate and Sea, which leaves the style as it was
 private val BodyStyle: TextStyle
@@ -215,31 +217,55 @@ fun MessageRow(
     val haptics = LocalHapticFeedback.current
     val density = LocalDensity.current
     val offset = remember { Animatable(0f) }
-    val threshold = with(density) { SwipeThreshold.toPx() }
+    val method = LocalSwipeMethod.current
+    val threshold = with(density) { method.trigger.toPx() }
     val onSwipeReplyState by rememberUpdatedState(onSwipeReply)
     val onLongPressState by rememberUpdatedState(onLongPress)
     val swipe =
         if (item.actions.canReply) {
-            Modifier.pointerInput(item.key, threshold) {
-                // tracked here, not read back from offset: snapTo runs later in a launched coroutine
-                var dx = 0f
-                detectHorizontalDragGestures(
-                    onDragStart = { dx = 0f },
-                    onDragEnd = {
-                        if (dx <= -threshold) onSwipeReplyState(item)
-                        scope.launch { offset.animateTo(0f) }
-                    },
-                    onDragCancel = { scope.launch { offset.animateTo(0f) } },
-                ) { change, dragAmount ->
-                    val next = (dx + dragAmount).coerceIn(-SwipeMax.toPx(), 0f)
-                    if (next != dx) {
-                        change.consume()
-                        if (dx > -threshold && next <= -threshold) {
-                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+            Modifier.pointerInput(item.key, method) {
+                val telegram = method == SwipeMethod.TELEGRAM
+                val max = method.max.toPx()
+                val startSlop = if (telegram) SwipeStartSlop.toPx() else viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    // distance in the reply direction; tracked here, not read back from offset: snapTo runs later in a launched coroutine
+                    var d = 0f
+                    var claimed = false
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                        if (!change.pressed) {
+                            // a cancelled gesture arrives as an up that is already consumed
+                            if (claimed && !change.isConsumed && d >= threshold) onSwipeReplyState(item)
+                            break
                         }
-                        dx = next
+                        val before = d
+                        if (!claimed) {
+                            // a child (voice seek bar) took it
+                            if (change.isConsumed) break
+                            val total = change.position - down.position
+                            // past the slop the list scrolls (it claims after this row in the Main pass)
+                            if (abs(total.y) > viewConfiguration.touchSlop) break
+                            val along = total.x * method.direction
+                            // Telegram (ChatActivity): within atan(1/3) ≈ 18° of horizontal; Signal (ItemTouchHelper): within 45°
+                            if (along <= startSlop || abs(total.x) <= abs(total.y) * (if (telegram) 3 else 1)) {
+                                // the list claims in Main after this row; give up once it has (as awaitTouchSlopOrCancellation does)
+                                if (awaitPointerEvent(PointerEventPass.Final).changes.any { it.id == down.id && it.isConsumed }) break
+                                continue
+                            }
+                            claimed = true
+                            // ItemTouchHelper moves the item by the whole drag, Telegram from where the swipe started
+                            if (!telegram) d = along.coerceAtMost(max)
+                        } else {
+                            d = (d + change.positionChange().x * method.direction).coerceIn(0f, max)
+                        }
+                        change.consume()
+                        if (d == before) continue
+                        if (before < threshold && d >= threshold) haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                        val next = d * method.direction
                         scope.launch { offset.snapTo(next) }
                     }
+                    if (claimed) scope.launch { offset.animateTo(0f) }
                 }
             }
         } else {
@@ -253,13 +279,14 @@ fun MessageRow(
     ) {
         if (item.actions.canReply) {
             // the row recomposes only when a swipe starts or ends; the fade is read in the layer
-            val swiping by remember(offset) { derivedStateOf { offset.value < 0f } }
+            val swiping by remember(offset) { derivedStateOf { offset.value != 0f } }
             if (swiping) {
+                val left = method.direction > 0
                 Box(
-                    Modifier.align(Alignment.CenterEnd)
-                        .padding(end = 12.dp)
+                    Modifier.align(if (left) Alignment.CenterStart else Alignment.CenterEnd)
+                        .padding(horizontal = 12.dp)
                         .size(32.dp)
-                        .graphicsLayer { alpha = (-offset.value / threshold).coerceIn(0f, 1f) }
+                        .graphicsLayer { alpha = (abs(offset.value) / threshold).coerceIn(0f, 1f) }
                         .clip(CircleShape)
                         .background(ChatScreenTheme.colors.serviceBackground),
                     contentAlignment = Alignment.Center,
@@ -1136,7 +1163,7 @@ private fun Reactions(item: MessageItem, actions: ChatActions, modifier: Modifie
                     reaction.count.toString(),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Medium,
-                    color = if (reaction.mine) Color.White else accent,
+                    color = if (reaction.mine) contentOn(accent) else accent,
                 )
             }
         }

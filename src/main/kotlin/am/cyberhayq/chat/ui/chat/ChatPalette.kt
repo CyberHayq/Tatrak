@@ -83,7 +83,7 @@ object ChatScreenTheme {
                     accentIn = chat.accentIn,
                     accentOut = chat.accentOut,
                     unreadDividerText = chat.link,
-                    unreadDivider = chat.nightUnreadDivider ?: base.unreadDivider, // houses set it for night only; Slate and Sea for both
+                    unreadDivider = chat.nightUnreadDivider ?: base.unreadDivider, // the night backgrounds set it for night only; Slate and Sea for both
                     // Telegram tints the chips from the wallpaper so they don't clash with it
                     serviceBackground =
                         tint?.let {

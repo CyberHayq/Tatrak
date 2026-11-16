@@ -49,7 +49,7 @@ data class ChatColors(
     /** Icons and progress in received / sent bubbles (play buttons, file icons). */
     val accentIn: Color,
     val accentOut: Color,
-    /** Overrides of a house (night; day for the chips) for the date chips and unread divider; null = default. */
+    /** Overrides of the neutrals (night; day for the chips) for the date chips and unread divider; null = default. */
     val nightServiceBackground: Color? = null,
     val nightUnreadDivider: Color? = null,
 )
@@ -58,7 +58,7 @@ private val LightChatColors =
     ChatColors(
         topBar = Color(0xFFFFFFFF),
         onTopBar = Color(0xFF1A1D21),
-        onTopBarMuted = Color(0xFF848688),
+        onTopBarMuted = Color(0xFF747678),
         drawerHeader = Color(0xFF598FBA),
         archiveAvatar = Color(0xFFB8C2CC),
         chatBackground = Color(0xFFCBD9C0),
@@ -66,7 +66,7 @@ private val LightChatColors =
         bubbleOutgoing = Color(0xFFEFFFDE),
         textIncoming = Color(0xFF000000),
         textOutgoing = Color(0xFF000000),
-        timeIncoming = Color(0xFFA1AAB3),
+        timeIncoming = Color(0xFF71777D),
         timeOutgoing = Color(0xFF6EB869),
         checkRead = Color(0xFF46AA36),
         link = Color(0xFF2678B6),
@@ -89,7 +89,7 @@ private val DarkChatColors =
         bubbleOutgoing = Color(0xFF2B5278),
         textIncoming = Color(0xFFF5F5F5),
         textOutgoing = Color(0xFFF5F5F5),
-        timeIncoming = Color(0xFF6D7F8F),
+        timeIncoming = Color(0xFF7D8D9B),
         timeOutgoing = Color(0xFF7DA8D3),
         checkRead = Color(0xFF64B5EF),
         link = Color(0xFF71BAFA),
@@ -100,7 +100,7 @@ private val DarkChatColors =
         accentOut = Color(0xFF5FA6E6),
     )
 
-/** A house's neutral surfaces ([neutralsOf]) over the default day / night colours. */
+/** The style's or night background's neutral surfaces ([neutralsOf]) over the default day / night colours. */
 private fun ChatColors.withNeutrals(n: Neutrals) =
     copy(
         topBar = n.topBar,
@@ -130,7 +130,7 @@ private val LightScheme: ColorScheme =
         surface = Color.White,
         onSurface = Color(0xFF1A1D21),
         surfaceVariant = Color(0xFFF1F1F1),
-        onSurfaceVariant = Color(0xFF75787A),
+        onSurfaceVariant = Color(0xFF6C6E70),
         outlineVariant = Color(0xFFD9D9D9),
         // menus, dialogs and sheets draw on these; Material's defaults are lavender
         surfaceContainerLowest = Color.White,
@@ -150,7 +150,7 @@ private val DarkScheme: ColorScheme =
         background = Color(0xFF1D2733),
         surface = Color(0xFF1D2733),
         surfaceVariant = Color(0xFF242F3D),
-        onSurfaceVariant = Color(0xFF7F8B96),
+        onSurfaceVariant = Color(0xFF96A0A9),
         outlineVariant = Color(0xFF10171F),
         surfaceContainerLowest = Color(0xFF17202B),
         surfaceContainerLow = Color(0xFF1D2733),
@@ -176,14 +176,32 @@ private fun ColorScheme.withNeutrals(n: Neutrals) =
         surfaceContainerHighest = n.containerHighest,
     )
 
-/** Glyphs on an accent fill: white, or near-black on a light fill (dynamic tone-80 colours, Gold gold, Sea at night). */
-fun contentOn(fill: Color): Color = if (fill.luminance() > 0.45f) Color(0xFF1A1A1A) else Color.White
+/**
+ * Glyphs on an accent fill: white, or near-black on a light fill (the night accents, dynamic tone-80 colours, Gold, Cyan and
+ * Orange by day). At 0.30 every fill reaches 3:1 (white >= 3.0 below, near-black >= 5.8 above); `glyph()` in gen_accents.py mirrors it.
+ */
+fun contentOn(fill: Color): Color = if (fill.luminance() > 0.30f) Color(0xFF1A1A1A) else Color.White
+
+/**
+ * The chat list FAB fill: [accent] darkened (in sRGB, as `mix(c, K, t)` in gen_accents.py) until a white pencil reaches 4.5:1,
+ * i.e. luminance <= 1.05 / 4.5 - 0.05 = 0.1833; owner's choice 2026-11-15 (Telegram's white pencil without lowering contrast). Already dark accents
+ * are returned unchanged; `fab_fill()` in check_contrast.py mirrors it.
+ */
+fun fabFill(accent: Color): Color {
+    var t = 0f
+    var c = accent
+    while (c.luminance() > 0.1833f && t < 1f) {
+        t += 0.01f
+        c = Color(accent.red * (1 - t), accent.green * (1 - t), accent.blue * (1 - t), accent.alpha)
+    }
+    return c
+}
 
 val LocalChatColors = staticCompositionLocalOf { LightChatColors }
 
 /**
- * Neutral colours stay fixed (Telegram day / night) except for a house's own surfaces; [accent] tints the rest, or the system's
- * wallpaper colours when [dynamicColors] is on (Android 12+).
+ * Neutral colours follow the [style] and, at night, the [nightBackground] (Telegram day / blue-grey night without either);
+ * [accent] tints the rest, or the system's wallpaper colours when [dynamicColors] is on (Android 12+).
  */
 @Composable
 fun TatrakTheme(
@@ -191,7 +209,8 @@ fun TatrakTheme(
     style: TatrakStyle = TatrakStyle.remember(),
     accent: Accent = rememberAccent(style),
     dynamicColors: Boolean = rememberDynamicColors(),
-    elegant: Boolean = ElegantDark.remember(),
+    nightBackground: NightBackground = NightBackground.remember(),
+    avatarShape: AvatarShape = AvatarShape.remember(style),
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -200,8 +219,8 @@ fun TatrakTheme(
         remember(context, accent, darkTheme, dynamicColors) {
             if (dynamic) dynamicAccent(context, darkTheme) else resolveAccent(context, accent, darkTheme)
         }
-    // a house's own surfaces belong to the chosen accent, not to the system's dynamic colours
-    val neutrals = if (dynamic) null else neutralsOf(style, accent, darkTheme, elegant)
+    // the style's and night background's surfaces give way to the system's dynamic colours (the setting keeps its value)
+    val neutrals = if (dynamic) null else neutralsOf(style, darkTheme, nightBackground)
     val chatColors =
         remember(colors, darkTheme, neutrals) {
             (if (darkTheme) DarkChatColors else LightChatColors).let { base ->
@@ -231,8 +250,8 @@ fun TatrakTheme(
     val font = if (style == TatrakStyle.SLATE_SEA) ManropeFamily else null
     CompositionLocalProvider(
         LocalChatColors provides chatColors,
-        LocalAvatarShape provides avatarShapeOf(style),
-        LocalAvatarDotOffset provides avatarDotOffsetOf(style),
+        LocalAvatarShape provides avatarShapeOf(avatarShape),
+        LocalAvatarDotOffset provides avatarDotOffsetOf(avatarShape),
         LocalTatrakStyle provides style,
         LocalTatrakFont provides font,
     ) {

@@ -54,26 +54,28 @@ terminal. Never generate a replacement release key to update an existing app.
 
 A published release (GitHub and F-Droid's reproducible build) is built from the public
 repository's tag (`~/workspace/tatrak-public`, see public export), not from
-the development tree, because F-Droid rebuilds that tag and compares it with the signed APKs:
+the development tree, because F-Droid rebuilds that tag and compares it with the signed APKs. It is
+built in a temporary worktree of the public repository, removed after signing (the permanent
+`~/workspace/tatrak-release` clone was removed on 2026-11-16: its APKs had the same names as the test
+builds, and the owner sent an old one to his phone):
 
 ```sh
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk ANDROID_HOME=$HOME/Android/Sdk
-BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
 unset ANDROID_SDK_ROOT   # the shell's /opt/android-sdk conflicts with ANDROID_HOME and fails the build
-# a clean tree; the release APK carries no git data (vcsInfo off), so a worktree would do too
-git clone ~/workspace/tatrak-public ~/workspace/tatrak-release && git -C ~/workspace/tatrak-release checkout v<version>
-cd ~/workspace/tatrak-release && ./gradlew assembleConversationsFreeRelease
-RELEASE_DIR=build/outputs/apk/conversationsFree/release
-mkdir -p "$RELEASE_DIR/signed"
-for abi in arm64-v8a armeabi-v7a x86 x86_64; do
-  APK="am.cyberhayq.chat-<version>+free-$abi.apk"
-  # asks for the key password; v1 is off (minSdk 26)
-  "$BUILD_TOOLS/apksigner" sign --ks ~/tatrak-release.p12 --v1-signing-enabled false \
-    --out "$RELEASE_DIR/signed/$APK" "$RELEASE_DIR/$APK" || exit 1
-  "$BUILD_TOOLS/apksigner" verify --verbose --print-certs "$RELEASE_DIR/signed/$APK" || exit 1
-  "$BUILD_TOOLS/zipalign" -c 4 "$RELEASE_DIR/signed/$APK" || exit 1
-done
+# the release APK carries no git data (vcsInfo off), so a worktree builds the same APK as a clone
+git -C ~/workspace/tatrak-public worktree add --detach ~/workspace/tatrak-build-v<version> v<version>
+cd ~/workspace/tatrak-build-v<version> && ./gradlew assembleConversationsFreeRelease
+~/tatrak-sign.sh ~/workspace/tatrak-build-v<version>/build/outputs/apk/conversationsFree/release
+git -C ~/workspace/tatrak-public worktree remove --force ~/workspace/tatrak-build-v<version>
 ```
+
+`~/tatrak-sign.sh` is a link to `tools/release/tatrak-sign.sh`. It asks for the key password once,
+signs every APK in the folder (v2 + v3, v1 off for minSdk 26), checks zipalign and the certificate
+digest, and leaves the signed APKs under Gradle's names in `<release-dir>/signed` (for the GitHub
+release). It also copies them to `~/tatrak-apks` under names that cannot be confused: a build at a
+clean release tag as `tatrak-v<version>-<abi>.apk` (every ABI), any other build as
+`tatrak-test-<commit>[-dirty]-<yyyymmdd-HHMM>-arm64-v8a.apk`. Send or install only from
+`~/tatrak-apks`.
 
 The signed APKs go to the tag's GitHub release. The release certificate (`CN=Tatrak, O=CyberHayq`,
 RSA-2048, valid 2026-11-14 to 2054-04-01; public key SHA-256 `25087311…5b64`) has the SHA-256
@@ -83,12 +85,19 @@ digest
 (v2 + v3), aligned, one certificate. The same key first had a certificate named `CN=Android APK
 Signing`; it was reissued before anything was published, and that certificate is not used.
 
-When release APKs are only requested for testing, verify and provide the signed `arm64-v8a` APK
-only, unless the owner asks for other variants: the owner signs it with the command above, or the
-agent signs a separate local test APK with the existing debug key (find its path with
-`./gradlew signingReport`) and labels it debug-signed.
+A test APK for the owner's phone is built in the development repository and signed the same
+way (the phone's install is release-signed, so a debug-signed APK cannot update it):
 
-Debug-signed test APK, on this machine, after assembling the release:
+```sh
+cd ~/workspace/tatrak && ./gradlew assembleConversationsFreeRelease
+~/tatrak-sign.sh            # default folder: this repository's release build
+# -> ~/tatrak-apks/tatrak-test-<commit>[-dirty]-<time>-arm64-v8a.apk
+```
+
+When release APKs are only requested for testing, provide the signed `arm64-v8a` APK only, unless
+the owner asks for other variants. An agent cannot run the release signing (the password is never
+stored); it can sign a separate local test APK with the existing debug key (find its path with
+`./gradlew signingReport`) and label it debug-signed:
 
 ```sh
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk ANDROID_HOME=$HOME/Android/Sdk
@@ -96,7 +105,7 @@ BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
 RELEASE_DIR=build/outputs/apk/conversationsFree/release
 mkdir -p "$RELEASE_DIR/signed-debug"
 for abi in arm64-v8a; do
-  APK="am.cyberhayq.chat-2.21.0+free-$abi.apk"
+  APK="am.cyberhayq.chat-<version>-$abi.apk"
   "$BUILD_TOOLS/apksigner" sign --ks "$HOME/.android/debug.keystore" \
     --ks-key-alias AndroidDebugKey --ks-pass pass:android --key-pass pass:android \
     --out "$RELEASE_DIR/signed-debug/$APK" "$RELEASE_DIR/$APK" || exit 1
@@ -128,6 +137,30 @@ printf 'Categories:\n  - Internet\nLicense: GPL-3.0-only\nRepoType: git\nRepo: h
 Expected today: no errors, warnings only for the binary test vectors in
 `src/test/resources/media-vectors/`. The scanner deletes the Gradle wrapper in its copy, which is
 normal.
+
+# F-Droid build test
+
+`tools/fdroid/am.cyberhayq.chat.yml` is the draft of the fdroiddata recipe (per-ABI builds like
+fdroiddata's `eu.siacs.conversations.yml`: JDK 25 from Debian through `sudo`, flavour
+`conversations` + `free`, one `output` glob per ABI, `binary:` from the GitHub release,
+`AllowedAPKSigningKeys` = the release certificate). `tools/fdroid/test-build.sh <repo> <commit>
+[abi]` builds one ABI as F-Droid's CI does: fdroidserver from git in the official
+`registry.gitlab.com/fdroid/fdroidserver:buildserver` image (Debian 13, JDK 21 default, JDK 25
+installed by the recipe), `fdroid build --on-server`, the repository mounted read-only (so the
+still private public repository works), `binary:` left out. It prints the unsigned APK's SHA-256;
+compare it with a local unsigned `assembleConversationsFreeRelease` of the same commit (a worktree
+of `tatrak-public`, `ANDROID_HOME` = this machine's SDK, `~/Android` on the first dev machine).
+
+```sh
+WORK=$(mktemp -d) tools/fdroid/test-build.sh ../tatrak-public <commit>   # about 6 min, needs podman
+```
+
+Do not add Conversations' `prebuild` that turns `universalApk` off: the main output then becomes
+the first ABI split, `BuildConfig.VERSION_CODE` changes (5000000 → 5000001, used in
+`LocationActivity`'s user agent) and the dex no longer matches the APK we sign (found 2026-11-16).
+`fdroid lint` outside fdroiddata reports the categories as invalid (it lacks
+`config/categories.yml`); `fdroid rewritemeta` leaves the draft unchanged apart from its comment
+header, which goes when the recipe is submitted.
 
 # Judging speed: the `benchmark` build
 

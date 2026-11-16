@@ -19,7 +19,11 @@ public class AboutActivity extends ActionBarActivity {
 
         final ActivityAboutBinding binding =
                 DataBindingUtil.setContentView(this, R.layout.activity_about);
-        final var text = new SpannableString(getString(R.string.pref_about_message));
+        // Tatrak: own header (translated) and licence text instead of upstream pref_about_message
+        final var text =
+                new SpannableString(
+                        getString(R.string.tatrak_about_header)
+                                + getString(R.string.tatrak_about_legal));
         Linkify.addLinks(text);
         FixedURLSpan.fix(text);
         binding.about.setText(text);

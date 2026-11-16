@@ -27,7 +27,7 @@ sources:
 | 6 | Polish | In progress: 6a accents, 6b wallpapers, 6c settings, 6d profile done; 6e swipe-back working on API 31 and 37, gating checks left | Profiles, settings, swipe-back navigation, themes, chat wallpapers. |
 | 7 | Remaining screens and fixes | Implemented; full end-to-end validation pending | Historical scope in backlog; current checks and priorities below. |
 
-Implementation status describes the current working tree; validation status is listed separately below. Commits are signed by the owner with a hardware key.
+Implementation status describes the current state of the repository (committed work plus the working tree); validation status is listed separately below. Commits are signed by the owner with a hardware key.
 
 # Stage 2 details
 
@@ -50,7 +50,7 @@ See [chat screen](../architecture/chat-screen.md).
 
 # Current status and priorities
 
-Implementation is largely complete; successful builds and Roborazzi checks do not mean every flow is verified. Available API 31 and API 37 emulators support end-to-end checks, and real-device performance still needs measurement.
+Implementation is largely complete; successful builds and Roborazzi checks do not mean every flow is verified. Available API 31 and API 37 emulators support end-to-end checks, and real-device performance still needs measurement. Local encryption is implemented and committed: media at rest (phase 3; attachments, voice and camera captures, wallpapers, sticker packs and avatars are stored in the encrypted format, `4ad570736`, checked on the emulators 2026-11-13; design, review 2) and the history and UnifiedPush databases (SQLCipher with an Android Keystore-wrapped random key, `dd2a9bb5f`; see [implementation and verification details](../build/local-db-encryption.md)). This is not a released or hardware-certified claim, and the speed budgets of the media store still need the real-phone benchmark run. Offline last seen is done as an XEP-0012 query (`a11fd5e0f`, [last seen](../protocol/last-seen.md)).
 
 Current priorities:
 
@@ -60,8 +60,7 @@ Current priorities:
 
 Exploratory ideas, not accepted implementation commitments:
 
-- Local encryption of media at rest (phase 3) is implemented and checked on the emulators (2026-11-13): attachments, voice and camera captures, wallpapers, sticker packs and avatars are stored in the encrypted format (design, review 2); the speed budgets still need the real-phone benchmark run. Next encryption step: the password mode (phase 2), which must also wrap the media keys carried in Tatrak backups. Passive encryption of history and UnifiedPush databases is implemented in the working tree with SQLCipher and an Android Keystore-wrapped random key; see [implementation and verification details](../build/local-db-encryption.md). This is not a released or hardware-certified claim.
-- Offline last-seen behavior; see backlog.
+- Next encryption step: the password mode (phase 2), which must also wrap the media keys carried in Tatrak backups.
 - Standard OMEMO 2 is planned (owner, 2026-11-13: listed as "Planned" in the README); a post-quantum OMEMO profile (such as monocles' custom PQ profile) remains under assessment; no post-quantum session implementation is included. See backlog and [OMEMO 2 feasibility](../protocol/omemo2-feasibility.md).
 
 # Compose coverage: 14/53 screens

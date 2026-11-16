@@ -342,25 +342,11 @@ public class DatabaseBackend extends SQLiteOpenHelper {
                 am.cyberhayq.chat.storage.DatabaseStorage.password(context));
     }
 
-    // Tatrak: explicit destinations also support isolated migration and authenticated import staging.
+    // Tatrak: explicit destinations also support new generations and authenticated import staging.
     private DatabaseBackend(Context context, String path, byte[] password) {
-        this(context, path, password, DATABASE_VERSION);
-    }
-
-    private DatabaseBackend(Context context, String path, byte[] password, int version) {
-        super(context, path, password, null, version, 0,
+        super(context, path, password, null, DATABASE_VERSION, 0,
                 am.cyberhayq.chat.storage.DatabaseStorage.PRESERVE, null, false);
         this.context = context.getApplicationContext();
-    }
-
-    public static DatabaseBackend legacyForExport(Context context) {
-        final String path = context.getDatabasePath("history").getPath();
-        try (final var reader = net.zetetic.database.sqlcipher.SQLiteDatabase.openDatabase(
-                path, (byte[]) null, null,
-                net.zetetic.database.sqlcipher.SQLiteDatabase.OPEN_READONLY,
-                am.cyberhayq.chat.storage.DatabaseStorage.PRESERVE, null)) {
-            return new DatabaseBackend(context, path, null, reader.getVersion());
-        }
     }
 
     public static DatabaseBackend isolated(Context context, String path, byte[] password) {
@@ -1522,9 +1508,12 @@ public class DatabaseBackend extends SQLiteOpenHelper {
                         + Conversation.TABLENAME
                         + "."
                         + Conversation.MODE
-                        + " FROM "
+                        // Tatrak: CROSS JOIN fixes the order to the FTS index first; SQLCipher's
+                        // SQLite 3.54 otherwise starts from message_type_index and runs the MATCH
+                        // once per message (minutes on 150k messages)
+                        + " FROM messages_index CROSS JOIN "
                         + Message.TABLENAME
-                        + " JOIN "
+                        + " ON messages.rowid=messages_index.rowid JOIN "
                         + Conversation.TABLENAME
                         + " ON "
                         + Message.TABLENAME
@@ -1534,7 +1523,7 @@ public class DatabaseBackend extends SQLiteOpenHelper {
                         + Conversation.TABLENAME
                         + "."
                         + Conversation.UUID
-                        + " JOIN messages_index ON messages_index.rowid=messages.rowid WHERE "
+                        + " WHERE "
                         + Message.ENCRYPTION
                         + " NOT IN("
                         + Message.ENCRYPTION_AXOLOTL_NOT_FOR_THIS_DEVICE

@@ -465,47 +465,6 @@ public class StorageInstrumentation extends Instrumentation {
     private org.json.JSONObject row(String table, org.json.JSONObject values) throws org.json.JSONException {
         return new org.json.JSONObject().put("table", table).put("values", values);
     }
-    private void checkLegacyCopy(Context context) throws Exception {
-        final File source = new File(context.getCacheDir(), "legacy-storage-fixture.db");
-        final var stage = DatabaseStorage.createGeneration(context);
-        try {
-            try (final var helper = DatabaseBackend.isolated(context, source.getPath(), null)) {
-                final var db = helper.getWritableDatabase();
-                db.execSQL("ALTER TABLE messages DROP COLUMN tatrak_source_encryption");
-                db.execSQL("ALTER TABLE messages DROP COLUMN tatrak_source_fingerprint");
-                db.execSQL("DROP TRIGGER after_message_delete");
-                db.execSQL("CREATE TRIGGER after_message_delete AFTER DELETE ON messages BEGIN DELETE FROM messages_index WHERE rowid=OLD.rowid; END");
-                db.execSQL("INSERT INTO accounts(uuid,username,server,password,keys,options) VALUES('fixture','legacy','example.invalid','fixture','{}',2)");
-                db.execSQL("INSERT INTO conversations(uuid,accountUuid,contactJid) VALUES('chat','fixture','friend@example.invalid')");
-                db.execSQL("INSERT INTO messages(uuid,conversationUuid,body,encryption,status) VALUES('kept','chat','preserved history',5,0)");
-                db.execSQL("INSERT INTO messages(uuid,conversationUuid,body,encryption,status) VALUES('deleted','chat','deleted search entry',5,0)");
-                db.execSQL("DELETE FROM messages WHERE uuid='deleted'");
-                db.setVersion(57);
-                try (var cursor = db.rawQuery("PRAGMA integrity_check", null)) {
-                    check(cursor.moveToFirst() && !"ok".equals(cursor.getString(0)), "legacy stale FTS reproduced");
-                }
-            }
-            final byte[] original = Files.readAllBytes(source.toPath());
-            final var export = DatabaseStorage.class.getDeclaredMethod("exportPlaintext", File.class, File.class,
-                    DatabaseStorage.Generation.class);
-            export.setAccessible(true);
-            export.invoke(DatabaseStorage.INSTANCE, source, stage.history(), stage);
-            try (var helper = DatabaseBackend.isolated(context, stage.history().getPath(), stage.password())) {
-                final var copy = helper.getWritableDatabase();
-                check(copy.getVersion() == 59, "legacy encrypted copy upgraded");
-                try (var cursor = copy.rawQuery("SELECT body FROM messages WHERE uuid='kept'", null)) {
-                    check(cursor.moveToFirst() && "preserved history".equals(cursor.getString(0)), "legacy copy body retained");
-                }
-            }
-            try (var helper = UnifiedPushDatabase.isolated(context, stage.push().getPath(), stage.password())) { helper.getWritableDatabase(); }
-            DatabaseStorage.validatePair(stage);
-            check(Arrays.equals(original, Files.readAllBytes(source.toPath())), "source with stale FTS kept unchanged");
-        } finally {
-            source.delete();
-            for (String suffix : new String[] {"-journal", "-wal", "-shm"}) new File(source.getPath() + suffix).delete();
-            DatabaseStorage.discardImport(context, stage.getId());
-        }
-    }
     private void checkRecoveryImport(Context context) throws Exception {
         check(DatabaseStorage.state() == DatabaseStorage.State.RECOVERY_REQUIRED, "recovery gate before restore");
         final File root = new File(context.getNoBackupFilesDir(), "tatrak-databases");
@@ -594,17 +553,6 @@ public class StorageInstrumentation extends Instrumentation {
                 check(DatabaseStorage.state() == DatabaseStorage.State.RECOVERY_REQUIRED, "fail closed");
                 check(new File(context.getNoBackupFilesDir(), "tatrak-databases/active").isFile(), "selector retained");
             } else {
-                long accounts = -1, messages = -1;
-                if (DatabaseStorage.state() == DatabaseStorage.State.MIGRATION_REQUIRED) {
-                    try (var source = android.database.sqlite.SQLiteDatabase.openDatabase(
-                            context.getDatabasePath("history").getPath(), null,
-                            android.database.sqlite.SQLiteDatabase.OPEN_READONLY)) {
-                        accounts = android.database.DatabaseUtils.queryNumEntries(source, "accounts");
-                        messages = android.database.DatabaseUtils.queryNumEntries(source, "messages");
-                    }
-                    DatabaseStorage.migrate(context);
-                    awaitIdle();
-                }
                 check(DatabaseStorage.isReady(), "encrypted storage ready: " + DatabaseStorage.state());
                 final var db = DatabaseBackend.getInstance(context).getReadableDatabase();
                 if ("validate".equals(arguments.getString("mode"))) {
@@ -617,11 +565,7 @@ public class StorageInstrumentation extends Instrumentation {
                     method.setAccessible(true);
                     DatabaseStorage.validatePair((DatabaseStorage.Generation) method.invoke(DatabaseStorage.INSTANCE));
                 }
-                check(db.getVersion() == 59, "history schema");
-                if (accounts >= 0) {
-                    check(net.zetetic.database.DatabaseUtils.queryNumEntries(db, "accounts") == accounts, "accounts retained");
-                    check(net.zetetic.database.DatabaseUtils.queryNumEntries(db, "messages") >= messages, "history retained");
-                }
+                check(db.getVersion() == DatabaseBackend.DATABASE_VERSION, "history schema");
                 check(UnifiedPushDatabase.getInstance(context).getReadableDatabase().getVersion() == 1, "push schema");
                 for (String path : new String[] {DatabaseStorage.historyPath(context), DatabaseStorage.pushPath(context)}) {
                     final File file = new File(path);
@@ -629,8 +573,6 @@ public class StorageInstrumentation extends Instrumentation {
                     try (var input = new java.io.FileInputStream(file)) { check(input.read(header) == 16, "database header"); }
                     check(!new String(header, java.nio.charset.StandardCharsets.US_ASCII).startsWith("SQLite format 3"), "no plaintext header");
                 }
-                check(!context.getDatabasePath("history").exists(), "plaintext history cleaned");
-                check(!context.getDatabasePath("unified-push-distributor").exists(), "plaintext push cleaned");
                 final File directory = new File(DatabaseStorage.historyPath(context)).getParentFile();
                 check(new File(directory, "key").length() == 61, "wrapped key format");
                 checkMediaCipher(context);
@@ -660,7 +602,7 @@ public class StorageInstrumentation extends Instrumentation {
                 // The live database: a key bound to another generation would make its files unreadable.
                 // test installs are reinstalled clean for phase 3, so the live database always has its key
                 checkOwnMediaKey(context, "live media key bound to the active generation");
-                if ("imports".equals(arguments.getString("mode"))) { checkImports(context); checkLegacyCopy(context); }
+                if ("imports".equals(arguments.getString("mode"))) checkImports(context);
                 if ("store".equals(arguments.getString("mode"))) checkMediaStore(context);
                 if (arguments.getString("cleanup") != null) {
                     for (String id : arguments.getString("cleanup").split(",")) {

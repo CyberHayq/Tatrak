@@ -25,6 +25,7 @@ import androidx.compose.ui.composed
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import kotlin.math.abs
 
@@ -50,6 +51,9 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
     /** Off on tablets, where the chat is not on the back stack. */
     var swipeEnabled = true
 
+    /** Off with the Signal swipe method: only the system back gesture closes the chat. */
+    var dragEnabled = true
+
     /** Areas with their own horizontal gestures (voice seek bar, emoji panel), in this view's coordinates. */
     val exclusions = HashMap<Any, Rect>()
 
@@ -68,7 +72,16 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
     var parallax = 0.25f
     private var container: ViewGroup? = null
 
-    private val systemBack = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) OnBackInvokedCallback { dispatcher.onBackPressed() } else null
+    private val systemBack =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            OnBackInvokedCallback {
+                // the keyboard's own back callback sits at PRIORITY_DEFAULT, below this one: close it here first
+                val ime = WindowInsetsCompat.Type.ime()
+                if (ViewCompat.getRootWindowInsets(this@SwipeBackLayout)?.isVisible(ime) == true) {
+                    WindowCompat.getInsetsController(activity.window, this@SwipeBackLayout).hide(ime)
+                } else dispatcher.onBackPressed()
+            }
+        } else null
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()
@@ -91,7 +104,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
                 // the system's back zone (gesture navigation) is left to the system, as in Telegram:
                 // starting ours there too would run both back gestures at once
                 val edge = ViewCompat.getRootWindowInsets(this)?.getInsets(WindowInsetsCompat.Type.systemGestures())?.left ?: 0
-                tracking = swipeEnabled && ev.rawX >= edge && exclusions.values.none { it.contains(ev.x.toInt(), ev.y.toInt()) }
+                tracking = swipeEnabled && dragEnabled && ev.rawX >= edge && exclusions.values.none { it.contains(ev.x.toInt(), ev.y.toInt()) }
                 velocity?.recycle()
                 velocity = VelocityTracker.obtain().also { it.addMovement(ev) }
             }

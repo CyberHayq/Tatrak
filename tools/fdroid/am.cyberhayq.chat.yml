@@ -1,0 +1,90 @@
+# Draft of the fdroiddata recipe (metadata/am.cyberhayq.chat.yml); modelled on fdroiddata's
+# eu.siacs.conversations.yml, but without its universalApk prebuild: turning the universal APK
+# off changes BuildConfig.VERSION_CODE (the main output becomes the first ABI split), so the
+# APK would differ from the one we sign. Test it with test-build.sh before a merge request.
+Categories:
+  - Internet
+  - Messaging
+  - Voice & Video Chat
+License: GPL-3.0-only
+AuthorName: CyberHayq
+SourceCode: https://github.com/CyberHayq/Tatrak
+IssueTracker: https://github.com/CyberHayq/Tatrak/issues
+
+AutoName: Tatrak
+
+RepoType: git
+Repo: https://github.com/CyberHayq/Tatrak.git
+
+Builds:
+  - versionName: 0.2.0
+    versionCode: 5000101
+    commit: v0.2.0
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-armeabi-v7a.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-armeabi-v7a.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
+  - versionName: 0.2.0
+    versionCode: 5000102
+    commit: v0.2.0
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-x86.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-x86.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
+  - versionName: 0.2.0
+    versionCode: 5000103
+    commit: v0.2.0
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-x86_64.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-x86_64.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
+  - versionName: 0.2.0
+    versionCode: 5000104
+    commit: v0.2.0
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-arm64-v8a.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-arm64-v8a.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
+AllowedAPKSigningKeys: 3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b
+
+AutoUpdateMode: Version
+UpdateCheckMode: Tags ^v[0-9.]+$
+VercodeOperation:
+  - 100 * %c + 1
+  - 100 * %c + 2
+  - 100 * %c + 3
+  - 100 * %c + 4
+CurrentVersion: 0.2.0
+CurrentVersionCode: 5000104

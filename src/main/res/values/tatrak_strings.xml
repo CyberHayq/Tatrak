@@ -40,23 +40,11 @@
     <string name="tatrak_accent_pink">Pink</string>
     <string name="tatrak_accent_orange">Orange</string>
     <string name="tatrak_accent_red">Red</string>
-    <string name="tatrak_accent_ember">Ember</string>
-    <string name="tatrak_accent_steel">Steel</string>
-    <string name="tatrak_accent_crimson">Crimson</string>
     <string name="tatrak_accent_gold">Gold</string>
-    <string name="tatrak_accent_teal">Teal</string>
-    <string name="tatrak_accent_forest">Forest</string>
-    <string name="tatrak_accent_copper">Copper</string>
     <string name="tatrak_appearance">Appearance</string>
     <string name="tatrak_appearance_summary">Theme, accent colour, chat wallpaper</string>
     <string name="tatrak_appearance_theme">Theme</string>
     <string name="tatrak_appearance_accent">Accent colour</string>
-    <string name="tatrak_appearance_accent_signature">Signature</string>
-    <string name="tatrak_appearance_accent_editor">Editor palettes</string>
-    <string name="tatrak_accent_onedark">One Dark</string>
-    <string name="tatrak_accent_dracula">Dracula</string>
-    <string name="tatrak_appearance_elegant">Elegant dark</string>
-    <string name="tatrak_appearance_elegant_summary">Calm charcoal surfaces and soft off-white text at night; signature themes keep their own</string>
     <string name="tatrak_appearance_dynamic_summary">Use the colours of your phone’s wallpaper; the accent is not used then</string>
     <string name="tatrak_appearance_preview_in">Good morning! 👋</string>
     <string name="tatrak_appearance_preview_out">Morning! The new wallpaper looks great.</string>
@@ -91,4 +79,5 @@
     <string name="tatrak_launcher_label">Tatrak</string>
     <!-- "Save" of several media files when some could not be saved -->
     <string name="tatrak_attachments_saved_partly">Saved %1$d of %2$d media files</string>
+    <string name="tatrak_attachment_saved_as">Saved as %1$s</string>
 </resources>

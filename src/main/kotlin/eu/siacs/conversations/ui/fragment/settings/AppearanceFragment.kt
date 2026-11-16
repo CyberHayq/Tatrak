@@ -2,7 +2,8 @@ package eu.siacs.conversations.ui.fragment.settings
 
 import am.cyberhayq.chat.ui.chat.Wallpapers
 import am.cyberhayq.chat.ui.settings.AppearanceScreen
-import am.cyberhayq.chat.ui.theme.ElegantDark
+import am.cyberhayq.chat.ui.theme.AvatarShape
+import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.rememberAccent
@@ -62,8 +63,9 @@ class AppearanceFragment : Fragment() {
                     }
                     val theme = rememberStringPreference(AppSettings.THEME) ?: getString(R.string.theme)
                     var dynamicColors by remember { mutableStateOf(settings.isDynamicColorsDesired) }
+                    val style = TatrakStyle.remember()
                     AppearanceScreen(
-                        style = TatrakStyle.remember(),
+                        style = style,
                         onStyle = { TatrakStyle.set(requireContext(), it); activity?.recreate() },
                         themes = themes,
                         theme = theme,
@@ -78,8 +80,8 @@ class AppearanceFragment : Fragment() {
                             settings.setDynamicColors(value)
                             (activity as? BaseActivity)?.setDynamicColors(value)
                         },
-                        elegantDark = ElegantDark.remember(),
-                        onElegantDark = { ElegantDark.set(requireContext(), it); activity?.recreate() },
+                        nightBackground = NightBackground.remember(),
+                        onNightBackground = { NightBackground.set(requireContext(), it); activity?.recreate() },
                         accent = rememberAccent(),
                         // recreating recolours this activity's classic toolbar too
                         onAccent = { settings.accent = it.key; activity?.recreate() },
@@ -88,6 +90,8 @@ class AppearanceFragment : Fragment() {
                         onWallpaperPhoto = {
                             photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                         },
+                        avatarShape = AvatarShape.remember(style),
+                        onAvatarShape = { AvatarShape.set(requireContext(), it) },
                     )
                 }
             }

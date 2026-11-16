@@ -34,6 +34,14 @@
             android:key="tatrak_history_notices"
             android:summary="@string/tatrak_history_notices_summary"
             android:title="@string/tatrak_history_notices" />
+        <ListPreference
+            android:defaultValue="telegram"
+            android:entries="@array/tatrak_swipe_method_entries"
+            android:entryValues="@array/tatrak_swipe_method_values"
+            android:icon="@drawable/ic_reply_24dp"
+            android:key="tatrak_swipe_method"
+            android:title="@string/tatrak_swipe_method"
+            app:useSimpleSummaryProvider="true" />
 
 
     </PreferenceCategory>

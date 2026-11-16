@@ -534,7 +534,8 @@ public class ContactDetailsActivity extends OmemoActivity
             for (final XmppAxolotlSession session : sessions) {
                 final FingerprintStatus trust = session.getTrust();
                 hasKeys |= !trust.isCompromised();
-                if (!trust.isActive() && anyActive) {
+                // Tatrak: the key of the message that opened this screen shows even when inactive
+                if (!trust.isActive() && anyActive && !session.getFingerprint().equals(messageFingerprint)) {
                     if (showInactiveOmemo) {
                         showsInactive = true;
                     } else {

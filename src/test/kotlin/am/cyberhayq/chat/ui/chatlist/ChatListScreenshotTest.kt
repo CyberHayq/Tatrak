@@ -3,6 +3,7 @@ package am.cyberhayq.chat.ui.chatlist
 import am.cyberhayq.chat.ui.search.SearchResult
 import am.cyberhayq.chat.ui.search.SearchState
 import am.cyberhayq.chat.ui.theme.Accent
+import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.app.Application
@@ -64,7 +65,7 @@ class ChatListScreenshotTest {
 
     @Test
     @Config(qualifiers = "+night")
-    fun chatListDrawerEmberDark() = drawer(darkTheme = true, Accent.EMBER, "chat_list_drawer_ember_dark")
+    fun chatListDrawerAmoledDark() = drawer(darkTheme = true, Accent.RED, "chat_list_drawer_amoled_dark", NightBackground.AMOLED)
 
     @Test
     @Config(qualifiers = "w320dp-h640dp-xxhdpi")
@@ -74,9 +75,9 @@ class ChatListScreenshotTest {
     @Config(qualifiers = "w800dp-h1000dp-xxhdpi")
     fun chatListDrawerWide() = drawer(darkTheme = false, Accent.BLUE, "chat_list_drawer_wide")
 
-    private fun drawer(darkTheme: Boolean, accent: Accent, name: String) {
+    private fun drawer(darkTheme: Boolean, accent: Accent, name: String, night: NightBackground = NightBackground.BLUE_GREY) {
         compose.setContent {
-            TatrakTheme(darkTheme = darkTheme, accent = accent, dynamicColors = false) {
+            TatrakTheme(darkTheme = darkTheme, accent = accent, dynamicColors = false, nightBackground = night) {
                 ChatListDrawer(AccountHeader("Test", "test@example.am", null), NoListActions) {}
             }
         }
@@ -394,29 +395,32 @@ class ChatListScreenshotTest {
     fun chatListVioletDark() = capture(darkTheme = true, "chat_list_violet_dark", Accent.VIOLET)
 
     @Test
-    fun chatListEmberDark() = capture(darkTheme = true, "chat_list_ember_dark", Accent.EMBER)
-
-    @Test
-    fun chatListHouses() {
-        var accent by mutableStateOf(Accent.STEEL)
+    fun chatListAccentsAndNights() {
+        var accent by mutableStateOf(Accent.BLUE)
+        var style by mutableStateOf(TatrakStyle.TELEGRAM)
         var dark by mutableStateOf(false)
-        var elegant by mutableStateOf(false)
+        var night by mutableStateOf(NightBackground.BLUE_GREY)
         compose.setContent {
-            TatrakTheme(darkTheme = dark, accent = accent, elegant = elegant) {
+            TatrakTheme(darkTheme = dark, style = style, accent = accent, nightBackground = night) {
                 ChatListScreen(sampleState(), NoListActions)
             }
         }
-        for (house in Accent.entries.filter { (it.signature || it.palette) && it != Accent.EMBER }) for (night in listOf(false, true)) {
-            compose.runOnIdle { accent = house; dark = night }
+        // every accent by day and under each night background (Telegram style)
+        for (option in Accent.entries) for (mode in listOf(null) + NightBackground.entries) {
+            compose.runOnIdle { accent = option; dark = mode != null; night = mode ?: NightBackground.BLUE_GREY }
             compose.waitForIdle()
-            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_${house.key}_${if (night) "dark" else "light"}.png")
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_accent_${option.key}_${mode?.key ?: "day"}.png")
         }
-        // the opt-in elegant night: ordinary accents take it, a house keeps its own surfaces
-        for (option in listOf(Accent.BLUE, Accent.GREEN, Accent.PINK, Accent.EMBER)) {
-            compose.runOnIdle { accent = option; dark = true; elegant = true }
+        // Slate and Sea under the graphite and AMOLED nights (its blue-grey night is chat_list_slate_dark)
+        for (mode in listOf(NightBackground.GRAPHITE, NightBackground.AMOLED)) {
+            compose.runOnIdle { style = TatrakStyle.SLATE_SEA; accent = Accent.SEA; dark = true; night = mode }
             compose.waitForIdle()
-            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_elegant_${option.key}_dark.png")
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_slate_${mode.key}_dark.png")
         }
+        // the dock's selected item in a light accent by day (link colour, fitted to the bar)
+        compose.runOnIdle { style = TatrakStyle.SLATE_SEA; accent = Accent.GOLD; dark = false }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_slate_gold_day.png")
     }
 
     @Test

@@ -9,18 +9,46 @@
         <item name="colorSurfaceVariant">@color/tatrak_neutral_surface_variant</item>
         <item name="colorOnSurfaceVariant">@color/tatrak_neutral_on_surface_variant</item>
         <item name="colorOutline">@color/tatrak_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_neutral_outline_variant</item>
     </style>
-    <!-- opt-in elegant night: applied between ThemeOverlay.Tatrak and the accent, so houses still override it; equals the light neutrals by day -->
-    <style name="ThemeOverlay.Tatrak.Elegant" parent="">
-        <item name="android:colorBackground">@color/tatrak_elegant_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_elegant_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_elegant_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_elegant_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_elegant_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_elegant_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_elegant_neutral_outline</item>
+    <!-- night background "graphite", Telegram style: applied after ThemeOverlay.Tatrak and before the accent; equals the light neutrals by day -->
+    <style name="ThemeOverlay.Tatrak.Graphite" parent="">
+        <item name="android:colorBackground">@color/tatrak_graphite_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_graphite_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_graphite_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_graphite_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_graphite_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_graphite_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_graphite_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_graphite_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_graphite_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_graphite_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_graphite_neutral_outline_variant</item>
     </style>
-    <!-- Slate and Sea neutrals: applied after Tatrak / Elegant and before the accent, so a house that defines neutrals for the mode still wins -->
+    <!-- night background "AMOLED black", Telegram style; equals the light neutrals by day -->
+    <style name="ThemeOverlay.Tatrak.Amoled" parent="">
+        <item name="android:colorBackground">@color/tatrak_amoled_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_amoled_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_amoled_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_amoled_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_amoled_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_amoled_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_amoled_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_amoled_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_amoled_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_amoled_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_amoled_neutral_outline_variant</item>
+    </style>
+    <!-- Slate and Sea neutrals (blue-grey night): applied after ThemeOverlay.Tatrak and before the accent -->
     <style name="ThemeOverlay.Tatrak.SlateSea" parent="">
         <item name="android:colorBackground">@color/tatrak_slate_neutral_background</item>
         <item name="colorOnBackground">@color/tatrak_slate_neutral_on_background</item>
@@ -29,16 +57,44 @@
         <item name="colorSurfaceVariant">@color/tatrak_slate_neutral_surface_variant</item>
         <item name="colorOnSurfaceVariant">@color/tatrak_slate_neutral_on_surface_variant</item>
         <item name="colorOutline">@color/tatrak_slate_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_slate_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_slate_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_slate_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_slate_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_slate_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_slate_neutral_outline_variant</item>
     </style>
-    <!-- Slate and Sea with the elegant switch: applied instead of ThemeOverlay.Tatrak.SlateSea; equals it by day -->
-    <style name="ThemeOverlay.Tatrak.SlateSea.Elegant" parent="">
-        <item name="android:colorBackground">@color/tatrak_slate_elegant_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_slate_elegant_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_slate_elegant_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_slate_elegant_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_slate_elegant_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_slate_elegant_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_slate_elegant_neutral_outline</item>
+    <!-- Slate and Sea with the graphite night: applied instead of ThemeOverlay.Tatrak.SlateSea; equals it by day -->
+    <style name="ThemeOverlay.Tatrak.SlateSea.Graphite" parent="">
+        <item name="android:colorBackground">@color/tatrak_slate_graphite_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_slate_graphite_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_slate_graphite_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_slate_graphite_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_slate_graphite_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_slate_graphite_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_slate_graphite_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_slate_graphite_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_slate_graphite_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_slate_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_slate_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_slate_graphite_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_slate_graphite_neutral_outline_variant</item>
+    </style>
+    <!-- Slate and Sea with the AMOLED night: applied instead of ThemeOverlay.Tatrak.SlateSea; equals it by day -->
+    <style name="ThemeOverlay.Tatrak.SlateSea.Amoled" parent="">
+        <item name="android:colorBackground">@color/tatrak_slate_amoled_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_slate_amoled_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_slate_amoled_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_slate_amoled_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_slate_amoled_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_slate_amoled_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_slate_amoled_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_slate_amoled_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_slate_amoled_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_slate_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_slate_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_slate_amoled_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_slate_amoled_neutral_outline_variant</item>
     </style>
     <style name="ThemeOverlay.Tatrak.Accent" parent="" />
     <style name="ThemeOverlay.Tatrak.Accent.Blue">
@@ -209,83 +265,6 @@
         <item name="tatrakAccentIn">@color/tatrak_accent_red_accent_in</item>
         <item name="tatrakAccentOut">@color/tatrak_accent_red_accent_out</item>
     </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Ember">
-        <item name="colorPrimary">@color/tatrak_accent_ember_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_ember_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_ember_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_ember_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_ember_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_ember_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_ember_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_ember_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_ember_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_ember_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_ember_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_ember_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_ember_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_ember_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_ember_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_ember_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_ember_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_ember_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_ember_accent_out</item>
-    </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Steel">
-        <item name="colorPrimary">@color/tatrak_accent_steel_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_steel_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_steel_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_steel_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_steel_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_steel_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_steel_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_steel_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_steel_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_steel_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_steel_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_steel_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_steel_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_steel_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_steel_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_steel_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_steel_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_steel_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_steel_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_steel_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_steel_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_steel_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_steel_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_steel_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_steel_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_steel_neutral_outline</item>
-    </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Crimson">
-        <item name="colorPrimary">@color/tatrak_accent_crimson_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_crimson_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_crimson_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_crimson_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_crimson_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_crimson_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_crimson_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_crimson_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_crimson_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_crimson_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_crimson_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_crimson_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_crimson_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_crimson_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_crimson_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_crimson_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_crimson_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_crimson_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_crimson_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_crimson_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_crimson_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_crimson_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_crimson_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_crimson_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_crimson_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_crimson_neutral_outline</item>
-    </style>
     <style name="ThemeOverlay.Tatrak.Accent.Gold">
         <item name="colorPrimary">@color/tatrak_accent_gold_primary</item>
         <item name="colorOnPrimary">@color/tatrak_accent_gold_on_primary</item>
@@ -306,152 +285,5 @@
         <item name="tatrakUnreadBadge">@color/tatrak_accent_gold_badge</item>
         <item name="tatrakAccentIn">@color/tatrak_accent_gold_accent_in</item>
         <item name="tatrakAccentOut">@color/tatrak_accent_gold_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_gold_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_gold_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_gold_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_gold_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_gold_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_gold_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_gold_neutral_outline</item>
-    </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Teal">
-        <item name="colorPrimary">@color/tatrak_accent_teal_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_teal_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_teal_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_teal_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_teal_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_teal_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_teal_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_teal_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_teal_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_teal_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_teal_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_teal_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_teal_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_teal_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_teal_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_teal_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_teal_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_teal_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_teal_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_teal_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_teal_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_teal_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_teal_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_teal_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_teal_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_teal_neutral_outline</item>
-    </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Forest">
-        <item name="colorPrimary">@color/tatrak_accent_forest_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_forest_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_forest_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_forest_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_forest_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_forest_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_forest_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_forest_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_forest_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_forest_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_forest_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_forest_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_forest_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_forest_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_forest_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_forest_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_forest_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_forest_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_forest_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_forest_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_forest_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_forest_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_forest_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_forest_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_forest_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_forest_neutral_outline</item>
-    </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Copper">
-        <item name="colorPrimary">@color/tatrak_accent_copper_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_copper_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_copper_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_copper_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_copper_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_copper_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_copper_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_copper_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_copper_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_copper_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_copper_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_copper_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_copper_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_copper_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_copper_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_copper_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_copper_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_copper_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_copper_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_copper_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_copper_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_copper_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_copper_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_copper_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_copper_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_copper_neutral_outline</item>
-    </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Onedark">
-        <item name="colorPrimary">@color/tatrak_accent_onedark_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_onedark_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_onedark_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_onedark_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_onedark_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_onedark_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_onedark_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_onedark_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_onedark_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_onedark_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_onedark_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_onedark_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_onedark_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_onedark_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_onedark_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_onedark_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_onedark_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_onedark_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_onedark_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_onedark_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_onedark_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_onedark_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_onedark_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_onedark_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_onedark_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_onedark_neutral_outline</item>
-    </style>
-    <style name="ThemeOverlay.Tatrak.Accent.Dracula">
-        <item name="colorPrimary">@color/tatrak_accent_dracula_primary</item>
-        <item name="colorOnPrimary">@color/tatrak_accent_dracula_on_primary</item>
-        <item name="colorPrimaryContainer">@color/tatrak_accent_dracula_primary_container</item>
-        <item name="colorOnPrimaryContainer">@color/tatrak_accent_dracula_on_primary_container</item>
-        <item name="colorSecondary">@color/tatrak_accent_dracula_secondary</item>
-        <item name="colorOnSecondary">@color/tatrak_accent_dracula_on_primary</item>
-        <item name="colorSecondaryContainer">@color/tatrak_accent_dracula_secondary_container</item>
-        <item name="colorOnSecondaryContainer">@color/tatrak_accent_dracula_on_secondary_container</item>
-        <item name="colorTertiary">@color/tatrak_accent_dracula_secondary</item>
-        <item name="colorOnTertiary">@color/tatrak_accent_dracula_on_primary</item>
-        <item name="colorTertiaryContainer">@color/tatrak_accent_dracula_secondary_container</item>
-        <item name="colorOnTertiaryContainer">@color/tatrak_accent_dracula_on_secondary_container</item>
-        <item name="tatrakLink">@color/tatrak_accent_dracula_link</item>
-        <item name="tatrakBubbleOutgoing">@color/tatrak_accent_dracula_bubble_out</item>
-        <item name="tatrakTimeOutgoing">@color/tatrak_accent_dracula_time_out</item>
-        <item name="tatrakCheckRead">@color/tatrak_accent_dracula_check_read</item>
-        <item name="tatrakUnreadBadge">@color/tatrak_accent_dracula_badge</item>
-        <item name="tatrakAccentIn">@color/tatrak_accent_dracula_accent_in</item>
-        <item name="tatrakAccentOut">@color/tatrak_accent_dracula_accent_out</item>
-        <item name="android:colorBackground">@color/tatrak_accent_dracula_neutral_background</item>
-        <item name="colorOnBackground">@color/tatrak_accent_dracula_neutral_on_background</item>
-        <item name="colorSurface">@color/tatrak_accent_dracula_neutral_surface</item>
-        <item name="colorOnSurface">@color/tatrak_accent_dracula_neutral_on_surface</item>
-        <item name="colorSurfaceVariant">@color/tatrak_accent_dracula_neutral_surface_variant</item>
-        <item name="colorOnSurfaceVariant">@color/tatrak_accent_dracula_neutral_on_surface_variant</item>
-        <item name="colorOutline">@color/tatrak_accent_dracula_neutral_outline</item>
     </style>
 </resources>

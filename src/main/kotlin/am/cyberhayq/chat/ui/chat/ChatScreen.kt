@@ -226,6 +226,9 @@ interface ChatActions {
 
     fun showError(uuid: String) {}
 
+    /** The key list (contact's or own account's) with this message's key highlighted. */
+    fun openMessageKey(uuid: String) {}
+
     fun openWith(uuid: String) {}
 
     fun deleteFile(uuid: String) {}
@@ -268,6 +271,9 @@ data class MessageFocus(val uuid: String, val id: Long = System.nanoTime())
 
 @Immutable
 data class ReplyPreview(val uuid: String, val name: String, val text: String, val color: Int)
+
+/** Older messages are asked for while this many items are left above the top visible one. */
+private const val LOAD_MORE_AHEAD = 25
 
 @Composable
 fun ChatScreen(
@@ -604,8 +610,9 @@ private fun MessageList(
     LaunchedEffect(listState) {
         snapshotFlow {
                 val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-                // keyed by size: still near the top after a small page loads asks for the next one
-                if (last >= 0 && last >= items.size - 6) items.size else -1
+                // keyed by size: still near the top after a small page loads asks for the next one. 25 items ahead,
+                // Telegram's checkLoadCount while scrolling (ChatActivity); with 5 a fast fling hit the top first
+                if (last >= 0 && last >= items.size - 1 - LOAD_MORE_AHEAD) items.size else -1
             }
             .filter { it >= 0 }
             .distinctUntilChanged()

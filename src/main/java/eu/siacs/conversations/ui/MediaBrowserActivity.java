@@ -348,7 +348,7 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
                 future,
                 new FutureCallback<>() {
                     @Override
-                    public void onSuccess(List<Boolean> result) {
+                    public void onSuccess(List<File> result) {
                         // Tatrak: says how many were saved, not how many were tried
                         Toast.makeText(
                                         getApplicationContext(),

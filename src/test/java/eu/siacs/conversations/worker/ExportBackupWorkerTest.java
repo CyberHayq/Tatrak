@@ -177,7 +177,7 @@ public class ExportBackupWorkerTest {
         assertEquals("0a".repeat(32), keys.get(OLD_GENERATION));
         final byte[] own = MediaKeyTable.read(supportDb).getByGeneration().get(GENERATION);
         assertEquals(com.google.common.io.BaseEncoding.base16().lowerCase().encode(own), keys.get(GENERATION));
-        // a database without the table (migrated from the legacy layout) writes nothing
+        // a database without the table writes nothing
         db.execSQL("drop table " + MediaKeyTable.TABLE);
         final var none = new StringWriter();
         try (final var json = new JsonWriter(none)) {

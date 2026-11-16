@@ -1,6 +1,7 @@
 package am.cyberhayq.chat.ui.settings
 
 import am.cyberhayq.chat.ui.theme.Accent
+import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.app.Application
@@ -9,7 +10,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.unit.dp
+import androidx.test.core.app.ApplicationProvider
+import org.junit.Assert.assertTrue
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.siacs.conversations.R
 import org.junit.Rule
@@ -51,152 +58,85 @@ class SettingsScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/settings_home.png")
     }
 
-    @Test
-    @Config(qualifiers = "+night")
-    fun appearanceDark() {
-        compose.setContent {
-            TatrakTheme(darkTheme = true, accent = Accent.EMBER) {
-                AppearanceScreen(
-                    style = TatrakStyle.TELEGRAM,
-                    onStyle = {},
-                    themes = listOf("automatic" to "Automatic", "light" to "Light", "dark" to "Dark"),
-                    theme = "dark",
-                    onTheme = {},
-                    dynamicColorsAvailable = true,
-                    dynamicColors = false,
-                    onDynamicColors = {},
-                    elegantDark = false,
-                    onElegantDark = {},
-                    accent = Accent.EMBER,
-                    onAccent = {},
-                    wallpaper = "preset:sunrise",
-                    onWallpaper = {},
-                    onWallpaperPhoto = {},
-                )
-            }
+    /** The Appearance screen with fixed settings; [night] is the stored night background (shown only without dynamic colours). */
+    @androidx.compose.runtime.Composable
+    private fun Appearance(style: TatrakStyle, accent: Accent, dark: Boolean, night: NightBackground, wallpaper: String? = null) {
+        TatrakTheme(darkTheme = dark, style = style, accent = accent, dynamicColors = false, nightBackground = night) {
+            AppearanceScreen(
+                style = style,
+                onStyle = {},
+                themes = listOf("automatic" to "Automatic", "light" to "Light", "dark" to "Dark"),
+                theme = if (dark) "dark" else "light",
+                onTheme = {},
+                dynamicColorsAvailable = true,
+                dynamicColors = false,
+                onDynamicColors = {},
+                nightBackground = night,
+                onNightBackground = {},
+                accent = accent,
+                onAccent = {},
+                wallpaper = wallpaper,
+                onWallpaper = {},
+                onWallpaperPhoto = {},
+            )
         }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_ember_dark.png")
     }
 
     @Test
     @Config(qualifiers = "+night")
-    fun appearanceSlateDark() {
-        var elegant by mutableStateOf(false)
-        compose.setContent {
-            TatrakTheme(darkTheme = true, style = TatrakStyle.SLATE_SEA, accent = Accent.SEA, elegant = elegant) {
-                AppearanceScreen(
-                    style = TatrakStyle.SLATE_SEA,
-                    onStyle = {},
-                    themes = listOf("automatic" to "Automatic", "light" to "Light", "dark" to "Dark"),
-                    theme = "dark",
-                    onTheme = {},
-                    dynamicColorsAvailable = true,
-                    dynamicColors = false,
-                    onDynamicColors = {},
-                    elegantDark = elegant,
-                    onElegantDark = {},
-                    accent = Accent.SEA,
-                    onAccent = {},
-                    wallpaper = null,
-                    onWallpaper = {},
-                    onWallpaperPhoto = {},
-                )
-            }
+    fun appearanceDark() {
+        compose.setContent { Appearance(TatrakStyle.TELEGRAM, Accent.BLUE, dark = true, NightBackground.BLUE_GREY, "preset:sunrise") }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_dark.png")
+    }
+
+    /** Each night background in both styles; the style cards preview the chosen one. */
+    @Test
+    @Config(qualifiers = "+night")
+    fun appearanceNightBackgrounds() {
+        var style by mutableStateOf(TatrakStyle.TELEGRAM)
+        var night by mutableStateOf(NightBackground.BLUE_GREY)
+        compose.setContent { Appearance(style, if (style == TatrakStyle.SLATE_SEA) Accent.SEA else Accent.BLUE, dark = true, night) }
+        for (option in TatrakStyle.entries) for (background in NightBackground.entries) {
+            compose.runOnIdle { style = option; night = background }
+            compose.waitForIdle()
+            val prefix = if (option == TatrakStyle.SLATE_SEA) "appearance_slate" else "appearance"
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/${prefix}_${background.key}_dark.png")
         }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_slate_dark.png")
-        // Slate and Sea under the elegant switch: graphite night
-        compose.runOnIdle { elegant = true }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_slate_elegant_dark.png")
     }
 
     @Test
     fun appearanceSlateLight() {
-        compose.setContent {
-            TatrakTheme(darkTheme = false, style = TatrakStyle.SLATE_SEA, accent = Accent.SEA) {
-                AppearanceScreen(
-                    style = TatrakStyle.SLATE_SEA,
-                    onStyle = {},
-                    themes = listOf("automatic" to "Automatic", "light" to "Light", "dark" to "Dark"),
-                    theme = "light",
-                    onTheme = {},
-                    dynamicColorsAvailable = true,
-                    dynamicColors = false,
-                    onDynamicColors = {},
-                    elegantDark = true,
-                    onElegantDark = {},
-                    accent = Accent.SEA,
-                    onAccent = {},
-                    wallpaper = null,
-                    onWallpaper = {},
-                    onWallpaperPhoto = {},
-                )
-            }
-        }
+        // a stored night background changes nothing by day
+        compose.setContent { Appearance(TatrakStyle.SLATE_SEA, Accent.SEA, dark = false, NightBackground.GRAPHITE) }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_slate_light.png")
     }
 
     @Test
-    fun appearanceHouses() {
-        var accent by mutableStateOf(Accent.STEEL)
-        var dark by mutableStateOf(false)
-        var elegant by mutableStateOf(false)
-        compose.setContent {
-            TatrakTheme(darkTheme = dark, accent = accent, elegant = elegant) {
-                AppearanceScreen(
-                    style = TatrakStyle.TELEGRAM,
-                    onStyle = {},
-                    themes = listOf("automatic" to "Automatic", "light" to "Light", "dark" to "Dark"),
-                    theme = if (dark) "dark" else "light",
-                    onTheme = {},
-                    dynamicColorsAvailable = true,
-                    dynamicColors = false,
-                    onDynamicColors = {},
-                    elegantDark = elegant,
-                    onElegantDark = {},
-                    accent = accent,
-                    onAccent = {},
-                    wallpaper = null,
-                    onWallpaper = {},
-                    onWallpaperPhoto = {},
-                )
-            }
-        }
-        for (house in Accent.entries.filter { (it.signature || it.palette) && it != Accent.EMBER }) for (night in listOf(false, true)) {
-            compose.runOnIdle { accent = house; dark = night }
-            compose.waitForIdle()
-            compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_${house.key}_${if (night) "dark" else "light"}.png")
-        }
-        // the opt-in elegant night: ordinary accents take it, a house keeps its own surfaces
-        for (option in listOf(Accent.BLUE, Accent.GREEN, Accent.PINK, Accent.EMBER)) {
-            compose.runOnIdle { accent = option; dark = true; elegant = true }
-            compose.waitForIdle()
-            compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_elegant_${option.key}_dark.png")
-        }
+    fun appearanceGoldLight() {
+        compose.setContent { Appearance(TatrakStyle.TELEGRAM, Accent.GOLD, dark = false, NightBackground.BLUE_GREY, "preset:sunrise") }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_gold_light.png")
     }
 
+    /** On a 360 dp phone every accent keeps a full 48 x 48 dp target (the row wraps), none overlapping, all on screen. */
     @Test
-    fun appearanceGoldLight() {
-        compose.setContent {
-            TatrakTheme(darkTheme = false, accent = Accent.GOLD) {
-                AppearanceScreen(
-                    style = TatrakStyle.TELEGRAM,
-                    onStyle = {},
-                    themes = listOf("automatic" to "Automatic", "light" to "Light", "dark" to "Dark"),
-                    theme = "light",
-                    onTheme = {},
-                    dynamicColorsAvailable = true,
-                    dynamicColors = false,
-                    onDynamicColors = {},
-                    elegantDark = false,
-                    onElegantDark = {},
-                    accent = Accent.GOLD,
-                    onAccent = {},
-                    wallpaper = "preset:sunrise",
-                    onWallpaper = {},
-                    onWallpaperPhoto = {},
-                )
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun appearanceAccentRowNarrow() {
+        val context = ApplicationProvider.getApplicationContext<android.content.Context>()
+        var dark by mutableStateOf(false)
+        compose.setContent { Appearance(TatrakStyle.TELEGRAM, Accent.GOLD, dark, NightBackground.AMOLED) }
+        for (night in listOf(false, true)) {
+            compose.runOnIdle { dark = night }
+            compose.onNodeWithContentDescription(context.getString(R.string.tatrak_accent_gold)).performScrollTo()
+            val targets = Accent.entries.map { compose.onNodeWithContentDescription(context.getString(it.label)).getUnclippedBoundsInRoot() }
+            val width = compose.onRoot().getUnclippedBoundsInRoot().right
+            for ((i, t) in targets.withIndex()) {
+                assertTrue("target ${Accent.entries[i]} below 48 dp: $t", t.right - t.left >= 48.dp && t.bottom - t.top >= 48.dp)
+                assertTrue(t.left >= 0.dp && t.right <= width)
+                for (other in targets.drop(i + 1)) {
+                    assertTrue("targets overlap", t.right <= other.left || other.right <= t.left || t.bottom <= other.top || other.bottom <= t.top)
+                }
             }
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_accents_360dp_${if (night) "dark" else "light"}.png")
         }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_gold_light.png")
     }
 }

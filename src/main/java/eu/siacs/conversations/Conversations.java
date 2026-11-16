@@ -95,7 +95,7 @@ public class Conversations extends Application {
         EmojiInitializationService.execute(getApplicationContext());
         ExceptionHelper.init(getApplicationContext());
         SettingsUtils.applyThemeSettings(this);
-        // Tatrak: migration finishes before service/UI database admission.
+        // Tatrak: the encrypted storage opens before service/UI database admission.
         am.cyberhayq.chat.storage.DatabaseStorage.start(this);
         // Tatrak: a plain video left by a transcode the process did not finish
         eu.siacs.conversations.services.AttachFileToConversationRunnable.deleteTranscodeLeftovers(this);
