@@ -31,14 +31,26 @@ else
 fi
 echo "Built in $repo at $commit: $label"
 
+# refuse a stale build (2026-11-16: an old 0.1.0 build was signed as v0.2.0): the APKs must carry
+# HEAD's version and be newer than HEAD's commit
+version=$(git -C "$repo" show HEAD:build.gradle | sed -n "s/^ *versionName = '\(.*\)'.*/\1/p" | head -1)
+for apk in "${apks[@]}"; do
+  case $apk in am.cyberhayq.chat-"$version"-*.apk) ;;
+    *) echo "$apk is not version $version of $commit: rebuild first" >&2; exit 1 ;; esac
+  [ "$(date -r "$apk" +%s)" -ge "$(git -C "$repo" log -1 --format=%ct HEAD)" ] ||
+    { echo "$apk is older than $commit: rebuild first" >&2; exit 1; }
+done
+
 rm -rf signed && mkdir signed
 read -rsp "Key password: " KSPASS; echo
 export KSPASS
 trap 'unset KSPASS' EXIT
 
 for apk in "${apks[@]}"; do
+  # --alignment-preserved: keep Gradle's ZIP layout, so F-Droid can copy this signature onto its
+  # own unsigned build (apksigcopier); apksigner's default realignment made the copy fail to verify
   "$BT/apksigner" sign --ks "$KEYSTORE" --ks-pass env:KSPASS \
-    --v1-signing-enabled false --out "signed/$apk" "$apk"
+    --v1-signing-enabled false --alignment-preserved --out "signed/$apk" "$apk"
   "$BT/zipalign" -c 4 "signed/$apk"
   cert=$("$BT/apksigner" verify --print-certs "signed/$apk" | sed -n 's/.*certificate SHA-256 digest: //p')
   [ "$cert" = "$EXPECTED" ] || { echo "$apk: wrong certificate $cert" >&2; exit 1; }

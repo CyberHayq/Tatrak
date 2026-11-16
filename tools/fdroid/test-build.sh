@@ -2,7 +2,9 @@
 # Builds Tatrak the way F-Droid would (fdroidserver's `fdroid build --on-server` in the official
 # buildserver image, as fdroiddata's CI does) and prints the unsigned APK's path and SHA-256, to
 # compare with a local build of the same commit (reproducibility).
-# Usage: test-build.sh <git-repo> <commit> [abi]   (abi: arm64-v8a by default)
+# Usage: [SIGNED=<our signed apk>] test-build.sh <git-repo> <commit> [abi]   (abi: arm64-v8a by default)
+# With SIGNED, it also copies that APK's signature onto F-Droid's build and verifies it, as F-Droid
+# does before publishing our signed APK (needs fdroidserver in ~/.venvs/fdroidserver, see the runbook).
 # The repository is mounted read-only, so a private repository works; the build uses the recipe
 # next to this script, with Repo, commit and version pointed at the arguments, without `binary:`.
 set -euo pipefail
@@ -42,3 +44,8 @@ podman run --rm -v "$repo:/src:ro" -v "$work:/work" -w /work "$image" bash -euo 
 apk=$(ls "$work"/unsigned/*.apk 2>/dev/null | head -1 || true)
 [ -n "$apk" ] || { echo "no APK; see $work/build.log" >&2; exit 1; }
 echo "$apk"; sha256sum "$apk"
+if [ -n "${SIGNED:-}" ]; then
+  ~/.venvs/fdroidserver/bin/python -I -c 'import sys; from fdroidserver import apksigcopier as a
+a.do_copy(sys.argv[1], sys.argv[2], sys.argv[3], v1_only=a.NO)' "$SIGNED" "$apk" "$work/copied.apk"
+  "${APKSIGNER:-apksigner}" verify "$work/copied.apk" && echo "signature copy verifies: F-Droid can publish $SIGNED"
+fi

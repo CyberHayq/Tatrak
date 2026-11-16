@@ -69,7 +69,14 @@ cd ~/workspace/tatrak-build-v<version> && ./gradlew assembleConversationsFreeRel
 git -C ~/workspace/tatrak-public worktree remove --force ~/workspace/tatrak-build-v<version>
 ```
 
-`~/tatrak-sign.sh` is a link to `tools/release/tatrak-sign.sh`. It asks for the key password once,
+`~/tatrak-sign.sh` is a link to `tools/release/tatrak-sign.sh`. It first refuses a stale build: every
+APK must carry the version of the repository's `HEAD` (`build.gradle` `versionName`) and be newer than
+the `HEAD` commit (on 2026-11-16 a run without the folder argument signed the development tree's old
+0.1.0 build as `v0.2.0`, because the development repository's `HEAD` sat on the private `v0.2.0`
+tag; for a release, always pass the release worktree's folder). It asks for the key password once,
+signs with `--alignment-preserved` (apksigner's default realigns every entry, and F-Droid's copy of
+our signature onto its own unsigned build then fails with a `CHUNKED_SHA256` digest mismatch;
+found on `v0.2.0`, 2026-11-16),
 signs every APK in the folder (v2 + v3, v1 off for minSdk 26), checks zipalign and the certificate
 digest, and leaves the signed APKs under Gradle's names in `<release-dir>/signed` (for the GitHub
 release). It also copies them to `~/tatrak-apks` under names that cannot be confused: a build at a
@@ -153,6 +160,9 @@ of `tatrak-public`, `ANDROID_HOME` = this machine's SDK, `~/Android` on the firs
 
 ```sh
 WORK=$(mktemp -d) tools/fdroid/test-build.sh ../tatrak-public <commit>   # about 6 min, needs podman
+# also check that F-Droid can publish our signed APK (copies its signature onto F-Droid's build):
+SIGNED=~/tatrak-apks/tatrak-v<version>-arm64-v8a.apk APKSIGNER=<build-tools>/apksigner \
+  WORK=$(mktemp -d) tools/fdroid/test-build.sh ../tatrak-public v<version>
 ```
 
 Do not add Conversations' `prebuild` that turns `universalApk` off: the main output then becomes
@@ -161,6 +171,28 @@ the first ABI split, `BuildConfig.VERSION_CODE` changes (5000000 → 5000001, us
 `fdroid lint` outside fdroiddata reports the categories as invalid (it lacks
 `config/categories.yml`); `fdroid rewritemeta` leaves the draft unchanged apart from its comment
 header, which goes when the recipe is submitted.
+
+# Secret scan
+
+Run before a public export is pushed. The scanners run from their container images; on the first
+dev machine gitleaks is also a system package (`gitleaks git ../tatrak-public --redact=60` gives the
+same 14 matches). trufflehog runs without verification, so no candidate secret is sent to a
+provider's API.
+
+```sh
+podman run --rm -v ../tatrak-public:/repo:ro -v "$PWD/build":/out ghcr.io/gitleaks/gitleaks:latest \
+  git /repo --report-format json --report-path /out/gitleaks.json --redact=60 --no-banner
+podman run --rm -v ../tatrak-public:/repo:ro docker.io/trufflesecurity/trufflehog:latest \
+  git file:///repo --no-verification --json --no-update > build/trufflehog.json
+git -C ../tatrak-public log --all --name-only --format= \
+  | grep -iE '\.(p12|jks|keystore|pfx|pem|key)$|signing\.properties|local\.properties|\.env$'
+```
+
+Known false positives (2026-11-16, gitleaks 8.30.1, trufflehog 3.99.9): `AllowedAPKSigningKeys` in
+the F-Droid recipe (the public certificate digest), `pgpKey = "0x1A2B3…"` in
+`ParticipantsScreenshotTest`, `masterKey` in `src/test/resources/media-vectors/tink.json` (a random
+key made by `tools/media-vectors/Generate.java` for the test vectors only), and trufflehog's
+"Honeycomb" match inside upstream's old `bin/SecureConversations.apk` (an Android API name).
 
 # Judging speed: the `benchmark` build
 
