@@ -540,7 +540,8 @@
     <string name="gp_medium">Postrzedni</string>
     <string name="gp_long">Dugi</string>
     <string name="pref_broadcast_last_activity">Roznajmuj użycie</string>
-    <string name="pref_broadcast_last_activity_summary">Informuje twoje kōntakty ô tym, kedy używosz Conversations</string>
+    <!-- Tatrak: the app's name -->
+    <string name="pref_broadcast_last_activity_summary">Informuje twoje kōntakty ô tym, kedy używosz Tatrak</string>
     <string name="pref_privacy">Prywatność</string>
     <string name="pref_theme_options">Tymat</string>
     <string name="pref_theme_options_summary">Wybier paleta farbōw</string>
@@ -728,7 +729,8 @@
     <string name="foreground_service_channel_description">Ta kategoryjo powiadōmiyń je używano, coby pokazować stałe powiadōmiynie, co ôznaczo, iże %1$s funguje.</string>
     <string name="notification_group_status_information">Wiadōmość Statusu</string>
     <string name="error_channel_name">Problymy z połōnczyniym</string>
-    <string name="error_channel_description">Ta kategoryjo powiadōmiyń je używano, coby pokazować stałe powiadōmiynie, co ôznaczo, iże Conversations mo problymy z połōnczyniym.</string>
+    <!-- Tatrak: the app's name -->
+    <string name="error_channel_description">Ta kategoryjo powiadōmiyń je używano, coby pokazować stałe powiadōmiynie, co ôznaczo, iże Tatrak mo problymy z połōnczyniym.</string>
     <string name="notification_group_messages">Wiadōmości</string>
     <string name="notification_group_calls">Połōnczynia</string>
     <string name="messages_channel_name">Wiadōmości</string>
@@ -805,7 +807,8 @@
     <string name="ebook">e-book</string>
     <string name="video_original">Ôryginalne (niyskōmpresowane)</string>
     <string name="open_with">Ôtwōrz ze pōmocōm…</string>
-    <string name="set_profile_picture">Profilowy ôbrozek Conversations</string>
+    <!-- Tatrak: the app's name -->
+    <string name="set_profile_picture">Profilowy ôbrozek Tatrak</string>
     <string name="choose_account">Ôbier kōnto</string>
     <string name="restore_backup">Prziwrōć kopijo ibryczno</string>
     <string name="restore">Prziwrōć</string>

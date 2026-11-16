@@ -517,7 +517,8 @@
     <string name="gp_medium">Vừa</string>
     <string name="gp_long">Dài</string>
     <string name="pref_broadcast_last_activity">Sử dụng truyền phát</string>
-    <string name="pref_broadcast_last_activity_summary">Cho các liên hệ của bạn biết bạn dùng Conversations</string>
+    <!-- Tatrak: the app's name -->
+    <string name="pref_broadcast_last_activity_summary">Cho các liên hệ của bạn biết bạn dùng Tatrak</string>
     <string name="pref_privacy">Riêng tư</string>
     <string name="pref_theme_options">Chủ đề</string>
     <string name="pref_theme_options_summary">Chọn bộ màu sáng</string>
@@ -766,7 +767,8 @@
     <string name="ebook">sách điện tử</string>
     <string name="video_original">Gốc (không nén)</string>
     <string name="open_with">Mở bằng…</string>
-    <string name="set_profile_picture">Ảnh hồ sơ Conversations</string>
+    <!-- Tatrak: the app's name -->
+    <string name="set_profile_picture">Ảnh hồ sơ Tatrak</string>
     <string name="choose_account">Chọn tài khoản</string>
     <string name="restore_backup">Khôi phục bản sao lưu</string>
     <string name="restore">Khôi phục</string>

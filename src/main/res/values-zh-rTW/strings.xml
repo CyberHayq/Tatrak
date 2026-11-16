@@ -724,7 +724,8 @@
     <string name="ebook">電子書</string>
     <string name="video_original">原始 (未壓縮)</string>
     <string name="open_with">開啟為…</string>
-    <string name="set_profile_picture">Conversations 設定檔圖片</string>
+    <!-- Tatrak: the app's name -->
+    <string name="set_profile_picture">Tatrak 設定檔圖片</string>
     <string name="choose_account">選擇帳戶</string>
     <string name="restore_backup">還原備份</string>
     <string name="restore">還原</string>

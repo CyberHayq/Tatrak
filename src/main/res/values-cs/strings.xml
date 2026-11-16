@@ -115,7 +115,8 @@
     <string name="pref_notification_sound_summary">Zvuk upozornění na nové zprávy</string>
     <string name="pref_call_ringtone_summary">Vyzváněcí tón pro příchozí hovory</string>
     <string name="pref_notification_grace_period">Časová lhůta</string>
-    <string name="pref_notification_grace_period_summary">Časová lhůta po kterou bude Conversations v tichém režimu při zaznamenání aktivity na jiném přístroji.</string>
+    <!-- Tatrak: the app's name -->
+    <string name="pref_notification_grace_period_summary">Časová lhůta po kterou bude Tatrak v tichém režimu při zaznamenání aktivity na jiném přístroji.</string>
     <string name="pref_advanced_options">Rozšířené</string>
     <string name="pref_never_send_crash_summary">Zasíláním detailů o důvodu selhání pomůžete dalšímu vývoji</string>
     <string name="pref_confirm_messages">Potvrzovat zprávy</string>
@@ -1120,7 +1121,8 @@
     <string name="copy_geo_uri">Kopírovat polohu</string>
     <string name="copy_email_address">Kopírovat e-mailovou adresu</string>
     <string name="copied_email_address">E-mailová adresa zkopírována do schránky</string>
-    <string name="welcome_header">Začněte používat Conversations</string>
+    <!-- Tatrak: the app's name -->
+    <string name="welcome_header">Začněte používat Tatrak</string>
     <string name="server_invite">Pozvat na server</string>
     <string name="contact_has_paused_their_notifications">%s má pozastavené notifikace</string>
     <string name="start_group_chat">Zahájit skupinový chat</string>

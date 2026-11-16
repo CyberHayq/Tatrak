@@ -641,7 +641,8 @@
     <string name="ebook">e-booka</string>
     <string name="video_original">Jatorrizkoa (konprimatu gabea)</string>
     <string name="open_with">Ireki honekin…</string>
-    <string name="set_profile_picture">Conversations profil argazkia</string>
+    <!-- Tatrak: the app's name -->
+    <string name="set_profile_picture">Tatrak profil argazkia</string>
     <string name="choose_account">Kontua hautatu</string>
     <string name="restore_backup">Babes-kopia berrezarri</string>
     <string name="restore">Berrezarri</string>

@@ -1,7 +1,8 @@
 # Draft of the fdroiddata recipe (metadata/am.cyberhayq.chat.yml); modelled on fdroiddata's
 # eu.siacs.conversations.yml, but without its universalApk prebuild: turning the universal APK
 # off changes BuildConfig.VERSION_CODE (the main output becomes the first ABI split), so the
-# APK would differ from the one we sign. Test it with test-build.sh before a merge request.
+# APK would differ from the one we sign. Test it with test-build.sh before a merge request; drop
+# this header there (fdroiddata wants `commit` as a full hash, not a tag).
 Categories:
   - Internet
   - Messaging
@@ -10,6 +11,7 @@ License: GPL-3.0-only
 AuthorName: CyberHayq
 SourceCode: https://github.com/CyberHayq/Tatrak
 IssueTracker: https://github.com/CyberHayq/Tatrak/issues
+Changelog: https://github.com/CyberHayq/Tatrak/blob/HEAD/CHANGELOG.md
 
 AutoName: Tatrak
 
@@ -19,7 +21,7 @@ Repo: https://github.com/CyberHayq/Tatrak.git
 Builds:
   - versionName: 0.2.0
     versionCode: 5000101
-    commit: v0.2.0
+    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -34,7 +36,7 @@ Builds:
 
   - versionName: 0.2.0
     versionCode: 5000102
-    commit: v0.2.0
+    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -49,7 +51,7 @@ Builds:
 
   - versionName: 0.2.0
     versionCode: 5000103
-    commit: v0.2.0
+    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -64,7 +66,7 @@ Builds:
 
   - versionName: 0.2.0
     versionCode: 5000104
-    commit: v0.2.0
+    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless

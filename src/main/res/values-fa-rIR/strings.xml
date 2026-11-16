@@ -901,7 +901,8 @@
     <string name="retry_decryption">رمزگشایی دوباره</string>
     <string name="only_the_owner_can_change_group_chat_avatar">تنها مالک می‌تواند تصویر نمایهٔ گفتگوی عمومی را عوض کند</string>
     <string name="error_channel_description">این نوع از اعلان وقتی نمایش می‌یابد که در اتصال یک حساب مشکلی وجود داشته باشد.</string>
-    <string name="set_profile_picture">تصویر نمایهٔ Conversations</string>
+    <!-- Tatrak: the app's name -->
+    <string name="set_profile_picture">تصویر نمایهٔ Tatrak</string>
     <string name="shared_file_with_x">پرونده با %s هم‌رسانی شد</string>
     <string name="type_tablet">تبلت</string>
     <string name="view_media">دیدن رسانه</string>

@@ -99,11 +99,13 @@
     <string name="offering">предложение…</string>
     <string name="waiting">ожидание…</string>
     <string name="no_pgp_key">Нет ключа OpenPGP</string>
-    <string name="contact_has_no_pgp_key">Conversations не может зашифровать сообщение, потому что ваш собеседник не анонсирует свой открытый ключ.
+    <!-- Tatrak: the app's name -->
+    <string name="contact_has_no_pgp_key">Tatrak не может зашифровать сообщение, потому что ваш собеседник не анонсирует свой открытый ключ.
 \n
 \n<small>Попросите вашего собеседника настроить OpenPGP.</small></string>
     <string name="no_pgp_keys">Нет ключей OpenPGP</string>
-    <string name="contacts_have_no_pgp_keys">Conversations не может зашифровать сообщение, потому что ваши собеседники не анонсируют свои открытые ключи.
+    <!-- Tatrak: the app's name -->
+    <string name="contacts_have_no_pgp_keys">Tatrak не может зашифровать сообщение, потому что ваши собеседники не анонсируют свои открытые ключи.
 \n
 \n<small>Попросите ваших собеседников настроить OpenPGP.</small></string>
     <string name="pref_general">Общие</string>
@@ -1066,7 +1068,8 @@
     <string name="pref_fullscreen_notification">Полноэкранные уведомления</string>
     <string name="pref_backup_recurring">Регулярные резервные копии</string>
     <string name="pref_fullscreen_notification_summary">Разрешить приложению показывать экраны входящих звонков при заблокированном экране</string>
-    <string name="pref_up_long_summary">Conversations, будучи распределителем UnifiedPush, будет использовать стойкое, надёжное и малопотребляющее подключение XMPP для пробуждения других совместимых с UnifiedPush приложений, таких как Tusky, Ltt.rs, FluffyChat и др.</string>
+    <!-- Tatrak: the app's name -->
+    <string name="pref_up_long_summary">Tatrak, будучи распределителем UnifiedPush, будет использовать стойкое, надёжное и малопотребляющее подключение XMPP для пробуждения других совместимых с UnifiedPush приложений, таких как Tusky, Ltt.rs, FluffyChat и др.</string>
     <string name="detect_mim">Требовать привязку канала</string>
     <string name="detect_mim_summary">Привязка канала может обнаружить некоторые атаки посредником</string>
     <string name="pref_category_server_connection">Соединение с сервером</string>
