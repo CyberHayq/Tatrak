@@ -306,6 +306,7 @@ fun ChatScreen(
     // the message whose "more reactions" picker is open; dropped when the fragment shows another conversation
     var reactingTo by rememberSaveable(state.conversationUuid) { mutableStateOf<String?>(null) }
     val reactionPicker = remember { EmojiPickerSlot() }
+    var infoFor by rememberSaveable(state.conversationUuid) { mutableStateOf<String?>(null) }
     var wallpaperOpen by rememberSaveable { mutableStateOf(false) }
     val uriHandler = remember(actions) {
         object : UriHandler {
@@ -356,7 +357,7 @@ fun ChatScreen(
             val open = menu.value
             val menuItem = open?.let { (key) -> state.items.firstOrNull { it.key == key } as? MessageItem }
             if (open != null && menuItem != null) {
-                MessageMenu(menuItem, state.header.isGroup, actions, voice, anchor = open.second, onMoreReactions = { reactingTo = it }) { menu.value = null }
+                MessageMenu(menuItem, state.header.isGroup, actions, voice, anchor = open.second, onMoreReactions = { reactingTo = it }, onInfo = { infoFor = it }) { menu.value = null }
             }
         }
     }
@@ -386,6 +387,11 @@ fun ChatScreen(
     }
     reactingTo?.let { uuid ->
         ReactionSheet(reactionPicker, onPick = { actions.addReaction(uuid, it) }, onDismiss = { reactingTo = null })
+    }
+    infoFor?.let { key ->
+        (state.items.firstOrNull { it.key == key } as? MessageItem)?.let { item ->
+            MessageInfoSheet(item, onOpenKey = { actions.openMessageKey(key) }, onDismiss = { infoFor = null })
+        }
     }
 }
 

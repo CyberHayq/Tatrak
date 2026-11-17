@@ -99,9 +99,10 @@
     <string name="tatrak_delete_for_me">Delete only for me</string>
     <string name="tatrak_delete_for_me_confirm">Delete this message from this device? Others keep it.</string>
     <string name="tatrak_message_deleted">Message deleted</string>
-    <!-- long-press menu of a received message; %1$s is a date and time with seconds -->
-    <string name="tatrak_chat_sent_at">Sent %1$s</string>
-    <string name="tatrak_chat_received_at">Received %1$s</string>
+    <!-- long-press menu entry and its sheet -->
+    <string name="tatrak_chat_message_info">Message info</string>
+    <string name="tatrak_chat_info_sent">Sent</string>
+    <string name="tatrak_chat_info_received">Received</string>
     <string name="tatrak_shared_file_kept">The file was not deleted: it is outside Tatrak\'s storage. Delete it yourself if you no longer need it:\n%1$s</string>
     <!-- long-press menu: "OMEMO · verified"; %1$s the encryption method, %2$s the key's trust -->
     <string name="tatrak_chat_key_line">%1$s · %2$s</string>

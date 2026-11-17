@@ -185,21 +185,25 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   too tall. Before 2026-10-31 a copy was centred while the original stayed visible, which looked
   like a duplicate. One vibration only: `combinedClickable` vibrates on long press by itself
   (Compose foundation 1.7+), the extra manual one is gone.
-- Sent / received times (2026-11-15, owner): for a received message whose time received is known
-  (`Message.getTimeReceived()`, column `tatrak_time_received`), the menu starts with two
-  non-clickable secondary lines, "Sent <date, time>" (`getTimeSent`) and "Received <date, time>",
-  then a divider, like Telegram's "read at" row. `MessageItem.receivedAt` / `sentAt` carry the raw
-  epoch ms (null / 0 for own messages and unknown times), so only the open menu formats them
+- Message info (2026-11-17, owner): the long-press menu no longer starts with info lines; its last
+  entry "Message info" (`tatrak_chat_message_info`, Material "info outline" icon, Apache-2.0) is shown
+  when the time received is known or the message has an encryption line, and opens
+  `MessageInfoSheet` (a `ModalBottomSheet` built like `WallpaperSheet`, its message key kept in
+  `ChatScreen` with `rememberSaveable` like `reactingTo`). The menu is back to 200-260 dp wide.
+- Sent / received times (2026-11-15, owner; in the sheet since 2026-11-17): for a received message whose time received is known
+  (`Message.getTimeReceived()`, column `tatrak_time_received`), the sheet shows "Sent <date, time>"
+  (`getTimeSent`) and "Received <date, time>" rows. `MessageItem.receivedAt` / `sentAt` carry the raw
+  epoch ms (null / 0 for own messages and unknown times), so only the open sheet formats them
   (`receiptTime`: ICU skeleton `dMMM` + seconds via `DateFormat.getBestDateTimePattern`, the
   device's 12/24-hour setting, the year only when not the current one).
-- Message key (2026-11-16, owner, option A): under the times (or first, when there are none) the
-  menu names the encryption, `MessageItem.encryptionKey` (`KeyInfo`): the method from
+- Message key (2026-11-16, owner, option A; in the sheet since 2026-11-17): under the times (or first, when there are none) the
+  sheet names the encryption, `MessageItem.encryptionKey` (`KeyInfo`): the method from
   `CryptoHelper.encryptionTypeToText` ("Clear text", "OpenPGP", "OMEMO", imported PQ history) and,
   for an OMEMO message with `Message.getFingerprint()`, the key's trust ("this device" for the own
   fingerprint, else from `AxolotlService.getFingerprintTrust`: verified ✓, trusted not verified, not
   trusted, compromised, unknown key) and the fingerprint without the `05` type byte as two lines of
-  four 8-digit groups in monospace. The trust lookup is done once per message in the snapshot and
-  also feeds the bubble's lock (`security`). Tapping the fingerprint calls
+  four 8-digit groups in monospace (14sp, selectable). The trust lookup is done once per message in the snapshot and
+  also feeds the bubble's lock (`security`). The sheet's "Show this key in the key list" button calls
   `ChatActions.openMessageKey`: `ChatFragment` repeats `ConversationFragment.onContactPictureLongClicked`
   ("Contact details" / "Account details"; in a group the sender's real JID, as
   `MucDetailsContextMenuHelper`), so `ContactDetailsActivity` or `EditAccountActivity` opens with
@@ -207,7 +211,7 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   per-message PGP key, and the contact's current one could be taken for it. `keyTrustLabel` and
   `fingerprintLines` are top-level functions so they are unit-tested without an account connection.
   Call records get no key line. `ContactDetailsActivity` lists the message's key even when it is
-  inactive and inactive devices are hidden (Tatrak edit). The menu is up to 300 dp wide when it shows a fingerprint.
+  inactive and inactive devices are hidden (Tatrak edit).
 - Retractions (XEP-0424) of OMEMO messages need proof: the retraction must be encrypted with the
   message's key (or come from one of our own trusted devices), else the message stays and the
   bubble shows "Unverified request to delete this message" (`MessageItem.retractUnverified`, from

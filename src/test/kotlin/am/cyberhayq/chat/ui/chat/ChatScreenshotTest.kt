@@ -70,6 +70,8 @@ class ChatScreenshotTest {
 
     private val LINK = "https://example.am/changes"
 
+    private val FINGERPRINT = "3f2a9c41 b7e0d58a 61c4f9e2 0d7b3a68\n9e15c2f7 a4d860b3 c7f21e95 58b0a4d6"
+
     private val voice = MutableStateFlow(VoicePlayback("voice-1", true, 7_000, 19_000))
 
     /** Slate and Sea (style tokens): Sea by default, any other accent over the same slate surfaces; three night backgrounds. */
@@ -297,53 +299,61 @@ class ChatScreenshotTest {
     fun chatLongPressMenuNearTop() =
         capture("chat_menu_top", darkTheme = false, longPress = "Hey! Did you push") { privateChat(it) }
 
-    /** A received message with a known time received: "Sent" and "Received" above the actions. */
+    /** A received message with a known time received: "Message info" closes the menu; no times in the menu itself. */
     @Test
     fun chatLongPressMenuReceived() {
-        // a past year, so the year shows and the text does not depend on today's date
-        capture("chat_menu_received", darkTheme = false, longPress = "flag works now") { s ->
-            privateChat(s).let { st ->
-                st.copy(
-                    items =
-                        st.items.map {
-                            if (it is MessageItem && it.key == "m5")
-                                it.copy(sentAt = at("2025-11-14T21:03:10"), receivedAt = at("2025-11-14T21:03:15"))
-                            else it
-                        }
-                )
-            }
-        }
-        compose.onNodeWithText("Received", substring = true).assertExists()
+        capture("chat_menu_received", darkTheme = false, longPress = "flag works now") { s -> withInfo(privateChat(s), key = null) }
+        compose.onNodeWithText("Message info").assertExists()
+        compose.onNodeWithText("Received", substring = true).assertDoesNotExist()
     }
 
-    /** An OMEMO message: method, trust and the fingerprint, whose tap opens the key list. */
+    /** An OMEMO message: "Message info" opens the sheet with the times, trust and fingerprint; "Show this key" opens the key list. */
     @Test
-    fun chatLongPressMenuKey() {
+    fun chatMessageInfoSheet() {
         val opened = mutableListOf<String>()
         val actions = object : ChatActions by FakeActions {
             override fun openMessageKey(uuid: String) { opened += uuid }
         }
-        val fingerprint = "3f2a9c41 b7e0d58a 61c4f9e2 0d7b3a68\n9e15c2f7 a4d860b3 c7f21e95 58b0a4d6"
-        capture("chat_menu_key", darkTheme = false, actions = actions, longPress = "flag works now") { s ->
-            privateChat(s).let { st ->
-                st.copy(
-                    items =
-                        st.items.map {
-                            if (it is MessageItem && it.key == "m5")
-                                it.copy(
-                                    sentAt = at("2025-11-14T21:03:10"),
-                                    receivedAt = at("2025-11-14T21:03:15"),
-                                    encryptionKey = KeyInfo(R.string.encryption_choice_omemo, R.string.tatrak_chat_key_verified, fingerprint),
-                                )
-                            else it
-                        }
-                )
-            }
-        }
+        capture("chat_menu_key", darkTheme = false, actions = actions, longPress = "flag works now") { s -> withInfo(privateChat(s), FINGERPRINT) }
+        compose.onNodeWithText(FINGERPRINT).assertDoesNotExist()
+        compose.onNodeWithText("Message info").performClick()
+        compose.onNodeWithText("Message info").assertIsDisplayed() // now the sheet's title
+        compose.onNodeWithText("Sent").assertExists()
+        compose.onNodeWithText("Received").assertExists()
+        compose.onAllNodesWithText("2025", substring = true).assertCountEquals(2)
         compose.onNodeWithText("OMEMO · verified ✓").assertExists()
-        compose.onNodeWithText(fingerprint).performClick()
+        compose.onNodeWithText(FINGERPRINT).assertExists()
+        compose.onNodeWithText("Show this key in the key list").performClick()
         assertEquals(listOf("m5"), opened)
     }
+
+    /** The sheet's content on a 360 dp phone: a line of four fingerprint groups does not wrap. */
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun messageInfoSheet() {
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                val item = withInfo(privateChat(Samples(currentTextPalette())), FINGERPRINT).items.first { it.key == "m5" } as MessageItem
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) { MessageInfoSheetContent(item, onOpenKey = {}) }
+            }
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_message_info_sheet.png")
+    }
+
+    /** m5 with sent and received times in a past year (the year shows, so the text does not depend on today) and an OMEMO key. */
+    private fun withInfo(st: ChatState, key: String?) =
+        st.copy(
+            items =
+                st.items.map {
+                    if (it is MessageItem && it.key == "m5")
+                        it.copy(
+                            sentAt = at("2025-11-14T21:03:10"),
+                            receivedAt = at("2025-11-14T21:03:15"),
+                            encryptionKey = key?.let { k -> KeyInfo(R.string.encryption_choice_omemo, R.string.tatrak_chat_key_verified, k) },
+                        )
+                    else it
+                }
+        )
 
     private fun at(time: String) =
         java.time.LocalDateTime.parse(time).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
