@@ -18,6 +18,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
@@ -124,11 +125,9 @@ class ChatListScreenshotTest {
         assertTrue(drawerOpensOnRelease(0.7f, 0f, wasOpen = true)) // stays open
         assertFalse(drawerOpensOnRelease(0.6f, 0f, wasOpen = true))
         assertFalse(drawerOpensOnRelease(0.9f, -600f, wasOpen = true)) // fling back closes
-        assertTrue(archiveOpensOnRelease(170, 200))
-        assertFalse(archiveOpensOnRelease(169, 200))
-        assertTrue(archiveShowsOnRelease(67, 200))
-        assertFalse(archiveShowsOnRelease(66, 200))
-        assertFalse(archiveOpensOnRelease(0, 0) || archiveShowsOnRelease(0, 0))
+        assertTrue(archiveShowsOnRelease(170, 200))
+        assertFalse(archiveShowsOnRelease(169, 200))
+        assertFalse(archiveShowsOnRelease(0, 0))
         assertEquals(0.45f, archivePullShare(0, 200), 0.001f)
         assertEquals(0.2f, archivePullShare(200, 200), 0.001f)
         assertEquals(0.45f, archivePullShare(10, 0), 0.001f)
@@ -146,18 +145,25 @@ class ChatListScreenshotTest {
         list.performTouchInput { advanceEventTime(ARCHIVE_MIN_PULL_MS); moveBy(androidx.compose.ui.geometry.Offset(0f, 800f)) }
         compose.onNodeWithText("Release to see archive").assertIsDisplayed()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_archive_pull_release.png")
+        // released: the foreground shrinks onto the avatar (Telegram's out animation), then the real row shows
+        compose.mainClock.autoAdvance = false
         list.performTouchInput { up() }
+        compose.mainClock.advanceTimeBy(120)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_archive_morph.png")
+        compose.mainClock.autoAdvance = true
         compose.waitForIdle()
-        // released with the whole row pulled in: the archive opens at once
-        compose.onNodeWithText("Old project").assertExists()
+        compose.onNodeWithText("Release to see archive").assertDoesNotExist()
+        compose.onNodeWithText("Archive").assertIsDisplayed()
+        compose.onNodeWithText("Old project").assertDoesNotExist()
     }
 
     /** The archive drops in instead of replacing the list at once. */
     @Test
     fun theArchiveSlidesIn() {
         compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), NoListActions) } }
+        fullPull()
         compose.mainClock.autoAdvance = false
-        compose.onNodeWithText("Saved Messages").performTouchInput { swipeDown(startY = top + 10f, endY = top + 1800f, durationMillis = 600) }
+        compose.onNodeWithText("Archive").performClick()
         compose.mainClock.advanceTimeBy(180)
         // part-way: the list is gone, the archive is dropping in and fading in
         compose.onNodeWithText("Old project").assertExists()
@@ -168,29 +174,76 @@ class ChatListScreenshotTest {
         compose.onNodeWithText("Old project").assertIsDisplayed()
     }
 
-    /** Released with part of the row in view: the row stays, the archive is not opened. */
+    /** A slow pull with the row 85% in view leaves it there (Telegram); the archive opens only on a tap. */
+    private fun fullPull() {
+        compose.onNodeWithText("Saved Messages").performTouchInput { swipeDown(startY = top + 10f, endY = top + 1800f, durationMillis = 600) }
+        compose.waitForIdle()
+    }
+
+    /** Released with less than 85% of the row in view: it slides back out (Telegram). */
     @Test
-    fun aPartialPullShowsTheRow() {
+    fun aPartialPullHidesTheRowAgain() {
         compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), NoListActions) } }
         compose.onNodeWithText("Saved Messages").performTouchInput {
-            down(center); moveBy(androidx.compose.ui.geometry.Offset(0f, 40f)); moveBy(androidx.compose.ui.geometry.Offset(0f, 200f)); up()
+            down(center); moveBy(androidx.compose.ui.geometry.Offset(0f, 40f)); moveBy(androidx.compose.ui.geometry.Offset(0f, 200f))
+            advanceEventTime(ARCHIVE_MIN_PULL_MS); up()
         }
         compose.waitForIdle()
-        compose.onNodeWithText("Archive").assertIsDisplayed()
-        compose.onNodeWithText("Swipe down to see archive").assertDoesNotExist()
+        compose.onNodeWithText("Archive").assertIsNotDisplayed()
+        compose.onNodeWithText("Swipe down to see archive").assertIsNotDisplayed()
         compose.onNodeWithText("Old project").assertDoesNotExist()
     }
 
-    /** A quick jerk pulls the whole row in but under 200 ms: the row shows, the archive does not open (Telegram). */
+    /** The first archiving tells where the hidden archive is (Telegram's archive hint); later ones do not. */
     @Test
-    fun aQuickFullPullOnlyShowsTheRow() {
+    fun theFirstArchivingShowsTheArchiveHintOnce() {
+        compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), NoListActions) } }
+        val hint = "Swipe the list down from the top to see the archive."
+        fun archiveFirstChat() {
+            compose.onNodeWithText("Saved Messages").performTouchInput { longClick() }
+            compose.onNodeWithContentDescription("Archive").performClick()
+            compose.waitForIdle()
+        }
+        archiveFirstChat()
+        compose.onNodeWithText(hint, substring = true).assertExists()
+        archiveFirstChat()
+        compose.onNodeWithText("Chat archived", substring = true).assertExists()
+        compose.onNodeWithText(hint, substring = true).assertDoesNotExist()
+    }
+
+    /** Pulled in quickly, held still past 200 ms, released: the row stays and the release still ticks once. */
+    @Test
+    fun aHeldPullTicksOnRelease() {
+        var ticks = 0
+        val haptics = object : androidx.compose.ui.hapticfeedback.HapticFeedback {
+            override fun performHapticFeedback(hapticFeedbackType: androidx.compose.ui.hapticfeedback.HapticFeedbackType) { ticks++ }
+        }
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalHapticFeedback provides haptics) {
+                    ChatListScreen(sampleState(), NoListActions)
+                }
+            }
+        }
+        compose.onNodeWithText("Saved Messages").performTouchInput {
+            down(center); moveBy(androidx.compose.ui.geometry.Offset(0f, 40f)); moveBy(androidx.compose.ui.geometry.Offset(0f, 1200f))
+            advanceEventTime(ARCHIVE_MIN_PULL_MS + 50); up()
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("Archive").assertIsDisplayed()
+        assertEquals(1, ticks)
+    }
+
+    /** A quick jerk pulls the whole row in but under 200 ms: the row slides back out (Telegram's minPullingTime). */
+    @Test
+    fun aQuickFullPullHidesTheRowAgain() {
         compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), NoListActions) } }
         compose.onNodeWithText("Saved Messages").performTouchInput {
             down(center); moveBy(androidx.compose.ui.geometry.Offset(0f, 40f)); moveBy(androidx.compose.ui.geometry.Offset(0f, 1200f)); moveBy(androidx.compose.ui.geometry.Offset(0f, 10f)); up()
         }
         compose.waitForIdle()
         compose.onNodeWithText("Old project").assertDoesNotExist()
-        compose.onNodeWithText("Archive").assertIsDisplayed()
+        compose.onNodeWithText("Archive").assertIsNotDisplayed()
     }
 
     @Test
@@ -243,10 +296,14 @@ class ChatListScreenshotTest {
     }
 
     @Test
-    fun aFullPullOpensTheArchive() {
+    fun aFullPullShowsTheRowAndATapOpensTheArchive() {
         compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), NoListActions) } }
+        fullPull()
         compose.onNodeWithText("Old project").assertDoesNotExist()
-        compose.onNodeWithText("Saved Messages").performTouchInput { swipeDown(startY = top + 10f, endY = top + 1800f, durationMillis = 600) }
+        compose.onNodeWithText("Archive").assertIsDisplayed()
+        compose.onNodeWithText("Swipe down to see archive").assertDoesNotExist()
+        compose.onNodeWithText("Release to see archive").assertDoesNotExist()
+        compose.onNodeWithText("Archive").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Old project").assertExists()
         // back in the list, the row is hidden again (Telegram)
@@ -270,10 +327,11 @@ class ChatListScreenshotTest {
         compose.onNodeWithText("Old project").assertDoesNotExist()
         compose.onNodeWithText(long.chats.first().title).assertIsDisplayed()
         compose.onNodeWithText("Archive").assertIsNotDisplayed()
-        // a fresh pull from the top still opens it
+        // a fresh pull from the top still shows the row
         compose.onRoot().performTouchInput { swipeDown(startY = top + 600f, endY = bottom - 10f, durationMillis = 600) }
         compose.waitForIdle()
-        compose.onNodeWithText("Old project").assertExists()
+        compose.onNodeWithText("Archive").assertIsDisplayed()
+        compose.onNodeWithText("Old project").assertDoesNotExist()
     }
 
     /** A chat that gets a message moves to the top and shows there, not just above the screen. */
@@ -305,7 +363,8 @@ class ChatListScreenshotTest {
         compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState().let { it.copy(chats = it.chats.take(3)) }, NoListActions) } }
         compose.onNodeWithText("Archive").assertIsNotDisplayed()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_archive_hidden_short.png")
-        compose.onNodeWithText("Saved Messages").performTouchInput { swipeDown(startY = top + 10f, endY = top + 1800f, durationMillis = 600) }
+        fullPull()
+        compose.onNodeWithText("Archive").performClick()
         compose.waitForIdle()
         compose.onNodeWithText("Old project").assertExists()
         compose.onRoot().performTouchInput { swipeRight() }

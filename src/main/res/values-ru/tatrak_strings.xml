@@ -32,7 +32,7 @@
     <string name="tatrak_delete_chat_text">Чат исчезнет из списка. Из групп вы выйдете.</string>
     <string name="tatrak_delete">Удалить</string>
     <string name="tatrak_archive_empty">Архив пуст</string>
-    <string name="tatrak_archive_empty_hint">Смахните чат влево, чтобы убрать его в архив</string>
+    <string name="tatrak_archive_empty_hint">Удерживайте чат и нажмите кнопку архива, чтобы перенести его сюда</string>
     <string name="tatrak_accent_blue">Синий</string>
     <string name="tatrak_accent_cyan">Бирюзовый</string>
     <string name="tatrak_accent_green">Зелёный</string>

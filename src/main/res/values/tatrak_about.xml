@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Tatrak's About header; the licence text and library list follow in tatrak_about_legal -->
-    <string name="tatrak_about_header">Tatrak • Secure by design.\nOMEMO end-to-end encryption, an encrypted database and encrypted media on the device, over open XMPP.\n\nCopyright © 2026 CyberHayq\nSource code: https://github.com/CyberHayq/Tatrak\n\nBased on Conversations, copyright © 2014-2026 Daniel Gultsch\nhttps://codeberg.org/iNPUTmice/Conversations</string>
+    <string name="tatrak_about_header">Tatrak • Secure by design.\nOMEMO end-to-end encryption, an encrypted database and encrypted media on the device, over open XMPP.\n\nCopyright © 2026 CyberHayq\nSource code: https://github.com/CyberHayq/Tatrak\n\nBased on Conversations, copyright © 2014-2026 Daniel Gultsch\nhttps://codeberg.org/iNPUTmice/Conversations\n\nParts of the chat list animations are ported from Telegram for Android, GNU GPL v2 or later\nhttps://github.com/DrKLO/Telegram</string>
     <!-- upstream pref_about_message without its header and source link, plus Tatrak's own libraries;
          keep the library list in step with upstream about.xml when merging -->
     <string name="tatrak_about_legal" translatable="false">\n\nThis program is free software: you can redistribute it and/or modify

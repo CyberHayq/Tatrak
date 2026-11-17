@@ -5,4 +5,6 @@
     <string name="tatrak_archive_hide">Hide above list</string>
     <string name="tatrak_archive_pin">Pin in chat list</string>
     <string name="tatrak_drawer_close">Close menu</string>
+    <!-- second line of the first "Chat archived" message while the archive is hidden -->
+    <string name="tatrak_archive_hint">Swipe the list down from the top to see the archive.</string>
 </resources>

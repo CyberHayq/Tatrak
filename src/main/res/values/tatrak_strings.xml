@@ -32,7 +32,7 @@
     <string name="tatrak_delete_chat_text">The chat disappears from the list. You will leave group chats.</string>
     <string name="tatrak_delete">Delete</string>
     <string name="tatrak_archive_empty">Archive is empty</string>
-    <string name="tatrak_archive_empty_hint">Swipe a chat to the left to archive it</string>
+    <string name="tatrak_archive_empty_hint">Long-press a chat and tap the archive button to move it here</string>
     <string name="tatrak_accent_blue">Blue</string>
     <string name="tatrak_accent_cyan">Cyan</string>
     <string name="tatrak_accent_green">Green</string>

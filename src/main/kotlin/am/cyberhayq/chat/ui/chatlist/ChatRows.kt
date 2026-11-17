@@ -62,9 +62,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
 
-private val AvatarSize = 54.dp
+internal val AvatarSize = 54.dp
 internal val RowHeight = 72.dp
-private val RowHorizontalPadding = 10.dp
+internal val RowHorizontalPadding = 10.dp
+internal val ArchiveIconSize = 26.dp
 private val AvatarTextGap = 12.dp
 private val DraftColor = Color(0xFFDD4B39)
 
@@ -190,7 +191,7 @@ private fun ArchiveRowFrame(archived: List<ChatListItem>, onClick: () -> Unit, o
                     painterResource(R.drawable.ic_archive_24dp),
                     contentDescription = null,
                     tint = Color.White,
-                    modifier = Modifier.size(26.dp),
+                    modifier = Modifier.size(ArchiveIconSize),
                 )
             }
         },

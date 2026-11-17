@@ -1,9 +1,15 @@
 package am.cyberhayq.chat.ui.chatlist
 
+import am.cyberhayq.chat.ui.theme.LocalAvatarShape
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.contentOn
 import am.cyberhayq.chat.ui.theme.rememberPreference
 import android.content.Context
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.EaseInOut
+import androidx.compose.animation.core.Easing
+import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animate
 import androidx.compose.animation.core.animateFloatAsState
@@ -14,19 +20,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyListState
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -42,6 +42,8 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
@@ -53,12 +55,28 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.positionChange
 import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.StrokeJoin
+import androidx.compose.ui.graphics.TransformOrigin
+import androidx.compose.ui.graphics.addOutline
+import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.scale
+import androidx.compose.ui.graphics.drawscope.translate
+import androidx.compose.ui.graphics.drawscope.withTransform
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.Velocity
@@ -69,6 +87,8 @@ import eu.siacs.conversations.R
 import kotlin.math.abs
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 // ---- pure decisions (unit-tested) ----
@@ -86,28 +106,25 @@ internal fun drawerOpensOnRelease(progress: Float, velocityDpPerSecond: Float, w
     }
 
 /**
- * Share of the hidden archive row in view when the finger lifts: from [ARCHIVE_OPEN_FRACTION] the archive
- * opens if the row has been coming in for [ARCHIVE_MIN_PULL_MS] (Telegram's PullForegroundDrawable
- * SNAP_HEIGHT and minPullingTime), from [ARCHIVE_SHOW_FRACTION] the row stays in view, less slides it back
- * (an accidental pull at the top of the list).
+ * Share of the hidden archive row in view when the finger lifts: from [ARCHIVE_SHOW_FRACTION] the row stays
+ * in view if it has been coming in for [ARCHIVE_MIN_PULL_MS] (Telegram's PullForegroundDrawable SNAP_HEIGHT
+ * and minPullingTime), less slides it back (an accidental pull at the top of the list).
  */
-private const val ARCHIVE_OPEN_FRACTION = 0.85f
-private const val ARCHIVE_SHOW_FRACTION = 1f / 3f
+private const val ARCHIVE_SHOW_FRACTION = 0.85f
 internal const val ARCHIVE_MIN_PULL_MS = 200L
 
-internal fun archiveOpensOnRelease(shown: Int, rowHeight: Int): Boolean =
-    rowHeight > 0 && shown >= rowHeight * ARCHIVE_OPEN_FRACTION
+internal fun archiveShowsOnRelease(shown: Int, rowHeight: Int): Boolean =
+    rowHeight > 0 && shown >= rowHeight * ARCHIVE_SHOW_FRACTION
 
 /** Share of the finger's movement the row follows while pulled in: Telegram's pull parallax, 0.45 down to 0.2. */
 internal fun archivePullShare(shown: Int, rowHeight: Int): Float =
     0.45f - 0.25f * (if (rowHeight > 0) (shown.toFloat() / rowHeight).coerceIn(0f, 1f) else 0f)
 
-internal fun archiveShowsOnRelease(shown: Int, rowHeight: Int): Boolean =
-    rowHeight > 0 && shown >= rowHeight * ARCHIVE_SHOW_FRACTION
-
 // ---- hidden / pinned archive row ----
 
 const val ARCHIVE_HIDDEN_KEY = "tatrak_archive_hidden"
+/** Set once the "pull down to see the archive" hint has been shown with the first archiving. */
+const val ARCHIVE_HINT_SHOWN_KEY = "tatrak_archive_hint_shown"
 
 /** Telegram's "hide above list" (the default) or "pin in chat list", updated live. */
 @Composable
@@ -119,11 +136,12 @@ fun setArchiveHidden(context: Context, hidden: Boolean) =
 
 /**
  * Telegram's hidden archive. Pulling the list down brings the row into view under a foreground ("Swipe
- * down to see archive", "Release to see archive"). A release with the whole row pulled in opens the
- * archive; with part of it the real row stays, until it scrolls out of view; a short pull hides it again.
+ * down to see archive", "Release to see archive"). A release with the row pulled in far enough and long
+ * enough leaves the real row in view, until it scrolls out of view; any other release hides it again. A
+ * tap on the row opens the archive.
  */
 @Stable
-internal class ArchiveReveal(private val list: LazyListState, private val onOpen: () -> Unit) : NestedScrollConnection {
+internal class ArchiveReveal(private val list: LazyListState) : NestedScrollConnection {
     var revealed by mutableStateOf(false)
 
     private val rowHeight get() = if (list.firstVisibleItemIndex == 0) list.layoutInfo.visibleItemsInfo.firstOrNull()?.size ?: 0 else 0
@@ -131,15 +149,18 @@ internal class ArchiveReveal(private val list: LazyListState, private val onOpen
     /** Pixels of the hidden row in view. */
     private val shown get() = if (rowHeight == 0) 0 else rowHeight - list.firstVisibleItemScrollOffset
 
+    /** Share of the hidden row in view, 0..1. */
+    val pullProgress get() = if (rowHeight == 0) 0f else shown.toFloat() / rowHeight
+
     /** Time of the latest touch event, set by [archivePull]: the pull is timed in event time. */
     internal var eventTime = 0L
 
     /** Event time when the row started coming into view; null while it is out. */
     private var pullStart: Long? = null
 
-    /** A release now would open the archive. */
+    /** A release now would leave the row in view. */
     val reached get() =
-        !revealed && archiveOpensOnRelease(shown, rowHeight) && eventTime - (pullStart ?: eventTime) >= ARCHIVE_MIN_PULL_MS
+        !revealed && archiveShowsOnRelease(shown, rowHeight) && eventTime - (pullStart ?: eventTime) >= ARCHIVE_MIN_PULL_MS
 
     /** Whether the current drag began with the first chat at the top; null between drags. */
     private var dragFromTop: Boolean? = null
@@ -153,7 +174,7 @@ internal class ArchiveReveal(private val list: LazyListState, private val onOpen
         if (revealed || available.y <= 0f) return Offset.Zero
         if (source == NestedScrollSource.UserInput && dragFromTop == true) {
             val atRow = list.firstVisibleItemIndex == 0 || (list.firstVisibleItemIndex == 1 && list.firstVisibleItemScrollOffset == 0)
-            // the row resists: the finger travels about 2.5 rows to pull it in far enough to open
+            // the row resists: the finger travels about 2.5 rows to pull it in far enough to stay
             return if (atRow) Offset(0f, available.y * (1f - archivePullShare(shown, rowHeight))) else Offset.Zero
         }
         return when (list.firstVisibleItemIndex) {
@@ -172,17 +193,11 @@ internal class ArchiveReveal(private val list: LazyListState, private val onOpen
     override suspend fun onPreFling(available: Velocity): Velocity {
         dragFromTop = null
         if (revealed || rowHeight == 0) return Velocity.Zero
-        when {
-            reached -> {
-                onOpen()
-                // back in the list the row is hidden again
-                if (list.canScrollForward) list.scrollToItem(1)
-            }
-            archiveShowsOnRelease(shown, rowHeight) -> {
-                revealed = true
-                list.animateScrollToItem(0)
-            }
-            list.canScrollForward -> list.animateScrollToItem(1)
+        if (reached) {
+            revealed = true
+            list.animateScrollToItem(0)
+        } else if (list.canScrollForward) {
+            list.animateScrollToItem(1)
         }
         return available
     }
@@ -196,34 +211,178 @@ internal fun Modifier.archivePull(reveal: ArchiveReveal): Modifier =
         }
     }
 
-/** Over the hidden row while it is pulled into view; fades out when a release leaves the row in view. */
+private val PullMargin = 8.dp
+private val PullRadius = 9.dp
+/** Small circle plus its margins: below this much row in view the foreground fades in. */
+private val PullStart = 34.dp
+private val PullAccelerate = Easing { it * it }
+private val PullEaseOutQuint = CubicBezierEasing(0.23f, 1f, 0.32f, 1f)
+private val White = ColorFilter.tint(Color.White)
+
+/**
+ * Over the hidden row while it is pulled into view, after Telegram's PullForegroundDrawable (21f7d10): a pill
+ * growing with the pull up to a small circle with an arrow under the avatar, and the hint text; past the
+ * threshold the arrow turns and the accent spreads from the circle. A release that leaves the row in view
+ * shrinks the foreground onto the avatar ("out" with a bounce), then the real row shows.
+ */
 @Composable
 internal fun ArchivePullForeground(reveal: ArchiveReveal, modifier: Modifier = Modifier) {
-    val alpha = animateFloatAsState(if (reveal.revealed) 0f else 1f, tween(250), label = "archive foreground")
-    if (alpha.value == 0f) return
+    val revealed = reveal.revealed
+    // a fresh composition of an already revealed row shows the real row at once
+    var gone by remember { mutableStateOf(revealed) }
+    val out = remember { Animatable(0f) }
+    val bounce = remember { Animatable(0f) }
+    LaunchedEffect(revealed) {
+        if (!revealed) {
+            gone = false
+            out.snapTo(0f)
+            bounce.snapTo(0f)
+            return@LaunchedEffect
+        }
+        if (gone) return@LaunchedEffect
+        bounce.snapTo(-0.05f)
+        coroutineScope {
+            launch {
+                delay(180)
+                bounce.animateTo(0.02f, tween(150, easing = EaseInOut))
+                bounce.animateTo(0f, tween(135, easing = EaseInOut))
+            }
+            out.animateTo(1f, tween(250, easing = PullEaseOutQuint))
+        }
+        gone = true
+    }
+    if (gone) return
     val reached by remember(reveal) { derivedStateOf { reveal.reached } }
     val haptic = LocalHapticFeedback.current
-    LaunchedEffect(reached) { if (reached) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
-    val fill = if (reached) MaterialTheme.colorScheme.primary else TatrakTheme.chatColors.archiveAvatar
-    val content = if (reached) contentOn(fill) else Color.White
-    // at the bottom: the row slides in from above, so its lower edge shows first
-    Row(
-        verticalAlignment = Alignment.Bottom,
-        horizontalArrangement = Arrangement.Center,
-        modifier = modifier.graphicsLayer { this.alpha = alpha.value }.background(fill).padding(bottom = 14.dp),
+    // text and arrow follow the pulled share alone, the colour also waits for the minimum pull time (Telegram)
+    val endText by remember(reveal) { derivedStateOf { reveal.pullProgress > ARCHIVE_SHOW_FRACTION } }
+    val swap = animateFloatAsState(if (endText) 0f else 1f, tween(170, easing = LinearEasing), label = "archive text")
+    val arrow = animateFloatAsState(if (endText) 0f else 1f, tween(250, easing = EaseInOut), label = "archive arrow")
+    // also on a successful release: eventTime is not observed, so a pull held still past 200 ms never sets reached
+    val colorize = reached || revealed
+    LaunchedEffect(colorize) { if (colorize) haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove) }
+    val accentIn = remember { Animatable(0f) }
+    val accentOut = remember { Animatable(1f) }
+    val lastColorize = remember { booleanArrayOf(colorize) }
+    LaunchedEffect(colorize) {
+        if (lastColorize[0] == colorize) return@LaunchedEffect
+        lastColorize[0] = colorize
+        // the new colour spreads from the small circle over the old one
+        (if (colorize) accentIn else accentOut).run { snapTo(0f); animateTo(1f, tween(230, easing = PullAccelerate)) }
+    }
+    val grey = TatrakTheme.chatColors.archiveAvatar
+    val active = MaterialTheme.colorScheme.primary
+    val shape = LocalAvatarShape.current
+    val icon = painterResource(R.drawable.ic_archive_24dp)
+    val arrowPath = remember { Path() }
+    val clipPath = remember { Path() }
+    Box(
+        modifier.drawWithContent {
+            val w = size.width
+            val h = size.height
+            val margin = PullMargin.toPx()
+            val radius = PullRadius.toPx()
+            val visible = h * reveal.pullProgress
+            val startPull = (visible / PullStart.toPx()).coerceAtMost(1f)
+            val o = out.value
+            val b = bounce.value
+            val avatarRadius = AvatarSize.toPx() / 2
+            // the small circle sits under the avatar's centre, which the out phase ends on
+            val cx = (RowHorizontalPadding.toPx() + avatarRadius).let { if (layoutDirection == LayoutDirection.Rtl) w - it else it }
+            val cy = h / 2
+            val sy = h - margin - radius
+            val accent = lerp(grey, active, 1f - o)
+            val clip = if (o == 0f) null else {
+                val r = avatarRadius + avatarRadius * b + (w - avatarRadius) * (1f - o)
+                clipPath.apply {
+                    reset()
+                    addOutline(shape.createOutline(Size(2 * r, 2 * r), layoutDirection, this@drawWithContent))
+                    translate(Offset(cx - r, cy - r))
+                }
+            }
+            withTransform({ if (clip != null) clipPath(clip) }) {
+                drawRect(grey)
+                val revealCentre = Offset(cx, sy + (cy - sy) * o)
+                val inRadius = w * accentIn.value
+                val outRadius = w * accentOut.value
+                if (colorize) {
+                    if (outRadius > inRadius) drawCircle(grey, outRadius, revealCentre)
+                    if (inRadius > 0f) drawCircle(accent, inRadius, revealCentre)
+                } else {
+                    if (inRadius > outRadius) drawCircle(accent, inRadius, revealCentre)
+                    if (outRadius > 0f) drawCircle(grey, outRadius, revealCentre)
+                }
+                if (visible > PullStart.toPx()) {
+                    drawRoundRect(
+                        Color.White.copy(alpha = (1f - (o * 2f).coerceAtMost(1f)) * 0.4f * startPull),
+                        Offset(cx - radius, h - visible + margin),
+                        Size(2 * radius, visible - 2 * margin),
+                        CornerRadius(radius),
+                    )
+                }
+                if (o == 0f) {
+                    drawCircle(Color.White.copy(alpha = startPull), radius, Offset(cx, sy))
+                    val arrowColor = if (colorize) accent else grey
+                    rotate(180f * arrow.value, Offset(cx, sy)) {
+                        translate(cx - radius, sy - radius + 1.dp.toPx()) {
+                            // Telegram's ArrowDrawable: a triangle and a stem in an 18dp box, filled and stroked
+                            arrowPath.reset()
+                            arrowPath.moveTo(radius, 4.98.dp.toPx())
+                            arrowPath.lineTo(4.95.dp.toPx(), 9.dp.toPx())
+                            arrowPath.lineTo(2 * radius - 4.95.dp.toPx(), 9.dp.toPx())
+                            arrowPath.close()
+                            drawPath(arrowPath, arrowColor)
+                            drawPath(arrowPath, arrowColor, style = Stroke(1.dp.toPx(), join = StrokeJoin.Round))
+                            drawRect(arrowColor, Offset(7.06.dp.toPx(), 7.5.dp.toPx()), Size(3.88.dp.toPx(), 4.1.dp.toPx()))
+                        }
+                    }
+                }
+                this@drawWithContent.drawContent()
+            }
+            if (o > 0f) {
+                val box = ArchiveIconSize.toPx()
+                val start = 24.dp.toPx() / box
+                translate(0f, (sy - cy) * (1f - o)) {
+                    scale(start + (1f - start) * o + b, Offset(cx, cy)) {
+                        translate(cx - box / 2, cy - box / 2) { with(icon) { draw(Size(box, box), colorFilter = White) } }
+                    }
+                }
+            }
+        }
     ) {
-        Icon(
-            painterResource(R.drawable.ic_keyboard_double_arrow_down_24dp),
-            contentDescription = null,
-            tint = content,
-            modifier = Modifier.size(20.dp).graphicsLayer { rotationZ = if (reached) 180f else 0f },
-        )
-        Spacer(Modifier.width(8.dp))
-        Text(
-            stringResource(if (reached) R.string.tatrak_archive_release else R.string.tatrak_archive_pull),
-            color = content,
-            fontSize = 14.sp,
-        )
+        val pullText by remember { derivedStateOf { swap.value > 0f } }
+        val releaseText by remember { derivedStateOf { swap.value < 1f } }
+        val style = TextStyle(color = if (colorize) contentOn(active) else Color.White, fontSize = 16.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+        val place = Modifier.align(Alignment.BottomCenter).padding(start = 64.dp, end = 64.dp, bottom = 11.dp)
+        // scale pivots as in Telegram: the outgoing text shrinks towards below, the incoming grows from above
+        if (pullText) {
+            Text(
+                stringResource(R.string.tatrak_archive_pull),
+                style = style,
+                modifier = place.then(if (endText || revealed) Modifier.clearAndSetSemantics {} else Modifier).graphicsLayer {
+                    val s = swap.value
+                    alpha = s * (reveal.pullProgress * RowHeight.toPx() / PullStart.toPx()).coerceAtMost(1f)
+                    scaleX = 0.8f + 0.2f * s
+                    scaleY = scaleX
+                    translationY = 8.dp.toPx() * (1f - s)
+                    transformOrigin = TransformOrigin(0.5f, 1f + 8.dp.toPx() * (1f - s) / size.height)
+                },
+            )
+        }
+        if (releaseText) {
+            Text(
+                stringResource(R.string.tatrak_archive_release),
+                style = style,
+                modifier = place.then(if (!endText || revealed) Modifier.clearAndSetSemantics {} else Modifier).graphicsLayer {
+                    val s = swap.value
+                    alpha = (1f - s) * (reveal.pullProgress * RowHeight.toPx() / PullStart.toPx()).coerceAtMost(1f)
+                    scaleX = 0.9f + 0.1f * (1f - s)
+                    scaleY = scaleX
+                    translationY = 8.dp.toPx() * s
+                    transformOrigin = TransformOrigin(0.5f, 1f - 16.dp.toPx() * s / size.height)
+                },
+            )
+        }
     }
 }
 

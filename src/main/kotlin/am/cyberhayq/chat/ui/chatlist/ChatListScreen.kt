@@ -112,6 +112,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.preference.PreferenceManager
 import eu.siacs.conversations.R
 import eu.siacs.conversations.utils.FtsUtils
 import eu.siacs.conversations.utils.TimeFrameUtils
@@ -225,12 +226,17 @@ fun ChatListScreen(
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
             if (archived) {
-                val message =
+                val done =
                     if (uuids.size == 1) {
                         context.getString(R.string.tatrak_archived_one)
                     } else {
                         context.getString(R.string.tatrak_archived_many, uuids.size)
                     }
+                // Telegram's archive hint: once, and only while the archive row is hidden above the list
+                val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+                val hint = prefs.getBoolean(ARCHIVE_HIDDEN_KEY, true) && !prefs.getBoolean(ARCHIVE_HINT_SHOWN_KEY, false)
+                if (hint) prefs.edit().putBoolean(ARCHIVE_HINT_SHOWN_KEY, true).apply()
+                val message = if (hint) done + "\n" + context.getString(R.string.tatrak_archive_hint) else done
                 // with an action M3 defaults to Indefinite, which never goes away
                 val result =
                     snackbar.showSnackbar(
@@ -539,13 +545,12 @@ private fun ChatList(
     val formatter = rememberChatTimeFormatter()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     // hidden: the row is item 0 but the list starts scrolled past it, so a pull brings it into view by
-    // plain scrolling, covered by the pull foreground until a release shows it or opens the archive (ArchiveReveal)
+    // plain scrolling, covered by the pull foreground until a release shows it (ArchiveReveal)
     // with no chat outside the archive the row stays in sight, or the screen would be blank
     val hiddenArchive = archive != null && archive.hidden && chats.isNotEmpty()
     val rowPx = with(LocalDensity.current) { RowHeight.roundToPx() }
     val listState = rememberLazyListState(initialFirstVisibleItemScrollOffset = if (hiddenArchive) rowPx else 0)
-    val openArchive by rememberUpdatedState(archive?.open)
-    val reveal = remember(listState) { ArchiveReveal(listState) { openArchive?.invoke() } }
+    val reveal = remember(listState) { ArchiveReveal(listState) }
     val scope = rememberCoroutineScope()
     // Compose keeps the first visible chat in place, so a chat moving to the top would land above the
     // screen; at the top of the list it is shown instead, as in Telegram

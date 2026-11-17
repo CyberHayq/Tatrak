@@ -81,4 +81,6 @@ messengers](docs/messenger-comparison.md) is in `docs/`.
 ## Credits and licence
 
 Tatrak is a fork of [Conversations](https://codeberg.org/iNPUTmice/Conversations) by Daniel
-Gultsch and contributors. Licensed under the [GNU GPL v3](LICENSE).
+Gultsch and contributors. Parts of the chat list animations are ported from
+[Telegram for Android](https://github.com/DrKLO/Telegram) (GNU GPL v2 or later). Licensed under the
+[GNU GPL v3](LICENSE).
