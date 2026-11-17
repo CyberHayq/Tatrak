@@ -5,7 +5,9 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
@@ -18,6 +20,7 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
@@ -33,7 +36,8 @@ internal fun MessageInfoSheet(item: MessageItem, onOpenKey: () -> Unit, onDismis
 
 @Composable
 internal fun MessageInfoSheetContent(item: MessageItem, onOpenKey: () -> Unit, modifier: Modifier = Modifier) {
-    Column(modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, bottom = 16.dp)) {
+    // scrolls in a short window (landscape, large text): the sheet has no partially expanded state to drag
+    Column(modifier.fillMaxWidth().verticalScroll(rememberScrollState()).padding(start = 20.dp, end = 20.dp, bottom = 16.dp)) {
         Text(
             stringResource(R.string.tatrak_chat_message_info),
             style = MaterialTheme.typography.titleMedium,
@@ -67,7 +71,8 @@ internal fun MessageInfoSheetContent(item: MessageItem, onOpenKey: () -> Unit, m
 @Composable
 private fun InfoRow(label: Int, value: String) {
     Row(Modifier.fillMaxWidth().padding(vertical = 4.dp)) {
-        Text(stringResource(label), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-        Text(value, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface)
+        // the short label keeps its width, a long date wraps instead of squeezing it out
+        Text(stringResource(label), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(end = 12.dp))
+        Text(value, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, textAlign = TextAlign.End, modifier = Modifier.weight(1f))
     }
 }

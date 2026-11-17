@@ -28,6 +28,7 @@ import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
@@ -337,6 +338,9 @@ class ChatScreenshotTest {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) { MessageInfoSheetContent(item, onOpenKey = {}) }
             }
         }
+        val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
+        compose.onNodeWithText(FINGERPRINT).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
+        assertEquals(2, layouts.single().lineCount)
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_message_info_sheet.png")
     }
 
