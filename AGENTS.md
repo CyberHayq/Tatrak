@@ -30,6 +30,11 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
   staging: `git grep --cached -n "/home/"` (upstream SVGs in `art/` excepted) and
   `git grep --cached -lP '[\x{0400}-\x{04FF}]' -- '*.md'`.
 - Tests use generated media, never the owner's personal files (`~/Pictures` and the like).
+- Every commit goes to the public repository with its message (`knowledge/ops/public-export.md`).
+  Private `knowledge/` pages (outside `PUBLIC_KNOWLEDGE` in `tools/public-export/export.py`) may
+  share a commit with code only when the message says nothing they alone hold. Anything private
+  (another project's defect, a finding, owner-machine details) goes in a commit of its own that
+  touches only private pages.
 
 ## What may change
 
