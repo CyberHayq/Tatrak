@@ -364,10 +364,21 @@ public class MessageParser extends AbstractParser
             bodyIsFallback = false;
         }
 
-        if ((body != null && !bodyIsFallback)
-                || pgpEncrypted != null
-                || (axolotlEncrypted != null && axolotlEncrypted.hasExtension(Payload.class))
-                || oobUrl != null) {
+        // Tatrak: an OMEMO reaction's payload is only a fallback (Cheogram 3f4589d sends
+        // "> quote\n\n👍" encrypted, without fallback markers); Cheogram's parser drops every body
+        // sent with <reactions>, here only this one so plain text, PGP and files still show
+        final boolean encryptedReaction =
+                packet.hasExtension(Reactions.class)
+                        && axolotlEncrypted != null
+                        && axolotlEncrypted.hasExtension(Payload.class)
+                        && pgpEncrypted == null
+                        && oobUrl == null;
+        if (!encryptedReaction
+                && ((body != null && !bodyIsFallback)
+                        || pgpEncrypted != null
+                        || (axolotlEncrypted != null
+                                && axolotlEncrypted.hasExtension(Payload.class))
+                        || oobUrl != null)) {
             final boolean conversationIsProbablyMuc =
                     isTypeGroupChat
                             || mucUserElement != null
