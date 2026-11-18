@@ -822,7 +822,8 @@ private fun StatusIcon(status: DeliveryStatus, color: Color) {
             DeliveryStatus.NONE -> return
         }),
         tint = tint,
-        modifier = Modifier.size(if (status == DeliveryStatus.SENDING) 13.dp else 16.dp),
+        // one 16 dp slot for every status: the smaller clock grew the bubble when the send was acked
+        modifier = Modifier.size(16.dp).padding(if (status == DeliveryStatus.SENDING) 1.5.dp else 0.dp),
     )
 }
 
