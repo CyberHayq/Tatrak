@@ -176,7 +176,20 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   `populateContextMenu` rules into `ChatSnapshot.actions`. Hardware keyboard: Enter sends when
   "Enter is send" is on, Ctrl+Enter always, Shift+Enter is a new line, Ctrl+Up edits the last own
   message.
-- Long press: reactions (existing `sendReactions` and restrictions) and a menu with
+- Tap and long press (2026-11-17, owner, Telegram model; plan):
+  a tap on a text bubble (not on a link) or on the row beside any bubble opens the message menu;
+  media bubbles keep their tap (`primaryAction`); a long press selects the message and the same
+  finger dragging over other rows selects them (`MessageSelection.kt`: `selectionGestures` in the
+  list's Initial pass, `dragSelection`, `indexAt` for the reversed list, auto-scroll 56 dp / 12 dp
+  per frame, cap 100, after Telegram's `RecyclerListView` / `ChatActivity` at `21f7d10`). While
+  selecting a tap toggles, a check circle and a highlight mark the rows, swipe-to-reply and
+  swipe-back (`BlockSwipeBack`, re-checked on each move by `SwipeBackLayout`) are off, and
+  `SelectionBar` replaces the top bar: Copy (`selectionCopyText`, Telegram's format), Forward
+  (one in-app picker; `ACTION_SEND_MULTIPLE` with the files plus the texts as a quote and
+  `EXTRA_AS_QUOTE`, which `ShareWithActivity` passes on and `ChatFragment.processExtras` turns into
+  a quote plus composer previews; one message still goes through `ShareUtil.forward`), Delete (one dialog, then the legacy `deleteLocal` /
+  `retract` per message, oldest first; the selection stays until the dialog confirms).
+- The menu (opened by a tap since 2026-11-17): reactions (existing `sendReactions` and restrictions) and a menu with
   reply, copy, edit (existing correction flow), retry, save/share. The menu (`MessageMenu`)
   draws the bubble exactly where it was in the list and hides the original (`LocalMenuMessage`,
   read in a graphics layer, so no row recomposes); the reactions and actions go around it where

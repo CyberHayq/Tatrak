@@ -100,6 +100,12 @@
     <string name="tatrak_chat_forward">Переслать</string>
     <string name="tatrak_delete_for_me">Удалить только у меня</string>
     <string name="tatrak_delete_for_me_confirm">Удалить сообщение с этого устройства? У остальных оно останется.</string>
+    <plurals name="tatrak_delete_messages_for_me_confirm">
+        <item quantity="one">Удалить %d сообщение с этого устройства? У остальных оно останется.</item>
+        <item quantity="few">Удалить %d сообщения с этого устройства? У остальных они останутся.</item>
+        <item quantity="many">Удалить %d сообщений с этого устройства? У остальных они останутся.</item>
+        <item quantity="other">Удалить %d сообщения с этого устройства? У остальных они останутся.</item>
+    </plurals>
     <string name="tatrak_message_deleted">Сообщение удалено</string>
     <!-- long-press menu entry and its sheet -->
     <string name="tatrak_chat_message_info">О сообщении</string>
@@ -115,4 +121,11 @@
     <string name="tatrak_chat_key_this_device">это устройство</string>
     <string name="tatrak_chat_key_unknown">неизвестный ключ</string>
     <string name="tatrak_chat_key_open">Показать ключ в списке ключей</string>
+    <!-- after deleting several messages; %1$d count, %2$s the paths, one per line -->
+    <plurals name="tatrak_shared_files_kept">
+        <item quantity="one">Файлов не удалено: %1$d. Они лежат вне хранилища Tatrak. Если они больше не нужны, удалите их сами:\n%2$s</item>
+        <item quantity="few">Файлов не удалено: %1$d. Они лежат вне хранилища Tatrak. Если они больше не нужны, удалите их сами:\n%2$s</item>
+        <item quantity="many">Файлов не удалено: %1$d. Они лежат вне хранилища Tatrak. Если они больше не нужны, удалите их сами:\n%2$s</item>
+        <item quantity="other">Файлов не удалено: %1$d. Они лежат вне хранилища Tatrak. Если они больше не нужны, удалите их сами:\n%2$s</item>
+    </plurals>
 </resources>

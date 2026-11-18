@@ -98,6 +98,11 @@
     <string name="tatrak_chat_forward">Forward</string>
     <string name="tatrak_delete_for_me">Delete only for me</string>
     <string name="tatrak_delete_for_me_confirm">Delete this message from this device? Others keep it.</string>
+    <!-- delete of selected messages -->
+    <plurals name="tatrak_delete_messages_for_me_confirm">
+        <item quantity="one">Delete this message from this device? Others keep it.</item>
+        <item quantity="other">Delete %d messages from this device? Others keep them.</item>
+    </plurals>
     <string name="tatrak_message_deleted">Message deleted</string>
     <!-- long-press menu entry and its sheet -->
     <string name="tatrak_chat_message_info">Message info</string>
@@ -113,4 +118,9 @@
     <string name="tatrak_chat_key_this_device">this device</string>
     <string name="tatrak_chat_key_unknown">unknown key</string>
     <string name="tatrak_chat_key_open">Show this key in the key list</string>
+    <!-- after deleting several messages; %1$d count, %2$s the paths, one per line -->
+    <plurals name="tatrak_shared_files_kept">
+        <item quantity="one">%1$d file was not deleted: it is outside Tatrak\'s storage. Delete it yourself if you no longer need it:\n%2$s</item>
+        <item quantity="other">%1$d files were not deleted: they are outside Tatrak\'s storage. Delete them yourself if you no longer need them:\n%2$s</item>
+    </plurals>
 </resources>

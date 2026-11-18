@@ -42,6 +42,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
@@ -81,6 +82,7 @@ import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.text.AnnotatedString
@@ -207,10 +209,14 @@ fun MessageRow(
     isGroup: Boolean,
     actions: ChatActions,
     voice: StateFlow<VoicePlayback>,
-    /** With the bubble's coordinates, for the menu to draw it in place. */
-    onLongPress: (MessageItem, LayoutCoordinates?) -> Unit,
+    /** Tap: the message menu, with the bubble's coordinates for the menu to draw it in place. */
+    onMenu: (MessageItem, LayoutCoordinates?) -> Unit,
+    /** Long press (and a tap while [selecting]): flips this message's selection; a long press also starts the drag selection. */
+    onSelect: (MessageItem) -> Unit,
     onSwipeReply: (MessageItem) -> Unit,
     modifier: Modifier = Modifier,
+    selecting: Boolean = false,
+    selected: Boolean = false,
 ) {
     ReportComposition(item.key)
     val scope = rememberCoroutineScope()
@@ -220,9 +226,15 @@ fun MessageRow(
     val method = LocalSwipeMethod.current
     val threshold = with(density) { method.trigger.toPx() }
     val onSwipeReplyState by rememberUpdatedState(onSwipeReply)
-    val onLongPressState by rememberUpdatedState(onLongPress)
+    val onMenuState by rememberUpdatedState(onMenu)
+    val onSelectState by rememberUpdatedState(onSelect)
+    val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val openMenu = { onMenuState(item, placed[0]?.takeIf { it.isAttached }) }
+    val select = { onSelectState(item) }
+    val menuLabel = stringResource(R.string.tatrak_open_menu)
+    val selectLabel = stringResource(R.string.select)
     val swipe =
-        if (item.actions.canReply) {
+        if (item.actions.canReply && !selecting) {
             Modifier.pointerInput(item.key, method) {
                 val telegram = method == SwipeMethod.TELEGRAM
                 val max = method.max.toPx()
@@ -274,10 +286,28 @@ fun MessageRow(
     Box(
         modifier
             .fillMaxWidth()
+            .then(if (selected) Modifier.background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)) else Modifier)
             .padding(top = if (item.position.isStart) 6.dp else 2.dp)
             .then(swipe)
+            .then(
+                if (item.actions.any) {
+                    // a tap beside the bubble opens the menu too; while selecting the list's own handler takes taps
+                    Modifier.semantics { if (selecting) this.selected = selected }
+                        .combinedClickable(
+                            interactionSource = null,
+                            indication = null,
+                            onClickLabel = if (selecting) selectLabel else menuLabel,
+                            onLongClickLabel = selectLabel,
+                            onClick = if (selecting) select else openMenu,
+                            onLongClick = select,
+                        )
+                } else {
+                    Modifier
+                }
+            )
     ) {
-        if (item.actions.canReply) {
+        if (selecting) SelectionCheck(selected, Modifier.align(Alignment.BottomStart).padding(start = 10.dp, bottom = 4.dp))
+        if (item.actions.canReply && !selecting) {
             // the row recomposes only when a swipe starts or ends; the fade is read in the layer
             val swiping by remember(offset) { derivedStateOf { offset.value != 0f } }
             if (swiping) {
@@ -306,7 +336,8 @@ fun MessageRow(
             modifier =
                 Modifier.fillMaxWidth()
                     .offset { IntOffset(offset.value.roundToInt(), 0) }
-                    .padding(horizontal = 6.dp),
+                    // room for the check mark; outgoing bubbles sit at the other end
+                    .padding(start = if (selecting && !item.isOutgoing) 40.dp else 6.dp, end = 6.dp),
         ) {
             if (isGroup && !item.isOutgoing) {
                 if (item.showAvatar) {
@@ -324,7 +355,6 @@ fun MessageRow(
                 Spacer(Modifier.width(2.dp))
             }
             val open = primaryAction(item, actions)
-            val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
             val menuMessage = LocalMenuMessage.current
             Bubble(
                 item = item,
@@ -335,24 +365,29 @@ fun MessageRow(
                         .onPlaced { placed[0] = it }
                         // the long-press menu draws this bubble in its place
                         .graphicsLayer { alpha = if (menuMessage.value == item.key) 0f else 1f }
+                        // TalkBack focuses the bubble's own clickable node: it says "selected" too
+                        .semantics { if (selecting) this.selected = selected }
                         // combinedClickable vibrates on long press itself (hapticFeedbackEnabled)
                         .combinedClickable(
                             interactionSource = null,
                             indication = null,
-                            onClick = open ?: {},
-                            onLongClick =
-                                if (item.actions.any) {
-                                    { onLongPress(item, placed[0]?.takeIf { it.isAttached }) }
-                                } else {
-                                    null
+                            onClickLabel = if (selecting) selectLabel else if (open == null) menuLabel else null,
+                            onLongClickLabel = selectLabel,
+                            // media keep their own tap; the rest opens the menu (Telegram)
+                            onClick =
+                                when {
+                                    !item.actions.any -> open ?: {}
+                                    selecting -> select
+                                    else -> open ?: openMenu
                                 },
+                            onLongClick = if (item.actions.any) select else null,
                         )
                         .then(
                             if (item.actions.any) {
                                 Modifier.pointerInput(item.key) {
                                     childLongPress {
                                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
-                                        onLongPressState(item, placed[0]?.takeIf { it.isAttached })
+                                        onSelectState(item)
                                     }
                                 }
                             } else {

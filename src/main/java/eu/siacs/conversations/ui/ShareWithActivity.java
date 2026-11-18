@@ -243,6 +243,12 @@ public class ShareWithActivity extends XmppActivity
         } else if (Intent.ACTION_SEND_MULTIPLE.equals(action)) {
             final ArrayList<Uri> uris = intent.getParcelableArrayListExtra(Intent.EXTRA_STREAM);
             this.share.uris = uris == null ? new ArrayList<>() : uris;
+            // Tatrak: Tatrak's forward of several messages carries their texts as a quote too;
+            // other apps' text next to files is still dropped
+            if (intent.getBooleanExtra(ConversationsActivity.EXTRA_AS_QUOTE, false)) {
+                this.share.text = intent.getStringExtra(Intent.EXTRA_TEXT);
+                this.share.asQuote = true;
+            }
         }
     }
 
@@ -299,6 +305,9 @@ public class ShareWithActivity extends XmppActivity
             }
         } else if (share.text != null) {
             intent.setAction(ConversationsActivity.ACTION_VIEW_CONVERSATION);
+        }
+        // Tatrak: text and files together (a forward of several messages); before, only one of them
+        if (share.text != null || share.asQuote) {
             intent.putExtra(Intent.EXTRA_TEXT, share.text);
             intent.putExtra(ConversationsActivity.EXTRA_AS_QUOTE, share.asQuote);
         }

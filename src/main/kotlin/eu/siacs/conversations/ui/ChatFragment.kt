@@ -25,6 +25,8 @@ import am.cyberhayq.chat.ui.chat.appendToDraft
 import am.cyberhayq.chat.ui.chat.insertLinkAtCursor
 import am.cyberhayq.chat.ui.chat.replyId
 import am.cyberhayq.chat.ui.chat.replyQuote
+import am.cyberhayq.chat.ui.chat.SelectedText
+import am.cyberhayq.chat.ui.chat.selectionCopyText
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.Manifest
 import android.animation.Animator
@@ -920,7 +922,15 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                 } else {
                     Attachment.of(requireContext(), cleanUris(uris), type)
                 }
-            confirmAttachments(attachments)
+            // a forward of several messages (forwardMessages, marked by AS_QUOTE) lands in the composer: the texts as
+            // a quote, the files as previews, sent together; other shares keep the send dialog
+            if (asQuote) {
+                if (requireClassicForPgp()) return
+                text?.let(::quote)
+                addPreviews(attachments)
+            } else {
+                confirmAttachments(attachments)
+            }
             return
         }
         if (text != null && Patterns.URI_GEO.matcher(text).matches()) {
@@ -929,14 +939,18 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             )
             return
         } else if (text != null && asQuote) {
-            val current = viewModel.input.text
-            val prefix = if (current.isEmpty() || current.endsWith("\n")) current else "$current\n"
-            viewModel.setInput(prefix + quoteBlock(text) + "\n")
+            quote(text)
         } else if (text != null) {
             appendText(text, doNotAppend)
         }
         val message = downloadUuid?.let { c.findMessageWithFileAndUuid(it) }
         if (message != null) startDownloadable(message)
+    }
+
+    private fun quote(text: String) {
+        val current = viewModel.input.text
+        val prefix = if (current.isEmpty() || current.endsWith("\n")) current else "$current\n"
+        viewModel.setInput(prefix + quoteBlock(text) + "\n")
     }
 
     private fun appendText(text: String, doNotAppend: Boolean) {
@@ -1045,6 +1059,67 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     override fun forward(uuid: String) {
         val message = message(uuid) ?: return
         ShareUtil.forward(requireXmppActivity(), message)
+    }
+
+    /** ShareUtil.copyToClipboard with the selected messages' texts in Telegram's format. */
+    override fun copyMessages(uuids: List<String>) {
+        val c = conversation ?: return
+        val messages = uuids.mapNotNull(::message)
+        if (messages.isEmpty()) return
+        val activity = requireXmppActivity()
+        if (activity.copyTextToClipboard(selectionText(c, messages), R.string.message) &&
+            Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(activity, R.string.message_copied_to_clipboard, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun selectionText(c: Conversation, messages: List<Message>): String =
+        selectionCopyText(
+            messages.map {
+                val sender = if (it.status == Message.STATUS_RECEIVED) it.counterpart?.toString() else null
+                SelectedText(sender, UIHelper.getMessageDisplayName(it), it.bodyWithoutReplyFallback)
+            },
+            withNames = !(c.mode == Conversation.MODE_SINGLE && c.contact.isSelf),
+        )
+
+    /**
+     * ShareUtil.forward (share with inApp) for several messages at once: the files as one ACTION_SEND_MULTIPLE, the
+     * texts as one quote in Telegram's copy format. A single message goes the menu's way.
+     */
+    override fun forwardMessages(uuids: List<String>) {
+        val c = conversation ?: return
+        val messages = uuids.mapNotNull(::message)
+        val activity = requireXmppActivity()
+        messages.singleOrNull()?.let { return ShareUtil.forward(activity, it) }
+        if (messages.isEmpty()) return
+        val files = messages.filter { it.isFileOrImage && !it.isGeoUri }
+        val uris = ArrayList<Uri>()
+        for (message in files) {
+            val file = activity.xmppConnectionService.fileBackend.getFile(message)
+            // as ShareUtil.share: getUriForFile throws for a file outside file_paths.xml
+            try {
+                uris += FileBackend.getUriForFile(activity, file).buildUpon().appendQueryParameter("uuid", message.uuid).build()
+            } catch (e: SecurityException) {
+                Toast.makeText(activity, activity.getString(R.string.no_permission_to_access_x, file.absolutePath), Toast.LENGTH_SHORT).show()
+                return
+            }
+        }
+        val texts = messages.filterNot { it in files }
+        // AS_QUOTE also marks a files-only batch as ours (processExtras puts it into the composer)
+        val intent = Intent(activity, ShareWithActivity::class.java).putExtra(ConversationsActivity.EXTRA_AS_QUOTE, true)
+        if (texts.isNotEmpty()) intent.putExtra(Intent.EXTRA_TEXT, selectionText(c, texts))
+        if (uris.isEmpty()) {
+            intent.setAction(Intent.ACTION_SEND).setType("text/plain")
+        } else {
+            intent.setAction(Intent.ACTION_SEND_MULTIPLE).setType("*/*")
+                .putParcelableArrayListExtra(Intent.EXTRA_STREAM, uris)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            activity.startActivity(intent)
+        } catch (e: ActivityNotFoundException) {
+            Toast.makeText(activity, R.string.no_application_found_to_open_file, Toast.LENGTH_SHORT).show()
+        }
     }
 
     override fun copyLink(uuid: String) {
@@ -1581,14 +1656,41 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         builder.show()
     }
 
-    /** XEP-0424 "delete for everyone". */
-    private fun retract(message: Message) {
+    /** [delete]'s question once for the whole selection; then its per-message actions, oldest first. */
+    override fun deleteMessages(uuids: List<String>, onDeleted: () -> Unit) {
+        val messages = uuids.mapNotNull(::message)
+        if (messages.isEmpty()) return
+        val builder = MaterialAlertDialogBuilder(requireContext()).setNegativeButton(R.string.cancel, null)
+        if (messages.all { ChatSnapshot.canRetract(it.conversation as Conversation, it) }) {
+            builder.setItems(arrayOf(getString(R.string.tatrak_delete_for_me), getString(R.string.tatrak_retract))) { _, which ->
+                val kept = ArrayList<Message.StorageLocation>()
+                messages.forEach { if (which == 0) deleteLocal(it, kept) else retract(it, kept) }
+                warnKeptFiles(kept)
+                onDeleted()
+            }
+        } else {
+            builder
+                .setMessage(resources.getQuantityString(R.plurals.tatrak_delete_messages_for_me_confirm, messages.size, messages.size))
+                .setPositiveButton(R.string.delete) { _, _ ->
+                    val kept = ArrayList<Message.StorageLocation>()
+                    messages.forEach { deleteLocal(it, kept) }
+                    warnKeptFiles(kept)
+                    onDeleted()
+                }
+        }
+        builder.show()
+    }
+
+    /** XEP-0424 "delete for everyone"; a batch collects files kept in shared storage in [kept] instead of a dialog each. */
+    private fun retract(message: Message, kept: MutableList<Message.StorageLocation>? = null) {
         val manager = message.conversation.account.xmppConnection?.getManager(ModerationManager::class.java)
         val location = message.relativeFilePath.takeIf { message.isFileOrImage }
         if (manager?.retract(message) != true) {
             Toast.makeText(activity, R.string.tatrak_retract_failed, Toast.LENGTH_SHORT).show()
-        } else {
+        } else if (kept == null) {
             warnKeptFile(location)
+        } else if (location != null && location.sharedStorage()) {
+            kept += location
         }
     }
 
@@ -1601,8 +1703,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             .show()
     }
 
-    /** Only this device: nothing is sent, the others keep the message. */
-    private fun deleteLocal(message: Message) {
+    /** Only this device: nothing is sent, the others keep the message. A batch collects kept files in [kept]. */
+    private fun deleteLocal(message: Message, kept: MutableList<Message.StorageLocation>? = null) {
         val service = xmppConnectionService ?: return
         val c = conversation ?: return
         val db = DatabaseBackend.getInstance(requireContext())
@@ -1631,7 +1733,22 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         service.updateConversationUi()
         (activity as? ConversationsActivity)?.onConversationsListItemUpdated()
         refresh()
-        if (hadFile) warnKeptFile(location)
+        if (!hadFile) return
+        if (kept == null) warnKeptFile(location) else if (location != null && location.sharedStorage()) kept += location
+    }
+
+    /** One dialog for a batch delete's files that stay in shared storage. */
+    private fun warnKeptFiles(kept: List<Message.StorageLocation>) {
+        kept.singleOrNull()?.let { return warnKeptFile(it) }
+        if (kept.isEmpty()) return
+        MaterialAlertDialogBuilder(requireContext())
+            .setMessage(
+                resources.getQuantityString(
+                    R.plurals.tatrak_shared_files_kept, kept.size, kept.size, kept.joinToString("\n") { it.file().absolutePath }
+                )
+            )
+            .setPositiveButton(R.string.ok, null)
+            .show()
     }
 
     /** ConversationFragment.cancelTransmission. */

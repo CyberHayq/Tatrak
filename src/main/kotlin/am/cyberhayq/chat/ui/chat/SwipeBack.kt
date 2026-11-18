@@ -61,6 +61,8 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
     private val startSlop = 0.4f / 2.54f * resources.displayMetrics.xdpi
     private var downX = 0f
     private var downY = 0f
+    private var downLocalX = 0
+    private var downLocalY = 0
     private var swipeWidth = 0
     private var tracking = false
     private var velocity: VelocityTracker? = null
@@ -101,6 +103,8 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
             MotionEvent.ACTION_DOWN -> {
                 downX = ev.rawX
                 downY = ev.rawY
+                downLocalX = ev.x.toInt()
+                downLocalY = ev.y.toInt()
                 // the system's back zone (gesture navigation) is left to the system, as in Telegram:
                 // starting ours there too would run both back gestures at once
                 val edge = ViewCompat.getRootWindowInsets(this)?.getInsets(WindowInsetsCompat.Type.systemGestures())?.left ?: 0
@@ -109,6 +113,8 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
                 velocity = VelocityTracker.obtain().also { it.addMovement(ev) }
             }
             MotionEvent.ACTION_MOVE -> {
+                // a block can come during the gesture: a long press that starts selecting messages
+                if (tracking && exclusions.values.any { it.contains(downLocalX, downLocalY) }) tracking = false
                 if (!tracking) return false
                 velocity?.addMovement(ev)
                 val dx = ev.rawX - downX

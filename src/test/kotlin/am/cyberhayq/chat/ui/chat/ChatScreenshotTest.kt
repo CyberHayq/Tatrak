@@ -24,7 +24,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.click
+import androidx.activity.OnBackPressedDispatcher
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
@@ -52,6 +56,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import eu.siacs.conversations.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -68,6 +73,8 @@ import org.robolectric.annotation.GraphicsMode
 class ChatScreenshotTest {
 
     @get:Rule val compose = createComposeRule()
+
+    private var backDispatcher: OnBackPressedDispatcher? = null
 
     private val LINK = "https://example.am/changes"
 
@@ -266,9 +273,13 @@ class ChatScreenshotTest {
             )
         }
 
+    /** A tap on a text bubble opens the menu (Telegram); a long press selects instead. */
     @Test
-    fun chatLongPressMenu() =
-        capture("chat_menu", darkTheme = false, longPress = "Yes, an hour ago") { privateChat(it) }
+    fun chatTapMenu() {
+        capture("chat_menu", darkTheme = false, tap = "Yes, an hour ago") { privateChat(it) }
+        compose.onNodeWithContentDescription("More reactions").assertExists()
+        compose.onNodeWithContentDescription("Cancel selection").assertDoesNotExist()
+    }
 
     /** An encrypted message kept after an unverified request to delete it. */
     @Test
@@ -297,13 +308,13 @@ class ChatScreenshotTest {
 
     /** Near the top: the reactions go under the message, the message does not move. */
     @Test
-    fun chatLongPressMenuNearTop() =
-        capture("chat_menu_top", darkTheme = false, longPress = "Hey! Did you push") { privateChat(it) }
+    fun chatTapMenuNearTop() =
+        capture("chat_menu_top", darkTheme = false, tap = "Hey! Did you push") { privateChat(it) }
 
     /** A received message with a known time received: "Message info" closes the menu; no times in the menu itself. */
     @Test
-    fun chatLongPressMenuReceived() {
-        capture("chat_menu_received", darkTheme = false, longPress = "flag works now") { s -> withInfo(privateChat(s), key = null) }
+    fun chatTapMenuReceived() {
+        capture("chat_menu_received", darkTheme = false, tap = "flag works now") { s -> withInfo(privateChat(s), key = null) }
         compose.onNodeWithText("Message info").assertExists()
         compose.onNodeWithText("Received", substring = true).assertDoesNotExist()
     }
@@ -315,7 +326,7 @@ class ChatScreenshotTest {
         val actions = object : ChatActions by FakeActions {
             override fun openMessageKey(uuid: String) { opened += uuid }
         }
-        capture("chat_menu_key", darkTheme = false, actions = actions, longPress = "flag works now") { s -> withInfo(privateChat(s), FINGERPRINT) }
+        capture("chat_menu_key", darkTheme = false, actions = actions, tap = "flag works now") { s -> withInfo(privateChat(s), FINGERPRINT) }
         compose.onNodeWithText(FINGERPRINT).assertDoesNotExist()
         compose.onNodeWithText("Message info").performClick()
         compose.onNodeWithText("Message info").assertIsDisplayed() // now the sheet's title
@@ -362,11 +373,11 @@ class ChatScreenshotTest {
     private fun at(time: String) =
         java.time.LocalDateTime.parse(time).atZone(java.time.ZoneId.systemDefault()).toInstant().toEpochMilli()
 
-    /** A long press on a link opens the menu with reactions; the link's own tap must not eat it. */
+    /** A long press on a link selects the message; the link's own tap must not eat it. */
     @Test
-    fun longPressOnLinkOpensMenu() {
+    fun longPressOnLinkSelects() {
         val opened = onLink("chat_menu_link") { performTouchInput { longClick() } }
-        compose.onNodeWithContentDescription("More reactions").assertExists()
+        compose.onNodeWithContentDescription("Cancel selection").assertExists()
         // the release after the long press must not open the link as well
         assertEquals(emptyList<String>(), opened)
     }
@@ -388,6 +399,210 @@ class ChatScreenshotTest {
             }
         }
         return opened
+    }
+
+    // --- selecting messages (Telegram: long press selects, a drag selects more, a tap toggles) ---
+
+    /** Records what the selection bar and a tap on media ask for. */
+    private class SelectionActions : ChatActions by FakeActions {
+        val calls = mutableListOf<String>()
+        var onDeleted: (() -> Unit)? = null
+        override fun openMedia(uuid: String) { calls += "media $uuid" }
+        override fun copyMessages(uuids: List<String>) { calls += "copy $uuids" }
+        override fun forwardMessages(uuids: List<String>) { calls += "forward $uuids" }
+        override fun deleteMessages(uuids: List<String>, onDeleted: () -> Unit) {
+            calls += "delete $uuids"
+            this.onDeleted = onDeleted
+        }
+    }
+
+    private fun center(text: String): Offset = compose.onNodeWithText(text, substring = true).fetchSemanticsNode().boundsInRoot.center
+
+    /** Long press on [from], then the same finger over [over] in a few steps. */
+    private fun longPressDrag(from: String, vararg over: String) {
+        val start = center(from)
+        val points = over.map(::center)
+        compose.onRoot().performTouchInput {
+            down(start)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            var at = start
+            for (point in points) {
+                val step = (point - at) / 4f
+                repeat(4) { moveBy(step) }
+                at = point
+            }
+            up()
+        }
+        compose.waitForIdle()
+    }
+
+    private fun selectionChat(s: Samples) =
+        privateChat(s).let { st -> st.copy(items = st.items.map { if (it is MessageItem) it.copy(actions = it.actions.copy(canDelete = true)) else it }) }
+
+    private fun assertSelected(count: Int?) {
+        if (count == null) {
+            compose.onNodeWithContentDescription("Cancel selection").assertDoesNotExist()
+        } else {
+            // the count beside the cross (message texts and reactions have digits too)
+            val bar = compose.onNodeWithContentDescription("Cancel selection").fetchSemanticsNode().boundsInRoot
+            assertTrue(compose.onAllNodesWithText(count.toString()).fetchSemanticsNodes().any { it.boundsInRoot.center.y in bar.top..bar.bottom })
+        }
+    }
+
+    @Test
+    fun longPressSelects() {
+        capture("chat_selection_one", darkTheme = false, act = { compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() } }) { privateChat(it) }
+        assertSelected(1)
+        compose.onNodeWithContentDescription("More reactions").assertDoesNotExist()
+    }
+
+    /** m3 to m5 passes the "Today" chip and the unread divider, which are not selectable; the bar hands them over oldest first. */
+    @Test
+    fun longPressDragSelectsAndCopies() {
+        val actions = SelectionActions()
+        capture("chat_selection", darkTheme = false, actions = actions, act = { longPressDrag("Yes, an hour ago", "flag works now") }) { selectionChat(it) }
+        assertSelected(3)
+        compose.onNodeWithContentDescription("Copy").performClick()
+        assertEquals(listOf("copy [m3, m4, m5]"), actions.calls)
+        assertSelected(null)
+    }
+
+    /** A drag that starts on a selected message unselects (the mode set by the first row, as in Telegram). */
+    @Test
+    fun dragFromSelectedUnselects() {
+        capture("chat_selection_unselect", darkTheme = false, act = {
+            longPressDrag("flag works now", "Fixd the typo", "Sure, 10 works")
+            longPressDrag("Fixd the typo", "Sure, 10 works")
+        }) { selectionChat(it) }
+        assertSelected(1)
+    }
+
+    @Test
+    fun tapTogglesAndLastUnselectLeaves() {
+        val actions = SelectionActions()
+        capture("chat_selection_tap", darkTheme = false, actions = actions, act = { compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() } }) {
+            selectionChat(it)
+        }
+        compose.onNodeWithText("Fixd the typo").performTouchInput { click() }
+        assertSelected(2)
+        compose.onNodeWithText("Fixd the typo").performTouchInput { click() }
+        assertSelected(1)
+        compose.onNodeWithContentDescription("More reactions").assertDoesNotExist()
+        compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { click() }
+        assertSelected(null)
+        assertEquals(emptyList<String>(), actions.calls)
+    }
+
+    @Test
+    fun backAndCrossLeaveSelection() {
+        capture("chat_selection_back", darkTheme = false, act = { compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() } }) { selectionChat(it) }
+        compose.runOnIdle { backDispatcher!!.onBackPressed() }
+        assertSelected(null)
+        compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() }
+        compose.onNodeWithContentDescription("Cancel selection").performClick()
+        assertSelected(null)
+    }
+
+    @Test
+    fun forwardAndDeleteTheSelection() {
+        val actions = SelectionActions()
+        capture("chat_selection_actions", darkTheme = false, actions = actions, act = { longPressDrag("Yes, an hour ago", "flag works now") }) { selectionChat(it) }
+        compose.onNodeWithContentDescription("Forward").performClick()
+        longPressDrag("Fixd the typo", "Sure, 10 works")
+        compose.onNodeWithContentDescription("Delete").performClick()
+        // the selection stays until the dialog's delete runs
+        assertSelected(2)
+        compose.runOnIdle { actions.onDeleted!!() }
+        assertSelected(null)
+        assertEquals(listOf("forward [m3, m4, m5]", "delete [m6, m7]"), actions.calls)
+    }
+
+    /** Media keep their own tap; while selecting, the same tap toggles instead. */
+    @Test
+    fun tapOnPhotoOpensItOrToggles() {
+        val actions = SelectionActions()
+        capture("chat_selection_media", darkTheme = false, actions = actions, act = { compose.onNodeWithText("11:00").performTouchInput { click() } }) { photoChat(it) }
+        assertEquals(listOf("media i1"), actions.calls)
+        compose.onNodeWithContentDescription("More reactions").assertDoesNotExist()
+        compose.onNodeWithText("11:00").performTouchInput { longClick() }
+        compose.onNodeWithText("11:02").performTouchInput { click() }
+        assertSelected(2)
+        assertEquals(listOf("media i1"), actions.calls)
+    }
+
+    /** Holding the drag at the list's top edge scrolls up and selects on the way, up to the oldest message. */
+    @Test
+    fun dragAtTheTopEdgeScrollsAndSelects() {
+        val actions = SelectionActions()
+        capture("chat_selection_autoscroll", darkTheme = false, actions = actions, act = {
+            val start = center("Reply number 24")
+            val listTop = compose.onNode(hasScrollAction()).fetchSemanticsNode().boundsInRoot.top
+            compose.onRoot().performTouchInput {
+                down(start)
+                advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+                val step = (Offset(start.x, listTop + 10f) - start) / 8f
+                repeat(8) { moveBy(step) }
+                advanceEventTime(3_000)
+                moveBy(Offset(1f, 0f))
+                up()
+            }
+        }) { longGroupChat(it) }
+        compose.onNodeWithContentDescription("Copy").performClick()
+        val copied = actions.calls.single()
+        assertTrue(copied, copied.startsWith("copy [") && "x1" in copied && copied.endsWith("n24]"))
+    }
+
+    /** The selection survives an activity recreation (rotation). */
+    @Test
+    fun selectionSurvivesRecreation() {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            TatrakTheme(darkTheme = false) {
+                ChatScreen(
+                    state = privateChat(Samples(currentTextPalette())),
+                    input = TextFieldValue(),
+                    onInputChange = {},
+                    reply = null,
+                    actions = FakeActions,
+                    voice = voice,
+                    recording = MutableStateFlow(VoiceRecording()),
+                )
+            }
+        }
+        compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() }
+        restoration.emulateSavedInstanceStateRestore()
+        assertSelected(1)
+    }
+
+    /** A selected message that leaves the list leaves the selection: the menu works again and it does not come back selected. */
+    @Test
+    fun vanishedMessageLeavesTheSelection() {
+        var gone by mutableStateOf(false)
+        capture("chat_selection_vanished", darkTheme = false, act = { compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() } }) { s ->
+            selectionChat(s).let { st -> if (gone) st.copy(items = st.items.filterNot { it.key == "m3" }) else st }
+        }
+        assertSelected(1)
+        gone = true
+        compose.waitForIdle()
+        assertSelected(null)
+        compose.onNodeWithText("Fixd the typo").performTouchInput { click() }
+        compose.onNodeWithContentDescription("More reactions").assertExists()
+        compose.runOnIdle { backDispatcher!!.onBackPressed() }
+        gone = false
+        compose.waitForIdle()
+        assertSelected(null)
+    }
+
+    /** The empty part of the row beside a bubble opens the menu (the bubble keeps its own tap). */
+    @Test
+    fun tapBesideBubbleOpensMenu() {
+        val actions = SelectionActions()
+        capture("chat_menu_beside", darkTheme = false, actions = actions, act = {
+            val bubble = compose.onNodeWithText("11:00").fetchSemanticsNode().boundsInRoot
+            compose.onRoot().performTouchInput { click(Offset(width - 20f, bubble.center.y)) }
+        }) { photoChat(it) }
+        compose.onNodeWithContentDescription("More reactions").assertExists()
+        assertEquals(emptyList<String>(), actions.calls)
     }
 
     // Telegram: a flat leftward swipe replies; rightward or about 22° off horizontal it does not (the list scrolls)
@@ -567,7 +782,8 @@ class ChatScreenshotTest {
         darkTheme: Boolean,
         input: TextFieldValue = TextFieldValue(),
         reply: ReplyPreview? = null,
-        longPress: String? = null,
+        /** A message text to tap first (opens the menu). */
+        tap: String? = null,
         recording: VoiceRecording = VoiceRecording(),
         accent: Accent = Accent.BLUE,
         previews: List<String> = emptyList(),
@@ -582,6 +798,7 @@ class ChatScreenshotTest {
         compose.setContent {
             TatrakTheme(darkTheme = darkTheme, style = style, accent = accent, nightBackground = nightBackground) {
               CompositionLocalProvider(LocalSwipeMethod provides swipe) {
+                backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
                 val samples = Samples(currentTextPalette())
                 val chat = state(samples)
                 ChatScreen(
@@ -598,8 +815,9 @@ class ChatScreenshotTest {
               }
             }
         }
-        if (longPress != null) {
-            compose.onNodeWithText(longPress, substring = true).performTouchInput { longClick() }
+        if (tap != null) {
+            // the end of the text, clear of links (a tap on a link opens it)
+            compose.onNodeWithText(tap, substring = true, useUnmergedTree = true).performTouchInput { click(bottomRight - Offset(4f, 4f)) }
         }
         act()
         compose.waitForIdle()
@@ -770,6 +988,9 @@ class ChatScreenshotTest {
             composer = ComposerInfo(hint = "Send encrypted message"),
         )
     }
+
+    /** The two photos of [mediaChat] alone, so both are on screen. */
+    private fun photoChat(s: Samples): ChatState = mediaChat(s).let { st -> st.copy(items = st.items.filter { it.key in setOf("i1", "i2") }) }
 
     private fun captionChat(s: Samples): ChatState {
         // the caption is set apart from the text, as ChatSnapshot does

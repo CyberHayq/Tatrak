@@ -3035,6 +3035,10 @@ public class ConversationFragment extends XmppFragment
                 mediaPreviewAdapter.addMediaPreviews(
                         Attachment.of(getActivity(), cleanedUris, type));
             }
+            // Tatrak: a forward of several messages brings their texts as a quote with the files
+            if (text != null && asQuote) {
+                quoteText(text);
+            }
             toggleInputMethod();
             return;
         }

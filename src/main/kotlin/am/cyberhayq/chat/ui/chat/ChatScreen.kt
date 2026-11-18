@@ -11,6 +11,7 @@ import am.cyberhayq.chat.ui.theme.LocalAvatarDotOffset
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
 import am.cyberhayq.chat.ui.theme.rememberStringPreference
 import android.graphics.Bitmap
+import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.runtime.Stable
@@ -78,6 +79,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
@@ -196,6 +198,15 @@ interface ChatActions {
     /** Asks: delete on this device only, or (own messages) for everyone via XEP-0424. */
     fun delete(uuid: String)
 
+    /** Selection bar: [delete]'s question once for all [uuids] (oldest first), then [onDeleted] once they are gone. */
+    fun deleteMessages(uuids: List<String>, onDeleted: () -> Unit) {}
+
+    /** Selection bar: the texts of [uuids] (oldest first) on the clipboard in Telegram's format. */
+    fun copyMessages(uuids: List<String>) {}
+
+    /** Selection bar: one chat picker for [uuids] (oldest first); the texts arrive as a quote, the files together. */
+    fun forwardMessages(uuids: List<String>) {}
+
     fun openLocation(uuid: String)
 
     fun toggleVoice(uuid: String)
@@ -308,6 +319,21 @@ fun ChatScreen(
     val reactionPicker = remember { EmojiPickerSlot() }
     var infoFor by rememberSaveable(state.conversationUuid) { mutableStateOf<String?>(null) }
     var wallpaperOpen by rememberSaveable { mutableStateOf(false) }
+    var selection by rememberSaveable(state.conversationUuid) { mutableStateOf(emptyList<String>()) }
+    // newest first like the list; messages that left the list drop out
+    val selected = remember(selection, state.items) {
+        if (selection.isEmpty()) {
+            emptyList()
+        } else {
+            val keys = selection.toHashSet()
+            state.items.filterIsInstance<MessageItem>().filter { it.key in keys }
+        }
+    }
+    val selecting = selected.isNotEmpty()
+    // vanished keys go from the saved selection too, so they neither block the menu nor come back selected
+    LaunchedEffect(selected) { if (state.items.isNotEmpty() && selected.size != selection.size) selection = selected.map { it.key } }
+    BackHandler(enabled = selecting) { selection = emptyList() }
+    BlockSwipeBack(selecting)
     val uriHandler = remember(actions) {
         object : UriHandler {
             override fun openUri(uri: String) = actions.openLink(uri)
@@ -329,10 +355,32 @@ fun ChatScreen(
                     ?.let { (if (dark) it.night else it.day)[0] }
             CompositionLocalProvider(LocalWallpaperTint provides tint) {
                 Column(Modifier.fillMaxSize()) {
-                    ChatTopBar(state.header, state.composer.encryption, actions) { wallpaperOpen = true }
+                    if (selecting) {
+                        val oldestFirst = selected.asReversed()
+                        fun keys(can: (MessageActions) -> Boolean) = oldestFirst.filter { can(it.actions) }.map { it.key }.takeIf { it.isNotEmpty() }
+                        SelectionBar(
+                            count = selected.size,
+                            onClose = { selection = emptyList() },
+                            onCopy = keys { it.canCopy }?.let { { actions.copyMessages(it); selection = emptyList() } },
+                            onForward = keys { it.canShare }?.let { { actions.forwardMessages(it); selection = emptyList() } },
+                            onDelete =
+                                if (oldestFirst.all { it.actions.canDelete }) {
+                                    { actions.deleteMessages(oldestFirst.map { it.key }) { selection = emptyList() } }
+                                } else {
+                                    null
+                                },
+                        )
+                    } else {
+                        ChatTopBar(state.header, state.composer.encryption, actions) { wallpaperOpen = true }
+                    }
                     Box(Modifier.weight(1f).fillMaxWidth()) {
                         key(state.conversationUuid) {
-                            MessageList(state, actions, voice, focus, onFocused, seenMentions, onLongPress = { item, bubble -> menu.value = item.key to bounds(screen[0], bubble) })
+                            MessageList(
+                                state, actions, voice, focus, onFocused, seenMentions,
+                                selection = remember(selected) { selected.map { it.key } },
+                                onSelectionChange = { selection = it },
+                                onMenu = { item, bubble -> if (!selecting) menu.value = item.key to bounds(screen[0], bubble) },
+                            )
                         }
                         state.banner?.let { ChatBannerBar(it, actions, Modifier.align(Alignment.TopCenter)) }
                         ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 56.dp else 12.dp))
@@ -601,7 +649,10 @@ private fun MessageList(
     focus: MessageFocus?,
     onFocused: (MessageFocus) -> Unit,
     seenMentions: Set<String>,
-    onLongPress: (MessageItem, LayoutCoordinates?) -> Unit,
+    /** Selected message keys, newest first. */
+    selection: List<String>,
+    onSelectionChange: (List<String>) -> Unit,
+    onMenu: (MessageItem, LayoutCoordinates?) -> Unit,
 ) {
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
@@ -682,12 +733,28 @@ private fun MessageList(
                 .filter { it.isNotEmpty() }
                 .collect(actions::mentionsSeen)
         }
+        val currentSelection by rememberUpdatedState(selection)
+        val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
+        // set by a row's long press, read by the list's pointer handler for the rest of that gesture
+        val drag = remember { arrayOfNulls<SelectionDrag>(1) }
+        val onSelect: (MessageItem) -> Unit = remember {
+            { item ->
+                val next = toggled(currentSelection, item.key)
+                // from an unselected row the drag selects, even when the cap kept this row out
+                drag[0] = SelectionDrag(item.key, next, item.key !in currentSelection)
+                currentOnSelectionChange(next)
+            }
+        }
+        val selectionSet = remember(selection) { selection.toHashSet() }
         CompositionLocalProvider(LocalOpenMessage provides openMessage) {
             LazyColumn(
                 state = listState,
                 reverseLayout = true,
                 contentPadding = PaddingValues(top = if (state.banner != null) 52.dp else 8.dp, bottom = 8.dp),
-                modifier = Modifier.fillMaxSize(),
+                modifier =
+                    Modifier.fillMaxSize().pointerInput(listState) {
+                        selectionGestures(listState, drag, scope, { currentSelection }, { currentItems }) { currentOnSelectionChange(it) }
+                    },
             ) {
                 items(state.items, key = { it.key }, contentType = { it.contentType }) { item ->
                     when (item) {
@@ -697,9 +764,12 @@ private fun MessageList(
                                 isGroup = isGroup,
                                 actions = actions,
                                 voice = voice,
-                                onLongPress = onLongPress,
+                                onMenu = onMenu,
+                                onSelect = onSelect,
                                 onSwipeReply = { actions.reply(it.key) },
                                 modifier = Modifier.animateItem().then(flash.modifier(item.key)),
+                                selecting = selection.isNotEmpty(),
+                                selected = item.key in selectionSet,
                             )
                         is DateItem -> DateChip(item.day, Modifier.animateItem().padding(vertical = 6.dp))
                         is UnreadItem -> UnreadDivider(Modifier.animateItem())
