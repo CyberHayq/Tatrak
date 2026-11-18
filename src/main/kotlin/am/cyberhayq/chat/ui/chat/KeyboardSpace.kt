@@ -8,11 +8,11 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withTimeoutOrNull
 
 /**
- * Space under the composer's content, in px from the screen bottom, when [panel] px of emoji panel
- * sit just above it and [held] px are kept for a keyboard that went away: the keyboard slides
- * under the panel (or the held space) instead of adding to it, so the composer does not jump.
+ * Space under the composer's content, in px from the screen bottom, when [panel] px of emoji or
+ * attach panel sit just above it: the keyboard slides under the panel instead of adding to it, so
+ * the composer does not jump.
  */
-internal fun composerBottomPx(ime: Int, nav: Int, panel: Int, held: Int): Int = maxOf(ime, nav + panel, held) - panel
+internal fun composerBottomPx(ime: Int, nav: Int, panel: Int): Int = maxOf(ime, nav + panel) - panel
 
 /**
  * The keyboard is up and its inset animation has ended: Compose sets the IME animation target
@@ -28,7 +28,6 @@ internal class ComposerInsets(
     private val ime: WindowInsets,
     private val nav: WindowInsets,
     private val panelPx: Int,
-    private val heldPx: () -> Int,
 ) : WindowInsets {
     override fun getLeft(density: Density, layoutDirection: LayoutDirection) = nav.getLeft(density, layoutDirection)
 
@@ -36,7 +35,7 @@ internal class ComposerInsets(
 
     override fun getRight(density: Density, layoutDirection: LayoutDirection) = nav.getRight(density, layoutDirection)
 
-    override fun getBottom(density: Density) = composerBottomPx(ime.getBottom(density), nav.getBottom(density), panelPx, heldPx())
+    override fun getBottom(density: Density) = composerBottomPx(ime.getBottom(density), nav.getBottom(density), panelPx)
 }
 
 /**

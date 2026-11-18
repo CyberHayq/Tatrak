@@ -141,6 +141,9 @@ interface ChatActions {
 
     fun attachLocation()
 
+    /** A phone contact as a vCard file, the classic ATTACHMENT_CHOICE_CONTACT flow. */
+    fun attachContact()
+
     /** Hold-to-record began; false when it could not (permission asked, PGP, no microphone). */
     fun startRecording(): Boolean
 
@@ -311,9 +314,6 @@ fun ChatScreen(
     val menuKey = remember(menu) { derivedStateOf { menu.value?.first } }
     // the menu overlay fills this screen; the long-pressed bubble's bounds are taken relative to it
     val screen = remember { arrayOfNulls<LayoutCoordinates>(1) }
-    var attachOpen by rememberSaveable { mutableStateOf(false) }
-    // the attach sheet was closed by a pick, so the composer does not bring the keyboard back
-    var attachPicked by remember { mutableStateOf(false) }
     // the message whose "more reactions" picker is open; dropped when the fragment shows another conversation
     var reactingTo by rememberSaveable(state.conversationUuid) { mutableStateOf<String?>(null) }
     val reactionPicker = remember { EmojiPickerSlot() }
@@ -391,14 +391,8 @@ fun ChatScreen(
                         onInputChange = onInputChange,
                         reply = reply,
                         actions = actions,
-                        onAttach = {
-                            attachPicked = false
-                            attachOpen = true
-                        },
                         recording = recording,
                         previews = previews,
-                        attachOpen = attachOpen,
-                        attachPicked = attachPicked,
                     )
                 }
             }
@@ -416,21 +410,6 @@ fun ChatScreen(
             onPick = actions::setWallpaper,
             onPhoto = actions::pickWallpaperPhoto,
             onDismiss = { wallpaperOpen = false },
-        )
-    }
-    if (attachOpen) {
-        // a pick calls onDismiss and then the action in the same callback, so the composer sees both together
-        fun picked(action: () -> Unit): () -> Unit = {
-            attachPicked = true
-            action()
-        }
-        AttachSheet(
-            onDismiss = { attachOpen = false },
-            onCamera = picked(actions::takePhoto),
-            onVideo = picked(actions::recordVideo),
-            onGallery = picked(actions::attachGallery),
-            onFile = picked(actions::attachFile),
-            onLocation = picked(actions::attachLocation),
         )
     }
     reactingTo?.let { uuid ->

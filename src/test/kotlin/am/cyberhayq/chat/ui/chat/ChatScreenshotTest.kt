@@ -702,16 +702,26 @@ class ChatScreenshotTest {
         compose.onNodeWithText("Imported PQ OMEMO2 history").assertExists()
     }
 
+    /** The clip opens its menu in place of the keyboard; the emoji button swaps it for emoji and back; a pick closes it. */
     @Test
-    fun attachSheet() {
-        compose.setContent {
-            TatrakTheme(darkTheme = false) {
-                Box(Modifier.background(MaterialTheme.colorScheme.surface)) {
-                    AttachSheetContent({}, {}, {}, {}, {})
-                }
-            }
+    fun chatAttachPanel() {
+        var gallery = 0
+        val actions = object : ChatActions by FakeActions {
+            override fun attachGallery() { gallery++ }
         }
-        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_attach_sheet.png")
+        capture("chat_attach_panel", darkTheme = false, actions = actions, act = {
+            compose.onNodeWithContentDescription("Attach").performClick()
+        }) { privateChat(it).let { st -> st.copy(composer = st.composer.copy(contacts = true)) } }
+        compose.onNodeWithText("Gallery").assertIsDisplayed()
+        compose.onNodeWithText("Contact").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Emoji").performClick()
+        compose.onNodeWithText("Gallery").assertDoesNotExist()
+        compose.onNodeWithText("Stickers").assertIsDisplayed()
+        compose.onNodeWithContentDescription("Attach").performClick()
+        compose.onNodeWithText("Stickers").assertDoesNotExist()
+        compose.onNodeWithText("Gallery").performClick()
+        assertEquals(1, gallery)
+        compose.onNodeWithText("Gallery").assertDoesNotExist()
     }
 
     /** Two picks waiting for Send (a photo and a file without a preview) replace the text field. */
@@ -1120,6 +1130,7 @@ class ChatScreenshotTest {
         override fun attachGallery() = Unit
         override fun attachFile() = Unit
         override fun attachLocation() = Unit
+        override fun attachContact() = Unit
         override fun takePhoto() = Unit
         override fun recordVideo() = Unit
         override fun startRecording() = false

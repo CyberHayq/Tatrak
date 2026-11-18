@@ -2273,22 +2273,7 @@ public class ConversationFragment extends XmppFragment
                         }
                     case ATTACHMENT_CHOICE_CONTACT:
                         {
-                            final var pickIntent = new Intent(Intent.ACTION_PICK);
-                            pickIntent.setDataAndType(
-                                    ContactsContract.Contacts.CONTENT_URI,
-                                    ContactsContract.Contacts.CONTENT_TYPE);
-                            final var rawApplicationIds =
-                                    new ApplicationProvider(requireContext()).resolve(pickIntent);
-                            Log.d(Config.LOGTAG, "applicationIds " + rawApplicationIds);
-                            final var applicationIds =
-                                    Sets.intersection(
-                                            rawApplicationIds,
-                                            ApplicationProvider.KNOWN_CONTACTS_APP);
-                            if (applicationIds.isEmpty()) {
-                                yield pickIntent;
-                            }
-                            pickIntent.setPackage(Iterables.getFirst(applicationIds, null));
-                            yield pickIntent;
+                            yield contactPickIntent(requireContext());
                         }
                     default:
                         throw new IllegalStateException("Invalid attachment code");
@@ -2299,6 +2284,22 @@ public class ConversationFragment extends XmppFragment
             Toast.makeText(requireContext(), R.string.no_application_found, Toast.LENGTH_LONG)
                     .show();
         }
+    }
+
+    // Tatrak: moved out of invokeAttachFileIntent, shared with ChatFragment
+    static Intent contactPickIntent(final Context context) {
+        final var pickIntent = new Intent(Intent.ACTION_PICK);
+        pickIntent.setDataAndType(
+                ContactsContract.Contacts.CONTENT_URI, ContactsContract.Contacts.CONTENT_TYPE);
+        final var rawApplicationIds = new ApplicationProvider(context).resolve(pickIntent);
+        Log.d(Config.LOGTAG, "applicationIds " + rawApplicationIds);
+        final var applicationIds =
+                Sets.intersection(rawApplicationIds, ApplicationProvider.KNOWN_CONTACTS_APP);
+        if (applicationIds.isEmpty()) {
+            return pickIntent;
+        }
+        pickIntent.setPackage(Iterables.getFirst(applicationIds, null));
+        return pickIntent;
     }
 
     @Override

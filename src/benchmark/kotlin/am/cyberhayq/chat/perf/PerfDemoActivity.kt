@@ -219,6 +219,7 @@ class PerfDemoActivity : ComponentActivity() {
         override fun attachFile() = Unit
 
         override fun attachLocation() = Unit
+        override fun attachContact() = Unit
 
         override fun takePhoto() = Unit
 

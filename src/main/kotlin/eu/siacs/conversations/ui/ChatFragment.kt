@@ -107,6 +107,7 @@ import eu.siacs.conversations.xmpp.jingle.Media
 import eu.siacs.conversations.xmpp.manager.HttpUploadManager
 import eu.siacs.conversations.xmpp.manager.JingleManager
 import eu.siacs.conversations.xmpp.manager.ModerationManager
+import im.conversations.android.provider.VCardProvider
 import im.conversations.android.xmpp.model.state.Composing
 import im.conversations.android.xmpp.model.state.Paused
 import java.io.File
@@ -227,6 +228,24 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             if (result.resultCode == Activity.RESULT_OK && data != null) {
                 addPreviews(Attachment.extractAttachments(requireContext(), data, Attachment.Type.FILE))
             }
+        }
+
+    // ConversationFragment.handlePositiveActivityResult for ATTACHMENT_CHOICE_CONTACT
+    private val pickContactLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            val data = result.data
+            if (result.resultCode != Activity.RESULT_OK || data == null) {
+                return@registerForActivityResult
+            }
+            val vCard =
+                try {
+                    VCardProvider(requireContext()).vCardFromPickIntent(data.data)
+                } catch (e: IllegalArgumentException) {
+                    Toast.makeText(requireContext(), R.string.invalid_contact, Toast.LENGTH_LONG).show()
+                    Log.d(Config.LOGTAG, "could not find vcf uri", e)
+                    return@registerForActivityResult
+                }
+            addPreviews(Attachment.of(vCard, "text/x-vcard"))
         }
 
     private val shareLocationLauncher =
@@ -699,6 +718,18 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     override fun attachLocation() {
         if (requireClassicForPgp()) return
         shareLocationLauncher.launch(Intent(requireContext(), ShareLocationActivity::class.java))
+    }
+
+    /** ConversationFragment.attachFile + invokeAttachFileIntent for ATTACHMENT_CHOICE_CONTACT. */
+    override fun attachContact() {
+        if (requireClassicForPgp()) return
+        withPermissions(listOf(Manifest.permission.READ_CONTACTS)) {
+            try {
+                pickContactLauncher.launch(ConversationFragment.contactPickIntent(requireContext()))
+            } catch (e: ActivityNotFoundException) {
+                Toast.makeText(requireContext(), R.string.no_application_found, Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     override fun startRecording(): Boolean {

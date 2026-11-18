@@ -23,7 +23,7 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
 `ConversationsActivity`, verified by screenshot tests only (no device yet).[^plan]
 
 - Code: `src/main/kotlin/am/cyberhayq/chat/ui/chat/` (`ChatSnapshot`, `ChatViewModel`,
-  `ChatScreen`, `MessageBubble`, `MessageText`, `Composer`, `AttachSheet`, `MessageMenu`,
+  `ChatScreen`, `MessageBubble`, `MessageText`, `Composer`, `AttachPanel`, `MessageMenu`,
   `VoicePlayer`, `ChatPalette`) and the host `src/main/kotlin/eu/siacs/conversations/ui/ChatFragment.kt`.
 - `ConversationsActivity.showConversation` opens `ChatFragment` by default and the classic
   `ConversationFragment` when PGP is the next encryption, when the intent carries
@@ -254,12 +254,15 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   in the text field's system selection menu (`appendTextContextMenuComponents`, on by default in
   this Compose version) wrap the selection in XEP-0393 markers, per line, whitespace kept outside.
 - Keyboard and panels (2026-11-13, `KeyboardSpace.kt`): the composer's bottom space is
-  `max(ime, nav + panel, held) - panel`, read at layout time, so the keyboard slides under the
-  emoji panel instead of adding to it, and switching back keeps the panel until the keyboard has
-  settled (`imeAnimationTarget` reached). Opening the attach sheet with the keyboard up holds the
-  keyboard's space; dismissing the sheet without a pick brings the keyboard back into it (owner's
-  option A), a pick releases it over 250 ms. The emoji panel takes the last settled keyboard
-  height (280 dp before the first keyboard).
+  `max(ime, nav + panel) - panel`, read at layout time, so the keyboard slides under the
+  panel instead of adding to it, and switching back keeps the panel until the keyboard has
+  settled (`imeAnimationTarget` reached). Two panels take the keyboard's place (`KeyboardPanel`):
+  emoji/stickers and, since 2026-11-19 (owner), the attach menu (`AttachPanel`, 3 + 3 grid, one
+  row under a keyboard shorter than 200 dp; Contact added the same day, the classic
+  `ATTACHMENT_CHOICE_CONTACT` flow through the shared `ConversationFragment.contactPickIntent`) instead of the modal attach sheet and its held
+  keyboard space. The clip and the emoji button switch between them; tapped again, or the field
+  tapped, the keyboard comes back; Back or a pick closes the panel without the keyboard. Both take
+  the last settled keyboard height (280 dp before the first keyboard).
 - "More reactions" (2026-11-13, `ReactionSheet.kt`) opens a bottom sheet with the composer's
   emoji2 picker instead of the classic `AddReactionDialog`; a pick runs
   `AddReactionActivity.addReaction`'s rule (an emoji already ours re-sends the same set) and

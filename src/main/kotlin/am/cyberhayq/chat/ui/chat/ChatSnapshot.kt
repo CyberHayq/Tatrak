@@ -43,6 +43,7 @@ import eu.siacs.conversations.utils.TimeFrameUtils
 import eu.siacs.conversations.utils.UIHelper
 import eu.siacs.conversations.xmpp.jingle.JingleFileTransferConnection
 import eu.siacs.conversations.xmpp.manager.ChatStateManager
+import eu.siacs.conversations.services.QuickConversationsService
 import im.conversations.android.xmpp.model.idle.LastUserInteraction
 import im.conversations.android.xmpp.model.reactions.Restrictions
 import im.conversations.android.xmpp.model.state.Composing
@@ -319,6 +320,8 @@ data class ComposerInfo(
     val encryption: Int? = null,
     /** A group we take part in: "@" offers the participants. */
     val mentions: Boolean = false,
+    /** The build may read phone contacts: the attach menu offers Contact, as ConversationFragment does. */
+    val contacts: Boolean = false,
 )
 
 @Immutable
@@ -539,6 +542,7 @@ object ChatSnapshot {
                 },
             editing = correcting?.let { EditPreview(it.uuid, UIHelper.shorten(it.bodyWithoutReplyFallback).toString()) },
             mentions = isGroup && participating,
+            contacts = QuickConversationsService.isContactListIntegration(context),
         )
     }
 

@@ -174,24 +174,20 @@ fun Composer(
     onInputChange: (TextFieldValue) -> Unit,
     reply: ReplyPreview?,
     actions: ChatActions,
-    onAttach: () -> Unit,
     recording: StateFlow<VoiceRecording>,
     modifier: Modifier = Modifier,
     previews: List<String> = emptyList(),
-    /** The attach sheet opened by [onAttach] is showing. */
-    attachOpen: Boolean = false,
-    /** The attach sheet was closed by picking an item (the keyboard does not come back). */
-    attachPicked: Boolean = false,
 ) {
     val colors = MaterialTheme.colorScheme
     val density = LocalDensity.current
-    var emojiOpen by rememberSaveable { mutableStateOf(false) }
-    // the keyboard was asked back in place of the panel: the panel stays until it is up
-    var emojiLeaving by remember { mutableStateOf(false) }
-    BackHandler(enabled = emojiOpen) { emojiOpen = false }
-    val onEmojiOpen: (Boolean) -> Unit = { open ->
-        emojiLeaving = !open && (emojiOpen || emojiLeaving)
-        emojiOpen = open
+    var panel by rememberSaveable { mutableStateOf(KeyboardPanel.NONE) }
+    // the keyboard was asked back in place of this panel: it stays until the keyboard is up
+    var leaving by remember { mutableStateOf(KeyboardPanel.NONE) }
+    BackHandler(enabled = panel != KeyboardPanel.NONE) { panel = KeyboardPanel.NONE }
+    // NONE asks the keyboard back, except while picked attachments hide the text field
+    val onPanel: (KeyboardPanel) -> Unit = { next ->
+        leaving = if (next == KeyboardPanel.NONE && previews.isEmpty()) (if (panel != KeyboardPanel.NONE) panel else leaving) else KeyboardPanel.NONE
+        panel = next
     }
     val emojiPicker = remember { EmojiPickerSlot() }
     var keyboardPx by rememberSaveable { mutableIntStateOf(0) }
@@ -199,47 +195,41 @@ fun Composer(
     val imeTarget = WindowInsets.imeAnimationTarget
     val nav = WindowInsets.navigationBars
     KeyboardHeight(ime, imeTarget, nav) { keyboardPx = it }
-    LaunchedEffect(emojiLeaving) {
-        if (emojiLeaving) {
+    LaunchedEffect(leaving) {
+        if (leaving != KeyboardPanel.NONE) {
             awaitKeyboard(density, ime, imeTarget, nav)
-            emojiLeaving = false
+            leaving = KeyboardPanel.NONE
         }
     }
-    val keyboard = LocalSoftwareKeyboardController.current
     val focus = remember { FocusRequester() }
-    // the keyboard was up when the attach sheet opened, so it comes back on a dismiss; saved, unlike the geometry below
-    var keepKeyboard by rememberSaveable { mutableStateOf(false) }
-    // the keyboard's space, kept under the composer while the attach sheet covers it; none after a recreation
-    var heldPx by remember { mutableIntStateOf(0) }
-    val attach = {
-        keepKeyboard = !emojiOpen && previews.isEmpty() && ime.getBottom(density) > nav.getBottom(density)
-        if (keepKeyboard) {
-            heldPx = ime.getBottom(density)
-            // hidden before the sheet takes the window focus, so it animates instead of being cut
-            keyboard?.hide()
-        }
-        onAttach()
-    }
-    val windowInfo = LocalWindowInfo.current
-    LaunchedEffect(attachOpen) {
-        if (attachOpen || !keepKeyboard) return@LaunchedEffect
-        if (!attachPicked) {
-            // dismissed: the keyboard comes back into the held space once the window has the focus again
-            snapshotFlow { windowInfo.isWindowFocused }.first { it }
-            focus.requestFocus()
-            keyboard?.show()
-            awaitKeyboard(density, ime, imeTarget, nav)
-        }
-        // up to the keyboard if it came back (nothing moves), else down to the navigation bar
-        animate(heldPx.toFloat(), 0f, animationSpec = tween(250, easing = FastOutSlowInEasing)) { value, _ -> heldPx = value.roundToInt() }
-        keepKeyboard = false
-    }
     val rec = recording.collectAsState()
     val recActive by remember { derivedStateOf { rec.value.active } }
-    val panelShown = (emojiOpen || emojiLeaving) && !recActive && composer.canWrite && !composer.requiresClassic
+    val shown = if (panel != KeyboardPanel.NONE) panel else leaving
+    val panelShown = shown != KeyboardPanel.NONE && !recActive && composer.canWrite && !composer.requiresClassic
     val panelPx = if (keyboardPx > 0) keyboardPx else with(density) { 280.dp.roundToPx() }
     val panelHeight = with(density) { panelPx.toDp() }
-    val insets = remember(ime, nav, panelShown, panelPx) { ComposerInsets(ime, nav, if (panelShown) panelPx else 0) { heldPx } }
+    val insets = remember(ime, nav, panelShown, panelPx) { ComposerInsets(ime, nav, if (panelShown) panelPx else 0) }
+    // a pick closes the panel without the keyboard: the camera, picker or map opens over the chat
+    fun picked(action: () -> Unit): () -> Unit = {
+        panel = KeyboardPanel.NONE
+        leaving = KeyboardPanel.NONE
+        action()
+    }
+    val panelContent: @Composable () -> Unit = {
+        if (shown == KeyboardPanel.ATTACH) {
+            AttachPanel(
+                panelHeight,
+                picked(actions::takePhoto),
+                picked(actions::recordVideo),
+                picked(actions::attachGallery),
+                picked(actions::attachFile),
+                picked(actions::attachLocation),
+                if (composer.contacts) picked(actions::attachContact) else null,
+            )
+        } else {
+            EmojiPanel(panelHeight, input, onInputChange, actions, emojiPicker, if (LocalTatrakStyle.current == TatrakStyle.SLATE_SEA) colors.surfaceContainer else colors.surface)
+        }
+    }
     val mentions =
         rememberMentionSuggestions(
             composer.mentions && composer.canWrite && !composer.requiresClassic && previews.isEmpty(),
@@ -248,7 +238,7 @@ fun Composer(
             actions,
         )
     if (LocalTatrakStyle.current == TatrakStyle.SLATE_SEA) {
-        SlateComposer(composer, input, onInputChange, reply, actions, attach, recording, modifier, previews, emojiOpen, onEmojiOpen, emojiPicker, panelShown, panelHeight, insets, focus, mentions)
+        SlateComposer(composer, input, onInputChange, reply, actions, recording, modifier, previews, panel, onPanel, panelShown, panelContent, insets, focus, mentions)
         return
     }
     Surface(color = colors.surface, shadowElevation = 3.dp, modifier = modifier.fillMaxWidth()) {
@@ -286,9 +276,9 @@ fun Composer(
                     )
                 else -> {
                     val rec by recording.collectAsState()
-                    InputRow(composer, input, onInputChange, actions, attach, rec, emojiOpen, previews, onEmojiOpen, focus, mentions)
-                    if (panelShown) EmojiPanel(panelHeight, input, onInputChange, actions, emojiPicker)
-                    BlockSwipeBack(emojiOpen || rec.active)
+                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions)
+                    if (panelShown) panelContent()
+                    BlockSwipeBack(panel != KeyboardPanel.NONE || rec.active)
                 }
             }
         }
@@ -306,15 +296,13 @@ private fun SlateComposer(
     onInputChange: (TextFieldValue) -> Unit,
     reply: ReplyPreview?,
     actions: ChatActions,
-    onAttach: () -> Unit,
     recording: StateFlow<VoiceRecording>,
     modifier: Modifier,
     previews: List<String>,
-    emojiOpen: Boolean,
-    onEmojiOpen: (Boolean) -> Unit,
-    emojiPicker: EmojiPickerSlot,
+    panel: KeyboardPanel,
+    onPanel: (KeyboardPanel) -> Unit,
     panelShown: Boolean,
-    panelHeight: Dp,
+    panelContent: @Composable () -> Unit,
     insets: WindowInsets,
     focus: FocusRequester,
     mentions: MentionSuggestions?,
@@ -334,7 +322,7 @@ private fun SlateComposer(
             }
         }
         val editing = composer.editing
-        val panel: (@Composable () -> Unit)? =
+        val contextPanel: (@Composable () -> Unit)? =
             when {
                 editing != null -> {
                     { ContextPanel(R.drawable.ic_edit_24dp, stringResource(R.string.tatrak_chat_editing), editing.text, actions::cancelEdit) }
@@ -344,13 +332,13 @@ private fun SlateComposer(
                 }
                 else -> null
             }
-        if (panel != null) {
+        if (contextPanel != null) {
             Surface(
                 color = pill,
                 shape = RoundedCornerShape(16.dp),
                 shadowElevation = 3.dp,
                 modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 6.dp),
-                content = panel,
+                content = contextPanel,
             )
         }
         Surface(
@@ -371,15 +359,13 @@ private fun SlateComposer(
                     )
                 else -> {
                     val rec by recording.collectAsState()
-                    InputRow(composer, input, onInputChange, actions, onAttach, rec, emojiOpen, previews, onEmojiOpen, focus, mentions)
-                    BlockSwipeBack(emojiOpen || rec.active)
+                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions)
+                    BlockSwipeBack(panel != KeyboardPanel.NONE || rec.active)
                 }
             }
         }
         if (panelShown) {
-            Surface(color = pill, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), modifier = Modifier.fillMaxWidth()) {
-                EmojiPanel(panelHeight, input, onInputChange, actions, emojiPicker, pill)
-            }
+            Surface(color = pill, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), modifier = Modifier.fillMaxWidth(), content = panelContent)
         }
     }
 }
@@ -390,11 +376,10 @@ private fun InputRow(
     input: TextFieldValue,
     onInputChange: (TextFieldValue) -> Unit,
     actions: ChatActions,
-    onAttach: () -> Unit,
     recording: VoiceRecording,
-    emojiOpen: Boolean,
+    panel: KeyboardPanel,
     previews: List<String>,
-    onEmojiOpen: (Boolean) -> Unit,
+    onPanel: (KeyboardPanel) -> Unit,
     focus: FocusRequester,
     mentions: MentionSuggestions?,
 ) {
@@ -443,6 +428,19 @@ private fun InputRow(
         )
     }
     val keyboard = LocalSoftwareKeyboardController.current
+    // the clip and the emoji button swap their panel in for the keyboard; tapped again, the keyboard comes back
+    fun toggle(target: KeyboardPanel) {
+        if (panel == target) {
+            onPanel(KeyboardPanel.NONE)
+            if (previews.isEmpty()) {
+                focus.requestFocus()
+                keyboard?.show()
+            }
+        } else {
+            keyboard?.hide()
+            onPanel(target)
+        }
+    }
     Row(
         verticalAlignment = Alignment.Bottom,
         modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp).padding(end = 2.dp),
@@ -452,7 +450,7 @@ private fun InputRow(
         } else if (previews.isNotEmpty()) {
             // as the classic screen: the strip takes the text field's place until Send
             PreviewStrip(previews, actions, Modifier.weight(1f))
-            IconButton(onClick = onAttach, modifier = Modifier.padding(bottom = 1.dp)) {
+            IconButton(onClick = { toggle(KeyboardPanel.ATTACH) }, modifier = Modifier.padding(bottom = 1.dp)) {
                 Icon(
                     painterResource(R.drawable.ic_attach_file_24dp),
                     contentDescription = stringResource(R.string.tatrak_chat_attach),
@@ -460,19 +458,8 @@ private fun InputRow(
                 )
             }
         } else {
-            IconButton(
-                onClick = {
-                    if (emojiOpen) {
-                        onEmojiOpen(false)
-                        focus.requestFocus()
-                        keyboard?.show()
-                    } else {
-                        keyboard?.hide()
-                        onEmojiOpen(true)
-                    }
-                },
-                modifier = Modifier.padding(bottom = 1.dp),
-            ) {
+            val emojiOpen = panel == KeyboardPanel.EMOJI
+            IconButton(onClick = { toggle(KeyboardPanel.EMOJI) }, modifier = Modifier.padding(bottom = 1.dp)) {
                 Icon(
                     painterResource(if (emojiOpen) R.drawable.ic_keyboard_24dp else R.drawable.tatrak_ic_emoji_24dp),
                     contentDescription =
@@ -485,7 +472,7 @@ private fun InputRow(
             val interactions = remember { MutableInteractionSource() }
             val pressed by interactions.collectIsPressedAsState()
             // tapping the field brings the keyboard back in place of the panel
-            LaunchedEffect(pressed) { if (pressed) onEmojiOpen(false) }
+            LaunchedEffect(pressed) { if (pressed) onPanel(KeyboardPanel.NONE) }
             // kept at zero width under a recording: dropping the field would drop the focus and the
             // keyboard, and the composer falling under the held mic counted as a slide up to the lock
             Box(if (recording.active) Modifier.width(0.dp).clearAndSetSemantics {} else Modifier.weight(1f)) {
@@ -549,7 +536,7 @@ private fun InputRow(
                 )
             }
             if (!recording.active && !editing) {
-                IconButton(onClick = onAttach, modifier = Modifier.padding(bottom = 1.dp)) {
+                IconButton(onClick = { toggle(KeyboardPanel.ATTACH) }, modifier = Modifier.padding(bottom = 1.dp)) {
                     Icon(
                         painterResource(R.drawable.ic_attach_file_24dp),
                         contentDescription = stringResource(R.string.tatrak_chat_attach),
@@ -934,6 +921,9 @@ private object StickerThumbs {
         return bitmap
     }
 }
+
+/** What sits in place of the keyboard under the composer. */
+internal enum class KeyboardPanel { NONE, EMOJI, ATTACH }
 
 /** Emoji (the installed emoji2 picker) and stickers in place of the keyboard, as tall as it was. */
 @Composable
