@@ -4,6 +4,10 @@
     <string name="tatrak_calls_missed">Missed</string>
     <string name="tatrak_calls_empty">No calls yet</string>
     <string name="tatrak_calls_no_missed">No missed calls</string>
+    <string name="tatrak_calls_incoming">Incoming</string>
+    <string name="tatrak_calls_no_incoming">No incoming calls</string>
+    <string name="tatrak_calls_outgoing">Outgoing</string>
+    <string name="tatrak_calls_no_outgoing">No outgoing calls</string>
     <string name="tatrak_calls_open_chat">Open chat</string>
     <string name="tatrak_call_confirm_audio">Call %1$s?</string>
     <string name="tatrak_call_confirm_video">Video call with %1$s?</string>

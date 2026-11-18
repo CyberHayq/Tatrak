@@ -65,8 +65,10 @@ while it is being swiped.
 
 # UI (stage 1, implemented)
 
-- `ModalNavigationDrawer` with account header and items: New chat, Contacts, Accounts, Scan QR code,
-  Settings. The drawer width is 80% of the window width, capped at 320 dp.[^screen]
+- Side menu (`DrawerHost`) with account header and items: Contacts, Archive, Calls, Accounts, Scan QR
+  code, Settings (new chat is the pencil FAB only). The day / night toggle in the header recreates
+  the activity; the open state is saved (`rememberDrawerController`), so the menu stays open. The
+  drawer width is 80% of the window width, capped at 320 dp.[^screen]
 - Top bar with menu and search; search filters the list and is closed by Back. Message search
   retains previous results while a new term is pending; the no-results text appears only when
   completed search terms match the current query, including across the input debounce.

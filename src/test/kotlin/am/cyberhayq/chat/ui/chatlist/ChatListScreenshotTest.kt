@@ -17,6 +17,7 @@ import org.robolectric.RuntimeEnvironment
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -116,6 +117,17 @@ class ChatListScreenshotTest {
     }
 
     // ---- hidden archive and the drawer by swipe ----
+
+    @Test
+    fun drawerStaysOpenAfterRecreate() {
+        val restore = StateRestorationTester(compose)
+        var drawer: DrawerController? = null
+        restore.setContent { drawer = rememberDrawerController() }
+        compose.runOnIdle { drawer!!.open() }
+        compose.waitForIdle()
+        restore.emulateSavedInstanceStateRestore()
+        compose.runOnIdle { assertEquals(1f, drawer!!.progress) }
+    }
 
     @Test
     fun gestureDecisions() {

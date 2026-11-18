@@ -40,6 +40,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.Saver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
@@ -422,7 +424,10 @@ class DrawerController(private val scope: CoroutineScope) {
 @Composable
 fun rememberDrawerController(): DrawerController {
     val scope = rememberCoroutineScope()
-    return remember { DrawerController(scope) }
+    // saved, so the menu stays open when the theme toggle recreates the activity
+    return rememberSaveable(saver = Saver({ it.isOpen }, { open -> DrawerController(scope).apply { if (open) dragTo(1f) } })) {
+        DrawerController(scope)
+    }
 }
 
 internal fun drawerWidth(screen: Dp): Dp = (screen * 0.8f).coerceAtMost(320.dp)
@@ -430,7 +435,7 @@ internal fun drawerWidth(screen: Dp): Dp = (screen * 0.8f).coerceAtMost(320.dp)
 /**
  * A modal side menu that follows a left-to-right swipe from anywhere, like old Telegram. The drag is
  * claimed in the Initial pass, so the folder pager never gets it.
- * shortcut: not saved over rotation, and no predictive back; add if the menu is open on rotate often.
+ * shortcut: no predictive back; add if users ask for it.
  */
 @Composable
 internal fun DrawerHost(

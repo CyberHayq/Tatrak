@@ -66,6 +66,22 @@ class CallsScreenshotTest {
     }
 
     @Test
+    fun tabsSplitByDirection() {
+        fun keys(tab: CallsTab) = state.entries.filter(tab.keep).map { it.key }
+        assertEquals(listOf("3"), keys(CallsTab.INCOMING))
+        assertEquals(listOf("2", "4"), keys(CallsTab.OUTGOING))
+        assertEquals(listOf("1"), keys(CallsTab.MISSED))
+    }
+
+    @Test
+    @Config(qualifiers = "+ru")
+    fun outgoingRussian() {
+        compose.setContent { TatrakTheme(darkTheme = false) { CallsScreen(state, NoActions) } }
+        compose.onNodeWithText("Исходящие").performClick()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/calls_outgoing_ru.png")
+    }
+
+    @Test
     fun empty() {
         compose.setContent { TatrakTheme(darkTheme = false) { CallsScreen(CallsState(loaded = true), NoActions) } }
         compose.onNodeWithText("No calls yet").assertExists()

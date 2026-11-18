@@ -1027,10 +1027,6 @@ internal fun ChatListDrawer(
             }
         }
         Spacer(Modifier.height(8.dp))
-        DrawerItem(R.drawable.ic_edit_24dp, stringResource(R.string.tatrak_new_chat)) {
-            close()
-            actions.newChat()
-        }
         DrawerItem(R.drawable.ic_contacts_24dp, stringResource(R.string.contacts)) {
             close()
             actions.openContacts()

@@ -31,7 +31,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.PrimaryTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -90,33 +90,37 @@ interface CallsActions {
     fun call(chat: String, video: Boolean)
 }
 
-private enum class CallsTab(val label: Int) {
-    ALL(R.string.tatrak_tab_all),
-    MISSED(R.string.tatrak_calls_missed),
+/** Incoming means answered: a missed call is on its own tab, as the row labels split them. */
+internal enum class CallsTab(val label: Int, val empty: Int, val keep: (CallEntry) -> Boolean) {
+    ALL(R.string.tatrak_tab_all, R.string.tatrak_calls_empty, { true }),
+    INCOMING(R.string.tatrak_calls_incoming, R.string.tatrak_calls_no_incoming, { it.received && !it.missed }),
+    OUTGOING(R.string.tatrak_calls_outgoing, R.string.tatrak_calls_no_outgoing, { !it.received }),
+    MISSED(R.string.tatrak_calls_missed, R.string.tatrak_calls_no_missed, { it.missed }),
 }
 
-/** Telegram-style call list: all calls or only missed ones, newest first, call back from a row. */
+/** Telegram-style call list: all, incoming, outgoing or missed calls, newest first, call back from a row. */
 @Composable
 fun CallsScreen(state: CallsState, actions: CallsActions, modifier: Modifier = Modifier) {
     var tab by rememberSaveable { mutableStateOf(CallsTab.ALL) }
-    val shown = remember(state.entries, tab) { if (tab == CallsTab.MISSED) state.entries.filter { it.missed } else state.entries }
+    val shown = remember(state.entries, tab) { if (tab == CallsTab.ALL) state.entries else state.entries.filter(tab.keep) }
     val time = rememberCallTimeFormatter()
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
             TatrakTopBar(title = stringResource(R.string.tatrak_calls), onBack = actions::back)
-            PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.surface) {
+            // scrollable: four Russian labels do not fit equal widths
+            PrimaryScrollableTabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 0.dp) {
                 CallsTab.entries.forEach { t ->
                     Tab(
                         selected = t == tab,
                         onClick = { tab = t },
-                        text = { Text(stringResource(t.label)) },
+                        text = { Text(stringResource(t.label), maxLines = 1) },
                         selectedContentColor = MaterialTheme.colorScheme.primary,
                         unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
             if (state.loaded && shown.isEmpty()) {
-                EmptyText(stringResource(if (tab == CallsTab.MISSED) R.string.tatrak_calls_no_missed else R.string.tatrak_calls_empty))
+                EmptyText(stringResource(tab.empty))
             } else {
                 LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
                     items(shown, key = { it.key }) { CallRow(it, time, actions) }
