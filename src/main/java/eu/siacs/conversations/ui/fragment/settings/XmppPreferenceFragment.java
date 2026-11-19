@@ -2,7 +2,11 @@ package eu.siacs.conversations.ui.fragment.settings;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.os.Bundle;
 import android.util.Log;
+import android.view.LayoutInflater;
+import android.view.View;
+import android.view.ViewGroup;
 
 import androidx.annotation.ArrayRes;
 import androidx.annotation.NonNull;
@@ -14,6 +18,8 @@ import androidx.preference.PreferenceFragmentCompat;
 import com.google.common.base.Function;
 import com.google.common.base.Strings;
 import com.google.common.primitives.Ints;
+
+import am.cyberhayq.chat.ui.settings.PreferenceListKt;
 
 import eu.siacs.conversations.Config;
 import eu.siacs.conversations.R;
@@ -40,6 +46,17 @@ public abstract class XmppPreferenceFragment extends PreferenceFragmentCompat {
     }
 
     public void onBackendConnected() {}
+
+    @NonNull
+    @Override
+    public View onCreateView(
+            @NonNull LayoutInflater inflater,
+            @Nullable ViewGroup container,
+            @Nullable Bundle savedInstanceState) {
+        // Tatrak: Compose draws the rows; the classic list stays, hidden, for bindPreferences()
+        return PreferenceListKt.preferenceListView(
+                this, super.onCreateView(inflater, container, savedInstanceState));
+    }
 
     @Override
     public void onResume() {

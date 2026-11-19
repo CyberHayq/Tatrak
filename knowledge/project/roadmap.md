@@ -63,7 +63,7 @@ Exploratory ideas, not accepted implementation commitments:
 - Next encryption step: the password mode (phase 2), which must also wrap the media keys carried in Tatrak backups.
 - Standard OMEMO 2 is planned (owner, 2026-11-13: listed as "Planned" in the README); a post-quantum OMEMO profile (such as monocles' custom PQ profile) remains under assessment; no post-quantum session implementation is included. See backlog and [OMEMO 2 feasibility](../protocol/omemo2-feasibility.md).
 
-# Compose coverage: 14/53 screens
+# Compose coverage: 24/53 screens
 
 Owner, 2026-11-13: track the move to Compose as X/Y, X screens drawn in Compose out of Y in
 total; update the count whenever a screen moves. A screen is an activity, a main fragment of
@@ -74,12 +74,15 @@ the third-party `CropImageActivity`, activities without UI (`ConversationActivit
 kept as the chat's "classic view" fallback. An XML-only restyle (call screen, onboarding
 screens) does not count as Compose.
 
-In Compose (14): chat list, chat, settings home, Appearance, profile (`ProfileActivity`), new chat
+In Compose (24): chat list, chat, settings home, Appearance, profile (`ProfileActivity`), new chat
 (`StartConversationActivity`), message search, shared media (`MediaBrowserActivity`), media viewer,
 accounts (`ManageAccountActivity`), share target (`ShareWithActivity`), call list, first-run
-security choice (`SetupModeActivity`), group participants (`MucUsersActivity`, 2026-11-13).
+security choice (`SetupModeActivity`), group participants (`MucUsersActivity`, 2026-11-13); the ten
+settings pages Attachments, Availability, Backup, Connection, Interface, Interface bubbles,
+Notifications, Privacy, Security, UnifiedPush (2026-11-19, one renderer over their preference tree,
+see the plan; their dialogs stay classic).
 
-Classic (39):
+Classic (29):
 - `AddReactionActivity`: the Compose chat no longer opens it or the classic reaction dialog
   (an emoji sheet since 2026-11-13); only the classic chat view still does.
 - Onboarding, Compose redesign postponed, XML restyle done 2026-11-13: `WelcomeActivity`,
@@ -93,7 +96,5 @@ Classic (39):
   `PublishGroupChatProfilePictureActivity`, `ChooseAccountForProfilePictureActivity`,
   `ScanQrCodeActivity`, `AboutActivity`, `ChangePasswordActivity`, `RecordingActivity`,
   `ShareViaAccountActivity`, `ShortcutActivity`, `DatabaseStorageActivity` (views built in code).
-- Settings pages (10): Attachments, Availability, Backup, Connection, Interface, Interface
-  bubbles, Notifications, Privacy, Security, UnifiedPush.
 
 [^plan]: Approved implementation plan
