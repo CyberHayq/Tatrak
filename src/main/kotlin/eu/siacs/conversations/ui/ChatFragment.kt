@@ -115,7 +115,9 @@ import java.io.IOException
 import java.time.Duration
 import java.time.Instant
 import java.util.UUID
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.android.awaitFrame
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.Job
@@ -379,6 +381,29 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             }
         )
         return layout
+    }
+
+    /** Set by [ConversationsActivity.showConversation] when this chat slides in over the list. */
+    var slideAfterLoad = false
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        // As Telegram: slide in once the first messages are laid out (listReady). Composing them in
+        // the middle of the slide dropped frames on slower phones. The fragment still reaches
+        // onStart (bind) while postponed; it stays below RESUMED, see markRead.
+        // shortcut: fixed 300 ms cap, after it the slide starts and messages pop in mid-way as before
+        if (slideAfterLoad) postponeEnterTransition(300, TimeUnit.MILLISECONDS)
+    }
+
+    override fun listReady() {
+        if (!slideAfterLoad) return
+        slideAfterLoad = false
+        viewLifecycleOwner.lifecycleScope.launch {
+            // the next frame lays out the initial scroll (alpha 0), the one after starts the slide
+            awaitFrame()
+            awaitFrame()
+            startPostponedEnterTransition()
+        }
     }
 
     /** Animators, not the old view animations: only these can follow a back gesture. */
@@ -1917,6 +1942,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         // Conversation.markRead mark the whole new chat as read
         if (viewModel.state.value.conversationUuid != c.uuid) return
         lastVisibleUuid = uuid
+        // not yet resumed: still invisible while the slide waits for listReady; onResume sends it
+        if (!isResumed) return
         (activity as? ConversationsActivity)?.onConversationRead(c, uuid)
     }
 

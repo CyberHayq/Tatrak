@@ -453,7 +453,8 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         }
         // reordering lets the pop follow a (predictive or swipe) back gesture
         final var transaction = fragmentManager.beginTransaction().setReorderingAllowed(true);
-        if (onBackStack && !(existing instanceof ConversationHost)) {
+        final boolean slide = onBackStack && !(existing instanceof ConversationHost);
+        if (slide) {
             transaction.setCustomAnimations(
                     R.animator.tatrak_chat_enter,
                     R.animator.tatrak_list_exit,
@@ -466,6 +467,8 @@ public class ConversationsActivity extends QrCodeProcessingActivity
             conversationFragment.reInit(conversation, arguments);
         } else {
             final var chatFragment = new ChatFragment();
+            // Tatrak: wait for the first messages before sliding in
+            chatFragment.setSlideAfterLoad(slide);
             transaction.replace(container, chatFragment);
             chatFragment.reInit(conversation, arguments);
         }

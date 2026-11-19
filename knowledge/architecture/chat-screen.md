@@ -32,6 +32,15 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   `ConversationHost`, which replaces the `instanceof ConversationFragment` checks used for
   navigation, archiving, rotation and the two-pane layout.
 - Opening a chat slides it in from the right while the list shifts left (`res/anim/tatrak_*`).
+- The slide waits for the first messages (2026-11-19), as Telegram delays its chat open. Before,
+  the slide started on an empty screen and the messages were composed mid-slide, which the owner
+  saw as jerks on some phones. `showConversation` sets `ChatFragment.slideAfterLoad` only when it
+  sets the slide animators (not in two panes, not classic to Compose); the fragment then postpones
+  its enter transition, capped at 300 ms, until `ChatActions.listReady` (the list's initial scroll
+  is done) plus two frames at alpha 0. A postponed fragment still reaches `onStart`, so `bind` and
+  the snapshot build run, but it stays below RESUMED: `markRead` keeps the position and `onResume`
+  sends it, so an unshown chat sends no read marker. `SwipeBackLayout` at alpha 0 passes touches to
+  the list below.
 - The phone layout uses `FragmentContainerView` so the outgoing chat list is drawn behind the
   entering chat. A plain `FrameLayout` drew the list on top until the end of the transition,
   hiding most of the chat and making it jump into view on API 37.

@@ -98,6 +98,9 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
         super.onDetachedFromWindow()
     }
 
+    // a chat waiting to slide in has alpha 0 over the visible list: let touches reach the list
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean = alpha != 0f && super.dispatchTouchEvent(ev)
+
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {

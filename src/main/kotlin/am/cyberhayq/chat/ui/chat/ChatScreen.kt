@@ -275,6 +275,9 @@ interface ChatActions {
 
     /** These mentions ([ChatState.mentions]) were shown on screen or jumped to. */
     fun mentionsSeen(uuids: Collection<String>) {}
+
+    /** The loaded chat has made its initial scroll; the next layout shows its first messages. */
+    fun listReady() {}
 }
 
 /**
@@ -642,7 +645,10 @@ private fun MessageList(
 
     // no read markers until the chat has scrolled to the unread divider
     var initialScrollDone by remember(state.generation) { mutableStateOf(false) }
-    InitialScroll(state, listState) { initialScrollDone = true }
+    InitialScroll(state, listState) {
+        initialScrollDone = true
+        actions.listReady()
+    }
     FollowNewMessages(state, listState)
 
     LaunchedEffect(listState) {
