@@ -79,6 +79,66 @@ Builds:
     scanignore:
       - src/test/resources/media-vectors
 
+  - versionName: 0.3.0
+    versionCode: 5000201
+    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-armeabi-v7a.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-armeabi-v7a.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
+  - versionName: 0.3.0
+    versionCode: 5000202
+    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-x86.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-x86.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
+  - versionName: 0.3.0
+    versionCode: 5000203
+    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-x86_64.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-x86_64.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
+  - versionName: 0.3.0
+    versionCode: 5000204
+    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-25-jdk-headless
+      - update-java-alternatives -a
+    gradle:
+      - conversations
+      - free
+    output: build/outputs/apk/conversationsFree/release/*-arm64-v8a.apk
+    binary: https://github.com/CyberHayq/Tatrak/releases/download/v%v/am.cyberhayq.chat-%v-arm64-v8a.apk
+    scanignore:
+      - src/test/resources/media-vectors
+
 AllowedAPKSigningKeys: 3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b
 
 AutoUpdateMode: Version
@@ -88,5 +148,5 @@ VercodeOperation:
   - 100 * %c + 2
   - 100 * %c + 3
   - 100 * %c + 4
-CurrentVersion: 0.2.0
-CurrentVersionCode: 5000104
+CurrentVersion: 0.3.0
+CurrentVersionCode: 5000204

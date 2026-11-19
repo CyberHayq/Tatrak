@@ -9,7 +9,9 @@ set -euo pipefail
 
 DIR=${1:-$HOME/workspace/tatrak/build/outputs/apk/conversationsFree/release}
 KEYSTORE=$HOME/tatrak-release.p12
-BT=$HOME/Android/build-tools/36.0.0
+# build tools from ANDROID_HOME, else ~/Android/Sdk, else an SDK unpacked straight into ~/Android
+BT=${ANDROID_HOME:-$HOME/Android/Sdk}/build-tools/36.0.0
+[ -x "$BT/apksigner" ] || BT=$HOME/Android/build-tools/36.0.0
 OUT=$HOME/tatrak-apks
 EXPECTED=3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b  # release certificate SHA-256
 export JAVA_HOME=/usr/lib/jvm/java-25-openjdk
