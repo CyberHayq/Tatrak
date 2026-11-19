@@ -18,6 +18,6 @@
     <string name="tatrak_bar_blur">Blur under bars</string>
     <string name="tatrak_bar_blur_off">Off</string>
     <string name="tatrak_bar_blur_frosted">Frosted</string>
-    <string name="tatrak_bar_blur_frosted_summary">Readable over any chat</string>
+    <string name="tatrak_bar_blur_frosted_summary">Readable over the style\'s own colours</string>
     <string name="tatrak_bar_blur_clear">Clear, like Telegram</string>
 </resources>

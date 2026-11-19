@@ -18,6 +18,6 @@
     <string name="tatrak_bar_blur">Размытие под панелями</string>
     <string name="tatrak_bar_blur_off">Выкл</string>
     <string name="tatrak_bar_blur_frosted">Матовое</string>
-    <string name="tatrak_bar_blur_frosted_summary">Читается поверх любого чата</string>
+    <string name="tatrak_bar_blur_frosted_summary">Читается поверх цветов стиля</string>
     <string name="tatrak_bar_blur_clear">Прозрачное, как в Telegram</string>
 </resources>

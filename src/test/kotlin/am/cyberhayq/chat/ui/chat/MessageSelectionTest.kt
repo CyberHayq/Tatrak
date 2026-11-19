@@ -1,5 +1,9 @@
 package am.cyberhayq.chat.ui.chat
 
+import androidx.compose.foundation.gestures.Orientation
+import androidx.compose.foundation.lazy.LazyListItemInfo
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.ui.unit.IntSize
 import org.junit.Assert.assertEquals
 import org.junit.Test
 
@@ -62,5 +66,35 @@ class MessageSelectionTest {
     fun copyOfOneMessageOrInSavedMessagesHasNoNames() {
         assertEquals("Hi", selectionCopyText(listOf(SelectedText("ani@x", "Ani", "Hi")), withNames = true))
         assertEquals("Hi\n\nFine", selectionCopyText(listOf(SelectedText(null, "Me", "Hi"), SelectedText(null, "Me", "Fine")), withNames = false))
+    }
+
+    @Test
+    fun dragOverAFloatingBarPicksTheNearestRowAReaderSees() {
+        // the chat's reversed list, 1000 px: composer pill 100 px at the bottom, header pill 150 px at the top,
+        // rows of 100 px from the bottom; rows 8 to 10 lie wholly under the header
+        val info =
+            object : LazyListLayoutInfo {
+                override val visibleItemsInfo =
+                    (0..10).map { i ->
+                        object : LazyListItemInfo {
+                            override val index = i
+                            override val key: Any = i
+                            override val offset = i * 100
+                            override val size = 100
+                        }
+                    }
+                override val viewportStartOffset = -100
+                override val viewportEndOffset = 900
+                override val totalItemsCount = 11
+                override val viewportSize = IntSize(400, 1000)
+                override val orientation = Orientation.Vertical
+                override val reverseLayout = true
+                override val beforeContentPadding = 100
+                override val afterContentPadding = 150
+            }
+        assertEquals(8, info.indexAt(50f))
+        assertEquals(7, info.indexAt(50f, padded = true))
+        assertEquals(0, info.indexAt(990f, padded = true))
+        assertEquals(3, info.indexAt(560f, padded = true))
     }
 }

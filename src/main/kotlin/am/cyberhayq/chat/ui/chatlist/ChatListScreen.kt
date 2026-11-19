@@ -46,6 +46,11 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
@@ -413,7 +418,8 @@ fun ChatListScreen(
                     if (floating) {
                         // above the bottom bar, following it in and out
                         AnimatedVisibility(dock, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
-                            NewChatButton(actions::newChat, Modifier)
+                            // clear of a side navigation bar or cutout, as the bottom pill is
+                            NewChatButton(actions::newChat, Modifier.windowInsetsPadding(WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.End)))
                         }
                     } else if (!slate && !searching && !inArchive && !selectionMode) {
                         NewChatButton(actions::newChat, Modifier.navigationBarsPadding())

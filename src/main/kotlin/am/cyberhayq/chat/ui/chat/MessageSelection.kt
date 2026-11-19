@@ -118,7 +118,7 @@ internal suspend fun PointerInputScope.selectionGestures(
     fun keyAt(index: Int) = (items().getOrNull(index) as? MessageItem)?.takeIf { it.actions.any }?.key
     fun dragTo(start: SelectionDrag, y: Float) {
         val from = items().indexOfFirst { it.key == start.key }
-        val to = listState.layoutInfo.indexAt(y) ?: return
+        val to = listState.layoutInfo.indexAt(y, padded) ?: return
         if (from < 0) return
         val next = dragSelection(start.base, from, to, start.select, ::keyAt)
         if (next != selection()) onChange(next)
@@ -182,10 +182,14 @@ internal suspend fun PointerInputScope.selectionGestures(
     }
 }
 
-/** The list item under [y] (pixels from the list's top edge); the nearest one when [y] is in the content padding. */
-internal fun LazyListLayoutInfo.indexAt(y: Float): Int? {
+/**
+ * The list item under [y] (pixels from the list's top edge); the nearest one when [y] is in the content padding.
+ * [padded] (floating bars): a finger over a bar picks the nearest row a reader sees, not a row hidden under the bar.
+ */
+internal fun LazyListLayoutInfo.indexAt(y: Float, padded: Boolean = false): Int? {
     // offsets run from the list's start (the bottom when reversed), after the content padding before the first item
-    val main = (if (reverseLayout) viewportSize.height - y else y) + viewportStartOffset
+    val raw = (if (reverseLayout) viewportSize.height - y else y) + viewportStartOffset
+    val main = if (padded) raw.coerceIn(0f, maxOf(0f, viewportSize.height - beforeContentPadding - afterContentPadding - 1f)) else raw
     return visibleItemsInfo
         .minByOrNull {
             when {

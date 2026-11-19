@@ -7,6 +7,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
@@ -240,30 +241,28 @@ private val FadeLength = 8.dp
  * The content fades out towards floating bars as high as [bars]' top and bottom (a Scaffold's padding; the screen's edges
  * included): gone under the bars, so the hidden archive row and rows behind the margins never show, and dimming over the
  * [FadeLength] before a bar's inner edge. One offscreen layer for the whole content, no per-item work; the heights are read
- * while drawing, so a bar that grows (the keyboard under the chat's composer) redraws without recomposing.
+ * in the draw cache, so a bar that grows (the keyboard under the chat's composer) redraws without recomposing.
  * [blurred]: the bars show the content blurred, so the fade moves past the edge, under the bars, and fades only the margins
  * beside and above them.
  */
 fun Modifier.fadeUnderBars(bars: PaddingValues, blurred: Boolean = false): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
-        .drawWithContent {
-            drawContent()
+        .drawWithCache {
+            // rebuilt only when the size or a bar's height changes, not on every frame of a scroll
             val fade = FadeLength.toPx()
             val under = if (blurred) fade else 0f
             val t = bars.calculateTopPadding().toPx()
             val b = bars.calculateBottomPadding().toPx()
             val opaque = listOf(Color.Transparent, Color.Black)
-            if (t > 0f) {
-                val edge = t - under
-                drawRect(Brush.verticalGradient(opaque, edge, edge + fade), size = Size(size.width, edge + fade), blendMode = BlendMode.DstIn)
-            }
-            if (b > 0f) {
-                val edge = size.height - b + under
-                drawRect(
-                    Brush.verticalGradient(opaque.reversed(), edge - fade, edge),
-                    topLeft = Offset(0f, edge - fade),
-                    size = Size(size.width, b - under + fade),
-                    blendMode = BlendMode.DstIn,
-                )
+            val top = t - under
+            val bottom = size.height - b + under
+            val topMask = Brush.verticalGradient(opaque, top, top + fade)
+            val bottomMask = Brush.verticalGradient(opaque.reversed(), bottom - fade, bottom)
+            onDrawWithContent {
+                drawContent()
+                if (t > 0f) drawRect(topMask, size = Size(size.width, top + fade), blendMode = BlendMode.DstIn)
+                if (b > 0f) {
+                    drawRect(bottomMask, topLeft = Offset(0f, bottom - fade), size = Size(size.width, b - under + fade), blendMode = BlendMode.DstIn)
+                }
             }
         }

@@ -438,13 +438,10 @@ fun ChatScreen(
                         bottomBar = { composer(Modifier.pointerInput(Unit) {}) },
                     ) { bars ->
                         Box(Modifier.fillMaxSize()) {
-                            if (backdrop == null) {
+                            // one call site for the messages with blur on or off: switching it keeps the list's scroll
+                            Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
+                                if (backdrop != null) ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
                                 messages(bars)
-                            } else {
-                                Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
-                                    ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
-                                    messages(bars)
-                                }
                             }
                             ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(bars).padding(top = 12.dp))
                         }
@@ -844,6 +841,7 @@ private fun MessageList(
         }
         FloatingDate(
             listState,
+            padded,
             { index -> items.getOrNull(index)?.day },
             if (bars != null) Modifier.align(Alignment.TopCenter).padding(bars).padding(top = 6.dp)
             else Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 50.dp else 6.dp),
@@ -983,12 +981,14 @@ private fun FollowNewMessages(state: ChatState, listState: LazyListState) {
 @Composable
 private fun FloatingDate(
     listState: LazyListState,
+    /** Floating bars: the date of the topmost row a reader sees, not of one under the header pill. */
+    padded: Boolean,
     dayAt: (Int) -> String?,
     modifier: Modifier,
 ) {
     val day by remember {
         derivedStateOf {
-            val top = listState.layoutInfo.visibleItemsInfo.lastOrNull()
+            val top = listState.layoutInfo.shownItems(padded).lastOrNull()
             top?.let { dayAt(it.index) }
         }
     }
