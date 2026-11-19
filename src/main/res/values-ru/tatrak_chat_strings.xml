@@ -24,8 +24,6 @@
     <string name="tatrak_chat_gallery">Галерея</string>
     <string name="tatrak_chat_file">Файл</string>
     <string name="tatrak_chat_classic_view">Классический вид</string>
-    <string name="tatrak_chat_account_disabled">Аккаунт отключён</string>
-    <string name="tatrak_chat_group_offline">Нет подключения к группе</string>
     <string name="tatrak_chat_pgp_notice">В этом чате используется OpenPGP. Отправляйте сообщения в классическом виде.</string>
     <plurals name="tatrak_chat_send_files">
         <item quantity="one">Отправить %d файл?</item>
@@ -111,6 +109,8 @@
     <string name="tatrak_chat_message_info">О сообщении</string>
     <string name="tatrak_chat_info_sent">Отправлено</string>
     <string name="tatrak_chat_info_received">Получено</string>
+    <!-- group chats: heading of the list of members who have read an own message -->
+    <string name="tatrak_chat_info_read_by">Прочитали</string>
     <string name="tatrak_shared_file_kept">Файл не удалён: он лежит вне хранилища Tatrak. Если он больше не нужен, удалите его сами:\n%1$s</string>
     <!-- long-press menu: "OMEMO · verified"; %1$s the encryption method, %2$s the key's trust -->
     <string name="tatrak_chat_key_line">%1$s · %2$s</string>

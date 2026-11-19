@@ -44,6 +44,6 @@ class ChatDefectsTest {
         assertEquals(ChatBanner.ADD_BACK, subscriptionBanner(blocked = false, pendingRequest = true, inRoster = false))
         assertEquals(ChatBanner.ALLOW_SUBSCRIPTION, subscriptionBanner(false, true, true))
         assertEquals(null, subscriptionBanner(false, false, false))
-        assertEquals(null, subscriptionBanner(true, true, false))
+        assertEquals(ChatBanner.BLOCKED, subscriptionBanner(true, true, false))
     }
 }

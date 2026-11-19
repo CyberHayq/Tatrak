@@ -6,6 +6,7 @@ import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import androidx.compose.ui.text.AnnotatedString
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -66,7 +67,7 @@ class ProfileScreenshotTest {
                     ProfileState(
                         loaded = true,
                         header = ChatHeader(title = "Ani", subtitle = "last seen 5 minutes ago"),
-                        address = "ani@tatrak.am",
+                        address = AnnotatedString("ani@tatrak.am"),
                         canCall = true,
                         canVideo = true,
                         blocked = false,
@@ -87,7 +88,7 @@ class ProfileScreenshotTest {
                     ProfileState(
                         loaded = true,
                         header = ChatHeader(title = "Tatrak team", subtitle = "4 participants", isGroup = true, isMuted = true),
-                        address = "team@conference.tatrak.am",
+                        address = AnnotatedString("team@conference.tatrak.am"),
                         about = "Release planning and builds",
                         members =
                             listOf(

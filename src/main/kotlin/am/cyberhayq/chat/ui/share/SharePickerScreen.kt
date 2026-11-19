@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.share
 
+import am.cyberhayq.chat.ui.chatlist.inErrorColor
 import am.cyberhayq.chat.ui.common.AvatarRow
 import am.cyberhayq.chat.ui.common.EmptyText
 import am.cyberhayq.chat.ui.common.TatrakTopBar
@@ -34,8 +35,8 @@ data class ShareTarget(
     /** Conversation uuid. */
     val key: String,
     val name: String,
-    /** The chat's address. */
-    val address: String,
+    /** The chat's address, look-alike characters marked. */
+    val address: AnnotatedString,
     val avatar: Bitmap? = null,
 )
 
@@ -94,7 +95,7 @@ fun SharePickerScreen(state: ShareState, actions: ShareActions, modifier: Modifi
                 items(shown, key = { it.key }) { target ->
                     AvatarRow(
                         name = target.name,
-                        subtitle = AnnotatedString(target.address),
+                        subtitle = target.address.inErrorColor(),
                         avatar = target.avatar,
                         onClick = { actions.pick(target.key) },
                     )

@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.newchat
 
+import am.cyberhayq.chat.ui.chatlist.inErrorColor
 import am.cyberhayq.chat.ui.common.AvatarRow
 import am.cyberhayq.chat.ui.common.EmptyText
 import am.cyberhayq.chat.ui.common.TatrakTopBar
@@ -42,6 +43,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.runtime.remember
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,7 +76,10 @@ data class NewChatEntry(
     /** Account uuid and address; stable across rebuilds. */
     val key: String,
     val name: String,
-    val subtitle: String,
+    /** "online", or the address with look-alike characters marked. */
+    val subtitle: AnnotatedString,
+    /** "Blocked", roster groups and presence, as the classic row's tags; drawn before [subtitle]. */
+    val tags: List<String> = emptyList(),
     val online: Boolean = false,
     val avatar: Bitmap? = null,
     val menu: List<NewChatMenu> = emptyList(),
@@ -223,7 +228,8 @@ private fun EntryRow(entry: NewChatEntry, onClick: () -> Unit, contactsOnly: Boo
     val labels = entry.menu.map { stringResource(it.label) }
     AvatarRow(
         name = entry.name,
-        subtitle = AnnotatedString(entry.subtitle),
+        // the participant rows' look: tags joined by " · " in the subtitle line
+        subtitle = entry.subtitle.inErrorColor().let { address -> remember(entry.tags, address) { if (entry.tags.isEmpty()) address else AnnotatedString(entry.tags.joinToString(" · ", postfix = " · ")) + address } },
         avatar = entry.avatar,
         onClick = onClick,
         subtitleColor =

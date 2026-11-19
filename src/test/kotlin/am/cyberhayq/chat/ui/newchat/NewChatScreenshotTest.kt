@@ -10,6 +10,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.text.AnnotatedString
 import org.junit.Assert.assertEquals
 import com.github.takahirom.roborazzi.captureRoboImage
 import org.junit.Rule
@@ -67,11 +68,11 @@ class NewChatScreenshotTest {
         NewChatState(
             contacts =
                 listOf(
-                    NewChatEntry("a", "Ani", "online", online = true),
-                    NewChatEntry("b", "Bob", "bob@tatrak.am"),
-                    NewChatEntry("d", "Davit", "davit@example.org"),
+                    NewChatEntry("a", "Ani", AnnotatedString("online"), online = true),
+                    NewChatEntry("b", "Bob", AnnotatedString("bob@tatrak.am"), tags = listOf("Blocked")),
+                    NewChatEntry("d", "Davit", AnnotatedString("davit@example.org")),
                 ),
-            groups = listOf(NewChatEntry("t", "Tatrak team", "team@conference.tatrak.am")),
+            groups = listOf(NewChatEntry("t", "Tatrak team", AnnotatedString("team@conference.tatrak.am"))),
             loaded = true,
         )
 

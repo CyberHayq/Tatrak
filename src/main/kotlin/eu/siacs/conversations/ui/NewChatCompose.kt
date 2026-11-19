@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui
 
+import am.cyberhayq.chat.ui.chatlist.styledAddress
 import am.cyberhayq.chat.ui.newchat.NewChatActions
 import am.cyberhayq.chat.ui.newchat.NewChatEntry
 import am.cyberhayq.chat.ui.newchat.NewChatMenu
@@ -8,12 +9,16 @@ import am.cyberhayq.chat.ui.newchat.NewChatScreen
 import am.cyberhayq.chat.ui.newchat.NewChatState
 import android.view.View
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.text.AnnotatedString
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import androidx.preference.PreferenceManager
+import eu.siacs.conversations.AppSettings
 import eu.siacs.conversations.R
 import im.conversations.android.model.Bookmark
 import eu.siacs.conversations.entities.Contact
 import eu.siacs.conversations.entities.ListItem
+import im.conversations.android.model.DynamicTag
 import im.conversations.android.xmpp.model.idle.LastUserInteraction
 import eu.siacs.conversations.services.QuickConversationsService
 import eu.siacs.conversations.utils.UIHelper
@@ -75,6 +80,12 @@ internal class NewChatCompose(private val activity: StartConversationActivity) :
     /** Called on the main thread at the end of the activity's `filter()`. */
     fun publish(contactItems: List<ListItem>, groupItems: List<ListItem>) {
         val service = activity.xmppConnectionService ?: return
+        // ListItemAdapter.refreshSettings / getView: "Blocked" always, the other tags with the setting on
+        val showDynamicTags = PreferenceManager.getDefaultSharedPreferences(activity).getBoolean(AppSettings.SHOW_DYNAMIC_TAGS, false)
+        // Blocked first: the subtitle line is ellipsized, a long roster group must not hide it
+        fun tags(item: ListItem) =
+            item.tags.takeIf { Contact.isNoteworthy(it) || showDynamicTags }.orEmpty()
+                .sortedByDescending { it is DynamicTag.Blocked }.map { tagLabel(activity, it) }
         val contactsByKey = LinkedHashMap<String, Contact>()
         val contactEntries =
             contactItems.filterIsInstance<Contact>().map { contact ->
@@ -82,12 +93,15 @@ internal class NewChatCompose(private val activity: StartConversationActivity) :
                 contactsByKey[key] = contact
                 val interaction = contact.lastUserInteraction
                 val online = interaction is LastUserInteraction.Online
+                val address = styledAddress(activity, contact.address.asBareJid())
                 NewChatEntry(
                     key = key,
                     name = contact.displayName,
                     subtitle =
-                        if (online) UIHelper.lastUserInteraction(activity, interaction)
-                        else contact.address.asBareJid().toString(),
+                        // an address with marked look-alike characters is shown even for an online contact
+                        if (online && address.spanStyles.isEmpty()) AnnotatedString(UIHelper.lastUserInteraction(activity, interaction))
+                        else address,
+                    tags = tags(contact),
                     online = online,
                     menu = contactMenu(contact),
                 )
@@ -101,7 +115,8 @@ internal class NewChatCompose(private val activity: StartConversationActivity) :
                 NewChatEntry(
                     key = key,
                     name = bookmark.displayName,
-                    subtitle = bookmark.address.asBareJid().toString(),
+                    subtitle = styledAddress(activity, bookmark.address.asBareJid()),
+                    tags = tags(bookmark),
                     menu =
                         buildList {
                             // the classic menu hides sharing for private rooms

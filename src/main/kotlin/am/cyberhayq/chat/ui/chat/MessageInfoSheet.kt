@@ -25,7 +25,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
 
-/** "Message info" from the long-press menu: sent and received times, encryption method, trust and key. */
+/** "Message info" from the long-press menu: sent and received times, readers in a group, encryption method, trust and key. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 internal fun MessageInfoSheet(item: MessageItem, onOpenKey: () -> Unit, onDismiss: () -> Unit) {
@@ -48,6 +48,12 @@ internal fun MessageInfoSheetContent(item: MessageItem, onOpenKey: () -> Unit, m
             val locale = LocalConfiguration.current.locales[0]
             InfoRow(R.string.tatrak_chat_info_sent, receiptTime(context, locale, item.sentAt))
             InfoRow(R.string.tatrak_chat_info_received, receiptTime(context, locale, item.receivedAt))
+        }
+        if (item.readBy.isNotEmpty()) {
+            Text(stringResource(R.string.tatrak_chat_info_read_by), fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            item.readBy.forEach {
+                Text(it, fontSize = 15.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.padding(vertical = 2.dp))
+            }
         }
         val key = item.encryptionKey ?: return@Column
         val method = stringResource(key.method)

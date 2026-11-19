@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui
 
+import am.cyberhayq.chat.ui.chatlist.styledAddress
 import am.cyberhayq.chat.ui.chat.ChatSnapshot
 import am.cyberhayq.chat.ui.profile.MEDIA_THUMBNAIL_DP
 import am.cyberhayq.chat.ui.profile.ProfileActions
@@ -153,7 +154,7 @@ class ProfileActivity :
                     false,
                     AppSettings(this).isBroadcastLastActivity,
                 ),
-            address = c.address.asBareJid().toString(),
+            address = styledAddress(this, c.address.asBareJid()),
             about = if (isGroup) c.mucOptions.subject else null,
             canCall = !isGroup,
             canVideo = !isGroup && isCameraFeatureAvailable(),

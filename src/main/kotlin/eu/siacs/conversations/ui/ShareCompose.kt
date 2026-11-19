@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui
 
+import am.cyberhayq.chat.ui.chatlist.styledAddress
 import am.cyberhayq.chat.ui.common.AVATAR_SIZE
 import am.cyberhayq.chat.ui.share.ShareActions
 import am.cyberhayq.chat.ui.share.SharePickerScreen
@@ -47,7 +48,7 @@ internal class ShareCompose(private val activity: ShareWithActivity) : ShareActi
                         ShareTarget(
                             key = it.uuid,
                             name = it.name.toString(),
-                            address = it.address.asBareJid().toString(),
+                            address = styledAddress(activity, it.address.asBareJid()),
                             avatar = previous[it.uuid],
                         )
                     },

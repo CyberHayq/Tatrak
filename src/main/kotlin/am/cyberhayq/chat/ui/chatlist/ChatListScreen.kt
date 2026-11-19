@@ -145,6 +145,9 @@ interface ChatListActions {
 
     fun scanQrCode()
 
+    /** The classic QR menu's "Invite to server" (shown when [ChatListScreen]'s canInvite is set). */
+    fun inviteToServer() {}
+
     fun openSettings()
 
     /** Drawer button: light <-> dark (a fixed choice, not "automatic"). */
@@ -200,6 +203,8 @@ fun ChatListScreen(
     initialArchiveOpen: Boolean = false,
     messages: SearchState = SearchState(),
     initialQuery: String? = null,
+    /** An enabled account's server can create invites (AccountPickerDialog.EasyInvite). */
+    canInvite: Boolean = false,
 ) {
     val drawer = rememberDrawerController()
     val scope = rememberCoroutineScope()
@@ -307,6 +312,7 @@ fun ChatListScreen(
                 state.account,
                 actions,
                 onArchive = if (state.archived.isEmpty()) null else openArchive,
+                canInvite = canInvite,
             ) { drawer.close() }
         },
     ) {
@@ -1060,6 +1066,7 @@ internal fun ChatListDrawer(
     account: AccountHeader?,
     actions: ChatListActions,
     onArchive: (() -> Unit)? = null,
+    canInvite: Boolean = false,
     close: () -> Unit,
 ) {
     val dark = MaterialTheme.colorScheme.background.luminance() < 0.5f
@@ -1114,6 +1121,12 @@ internal fun ChatListDrawer(
         DrawerItem(R.drawable.ic_qr_code_scanner_24dp, stringResource(R.string.scan_qr_code)) {
             close()
             actions.scanQrCode()
+        }
+        if (canInvite) {
+            DrawerItem(R.drawable.ic_join_24dp, stringResource(R.string.server_invite)) {
+                close()
+                actions.inviteToServer()
+            }
         }
         DrawerDivider()
         DrawerItem(R.drawable.ic_settings_24dp, stringResource(R.string.action_settings)) {

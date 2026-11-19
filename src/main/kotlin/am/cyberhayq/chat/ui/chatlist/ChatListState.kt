@@ -1,10 +1,18 @@
 package am.cyberhayq.chat.ui.chatlist
 
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import androidx.compose.material3.MaterialTheme
 import android.content.Context
 import android.graphics.Bitmap
 import android.os.SystemClock
 import android.util.LruCache
+import android.view.ContextThemeWrapper
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.text.AnnotatedString
+import am.cyberhayq.chat.ui.chat.toAnnotatedString
+import eu.siacs.conversations.utils.IrregularUnicodeDetector
+import eu.siacs.conversations.xmpp.Jid
 import eu.siacs.conversations.R
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Conversational
@@ -14,6 +22,7 @@ import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.ui.util.Attachment
 import eu.siacs.conversations.utils.UIHelper
 import eu.siacs.conversations.xmpp.manager.ChatStateManager
+import eu.siacs.conversations.xmpp.manager.JingleManager
 import im.conversations.android.xmpp.model.stanza.Presence
 import im.conversations.android.xmpp.model.state.Composing
 import java.util.UUID
@@ -54,6 +63,12 @@ data class ChatListItem(
     val previewMediaKey: String? = null,
     /** That message's square thumbnail; null until decoded or when decoding failed. */
     val previewThumbnail: Bitmap? = null,
+    /** A call with this contact is running (ConversationAdapter's phone icon). */
+    val ongoingCall: Boolean = false,
+    /** A group that notifies only on mentions (ConversationAdapter's empty bell). */
+    val mentionsOnly: Boolean = false,
+    /** [title] with look-alike characters marked, when the title is a stranger's address. */
+    val styledTitle: AnnotatedString? = null,
 )
 
 @Immutable
@@ -178,6 +193,7 @@ object ChatListSnapshot {
         return ChatListItem(
             uuid = conversation.uuid,
             title = chatTitle(context, conversation),
+            styledTitle = styledChatTitle(context, conversation),
             isGroup = isGroup,
             preview = preview,
             previewSender = previewSender,
@@ -198,6 +214,8 @@ object ChatListSnapshot {
             isArchived = conversation.tatrakArchivedAt != null,
             avatar = service.avatarService.get(conversation, avatarSize, avatarsCachedOnly),
             isSavedMessages = isSavedMessages(conversation),
+            ongoingCall = !isGroup && hasOngoingCall(conversation),
+            mentionsOnly = !conversation.alwaysNotify(),
             previewMediaKey = mediaKey,
             previewThumbnail =
                 if (mediaKey != null && file != null && failureKey != null) {
@@ -293,6 +311,13 @@ object ChatListSnapshot {
             Composing::class.java
     }
 
+    /** One-to-one chats only, as ConversationAdapter. */
+    internal fun hasOngoingCall(conversation: Conversation): Boolean =
+        conversation.account.xmppConnection
+            ?.getManager(JingleManager::class.java)
+            ?.getOngoingRtpConnection(conversation.contact)
+            ?.isPresent == true
+
     internal fun isOnline(conversation: Conversation): Boolean =
         when (conversation.contact.shownStatus) {
             Presence.Availability.CHAT,
@@ -319,3 +344,27 @@ internal fun chatTitle(context: Context, conversation: Conversation): String =
     } else {
         conversation.name.toString()
     }
+
+/** ConversationAdapter: a name that is the stranger's address gets its look-alike characters marked. */
+internal fun styledChatTitle(context: Context, conversation: Conversation): AnnotatedString? =
+    if (isSavedMessages(conversation)) null else (conversation.name as? Jid)?.let { styledAddress(context, it) }
+
+/**
+ * [IrregularUnicodeDetector]'s marks on look-alike characters, as the classic lists draw an address.
+ * The snapshot builders get the application context, which has no theme; the app theme gives colorError.
+ */
+internal fun styledAddress(context: Context, jid: Jid): AnnotatedString =
+    IrregularUnicodeDetector.style(ContextThemeWrapper(context, R.style.Theme_Conversations3), jid).toAnnotatedString()
+
+/**
+ * [styledAddress]'s marks in the current theme's error colour: the snapshot is styled on the
+ * application context, which may not follow the app's own light / dark choice.
+ */
+@Composable
+internal fun AnnotatedString.inErrorColor(): AnnotatedString {
+    val error = MaterialTheme.colorScheme.error
+    return remember(this, error) {
+        if (spanStyles.isEmpty()) this
+        else AnnotatedString(text, spanStyles.map { AnnotatedString.Range(it.item.copy(color = error), it.start, it.end) })
+    }
+}

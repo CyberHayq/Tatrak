@@ -6,6 +6,7 @@ import am.cyberhayq.chat.ui.participants.ParticipantsActions
 import am.cyberhayq.chat.ui.participants.ParticipantsScreen
 import am.cyberhayq.chat.ui.participants.ParticipantsState
 import am.cyberhayq.chat.ui.participants.attributeLabel
+import android.content.Context
 import android.graphics.Bitmap
 import android.view.Menu
 import android.view.View
@@ -70,13 +71,8 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
         var role = 0
         val details = ArrayList<String>()
         for (tag in user.dynamicTags) {
-            when (tag) {
-                is DynamicTag.Attributes -> role = attributeLabel(tag.affiliation(), tag.role())
-                is DynamicTag.Hat -> details += tag.title()
-                is DynamicTag.Status -> details += activity.getString(presence(tag.availability()))
-                is DynamicTag.RosterGroup -> details += tag.name()
-                is DynamicTag.Blocked -> details += activity.getString(R.string.blocked)
-            }
+            if (tag is DynamicTag.Attributes) role = attributeLabel(tag.affiliation(), tag.role())
+            else details += tagLabel(activity, tag)
         }
         user.realJid?.let { details += it.toString() }
         // UserAdapter's key id condition
@@ -85,16 +81,6 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
             else null
         return Participant(key, user.displayName, details.joinToString(" · "), role, pgpKey, user.avatar)
     }
-
-    private fun presence(availability: Presence.Availability): Int =
-        when (availability) {
-            Presence.Availability.CHAT -> R.string.presence_chat
-            Presence.Availability.ONLINE -> R.string.presence_online
-            Presence.Availability.AWAY -> R.string.presence_away
-            Presence.Availability.XA -> R.string.presence_xa
-            Presence.Availability.DND -> R.string.presence_dnd
-            Presence.Availability.OFFLINE -> R.string.presence_offline
-        }
 
     // --- actions ------------------------------------------------------------------------------
 
@@ -157,3 +143,23 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
         return withContext(Dispatchers.IO) { service.avatarService.get(user, sizePx, false) }
     }
 }
+
+/** UserAdapter.setHats' text of a tag other than [DynamicTag.Attributes] (drawn as the role); also the new-chat rows' tags. */
+internal fun tagLabel(context: Context, tag: DynamicTag): String =
+    when (tag) {
+        is DynamicTag.Hat -> tag.title()
+        is DynamicTag.Status -> context.getString(presence(tag.availability()))
+        is DynamicTag.RosterGroup -> tag.name()
+        is DynamicTag.Blocked -> context.getString(R.string.blocked)
+        is DynamicTag.Attributes -> error("drawn as the role")
+    }
+
+private fun presence(availability: Presence.Availability): Int =
+    when (availability) {
+        Presence.Availability.CHAT -> R.string.presence_chat
+        Presence.Availability.ONLINE -> R.string.presence_online
+        Presence.Availability.AWAY -> R.string.presence_away
+        Presence.Availability.XA -> R.string.presence_xa
+        Presence.Availability.DND -> R.string.presence_dnd
+        Presence.Availability.OFFLINE -> R.string.presence_offline
+    }

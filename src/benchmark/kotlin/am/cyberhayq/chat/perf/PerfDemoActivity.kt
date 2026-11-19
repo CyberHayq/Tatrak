@@ -1,6 +1,7 @@
 package am.cyberhayq.chat.perf
 
 import am.cyberhayq.chat.ui.chat.ChatActions
+import am.cyberhayq.chat.ui.chat.ChatBanner
 import am.cyberhayq.chat.ui.chat.ChatHeader
 import am.cyberhayq.chat.ui.chat.ChatItem
 import am.cyberhayq.chat.ui.chat.ChatScreen
@@ -208,8 +209,7 @@ class PerfDemoActivity : ComponentActivity() {
         override fun togglePin() = Unit
 
         override fun openClassic() = Unit
-        override fun addBack() = Unit
-        override fun allowSubscription() = Unit
+        override fun bannerAction(banner: ChatBanner) = Unit
         override fun selectEncryption(itemId: Int) = Unit
 
         override fun send() = Unit

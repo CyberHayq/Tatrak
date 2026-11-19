@@ -218,6 +218,17 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   when the time received is known or the message has an encryption line, and opens
   `MessageInfoSheet` (a `ModalBottomSheet` built like `WallpaperSheet`, its message key kept in
   `ChatScreen` with `rememberSaveable` like `reactingTo`). The menu is back to 200-260 dp wide.
+- Group read markers (2026-11-19, owner chose both forms): in a private, non-anonymous group
+  (`MucOptions.isPrivateAndNonAnonymous`, the only rooms where `DisplayedManager` stores
+  `Message.readByMarkers`) `ChatSnapshot.Builder.readMarks` repeats the walk of
+  `ConversationFragment.updateStatusMessages`, newest first: a `ServiceItem` ("Anya, Boris have read
+  up to this point", upstream strings, "Everyone…" / "+N others" past four names) under the message
+  where a member's marker first shows, members who wrote later left out, and the walk stops when
+  every member is represented. The row splits the bubble run. Members typing are not left out as
+  in the classic screen: typing shows in the header, not as a row. `MessageItem.readBy` lists, for
+  each own message, every member whose marker is on it or a later message (markers only, not later
+  senders); the info sheet shows them under "Read by" (`tatrak_chat_info_read_by`). Blue checks are
+  unchanged: in a group they still mean every member has read (`DisplayedManager`).
 - Sent / received times (2026-11-15, owner; in the sheet since 2026-11-17): for a received message whose time received is known
   (`Message.getTimeReceived()`, column `tatrak_time_received`), the sheet shows "Sent <date, time>"
   (`getTimeSent`) and "Received <date, time>" rows. `MessageItem.receivedAt` / `sentAt` carry the raw
@@ -359,6 +370,32 @@ edge gesture still plays the normal pop on release. Simplified: Signal's resista
 trigger (`BubblePositionInterpolator`) is linear here, and neither method checks that the list is
 not still flinging (Telegram requires `SCROLL_STATE_IDLE`). Tests: `ChatScreenshotTest`
 `telegram*` / `signal*` swipe cases.
+
+## Banners and status rows (2026-11-19)
+
+Ported from the classic screen after a parity check against `ConversationFragment` /
+`MessageAdapter` (owner: "fix all"; Claude Opus 5.5 subagent from the main session's plan):
+
+- `ChatBanner` is the classic snackbar: each case carries its upstream text and button, chosen
+  by `ChatSnapshot.banner()` in `updateSnackBar`'s order (archived chat: none; disabled /
+  logged out → Enable / Log in; blocked → Unblock; add back; allow; `CONNECTING` (Tatrak);
+  a group not joined → the `MucOptions.Error` text and action (`mucBanner`); pending OpenPGP →
+  Decrypt; message from a stranger → Block, a menu with "block entire domain" / "block
+  stranger" as `showBlockSubmenu`). `ChatFragment.bannerAction` runs the classic listener of
+  each case; the PGP result goes through `ConversationsActivity.onActivityResult` as before.
+  The old generic "not connected to the group" + Classic view banner is gone. `BlockMenu`
+  (`showBlockSubmenu`): the stranger's Block button and a long press on Add back / Allow open
+  "Reject request" (not for a stranger, `stopPresenceUpdatesTo`), "Block entire domain" and
+  "Block stranger" (address with a local part); the long-pressable button is a `Text` styled as a
+  `TextButton`, which takes no long press.
+- Group typing: the header subtitle shows `contact_is_typing` / `contacts_are_typing` from
+  `MucOptions.getUsersWithChatState(5)` (Composing only); `ChatStateManager` redraws the chat when a member's chat state changes
+  (Tatrak change in `xmpp/`, owner-approved 2026-11-19).
+- `LoadMoreItem` ("Load more messages") above the oldest item under `showLoadMoreMessages`'s
+  condition; `ChatFragment.loadHistory` is a port of `MessageAdapter.loadMoreMessages`.
+- One-to-one, not typing: a `ServiceItem` under the newest message for DND
+  (`contact_has_paused_their_notifications`) or the contact's night time (`its_time_for_contact`),
+  same conditions as the classic screen; the time zone answer is used only if already there.
 
 ## Classic view fallback
 

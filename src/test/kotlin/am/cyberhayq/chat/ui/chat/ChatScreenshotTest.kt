@@ -59,6 +59,7 @@ import com.github.takahirom.roborazzi.captureRoboImage
 import eu.siacs.conversations.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -374,6 +375,22 @@ class ChatScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_message_info_sheet.png")
     }
 
+    /** An own message in a private group: the sheet lists who has read it. */
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun groupMessageInfoSheet() {
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                val item = (groupChat(Samples(currentTextPalette())).items.first { it.key == "g4" } as MessageItem)
+                    .copy(readBy = listOf("Aram", "Mom"), encryptionKey = KeyInfo(R.string.encryption_choice_unencrypted))
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) { MessageInfoSheetContent(item, onOpenKey = {}) }
+            }
+        }
+        compose.onNodeWithText("Read by").assertExists()
+        compose.onNodeWithText("Mom").assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_group_message_info_sheet.png")
+    }
+
     /** m5 with sent and received times in a past year (the year shows, so the text does not depend on today) and an OMEMO key. */
     private fun withInfo(st: ChatState, key: String?) =
         st.copy(
@@ -683,8 +700,95 @@ class ChatScreenshotTest {
     fun chatPgpAndBanner() =
         capture("chat_pgp_banner", darkTheme = false) {
             privateChat(it).copy(
-                banner = ChatBanner.GROUP_OFFLINE,
+                banner = ChatBanner.PGP_PENDING,
                 composer = ComposerInfo(requiresClassic = true, hint = ""),
+            )
+        }
+
+    /** A group the account could not join: the classic reason and its action. */
+    @Test
+    fun chatGroupKickedBanner() {
+        val clicked = ArrayList<ChatBanner>()
+        val actions = object : ChatActions by FakeActions {
+            override fun bannerAction(banner: ChatBanner) { clicked += banner }
+        }
+        capture("chat_banner_group_kicked", darkTheme = false, actions = actions) { groupChat(it).copy(banner = ChatBanner.KICKED) }
+        compose.onNodeWithText("Join").performClick()
+        assertEquals(listOf(ChatBanner.KICKED), clicked)
+    }
+
+    /** The longest classic text wraps instead of being cut. */
+    @Test
+    fun chatGroupNonAnonymousBanner() =
+        capture("chat_banner_group_non_anonymous", darkTheme = false) { groupChat(it).copy(banner = ChatBanner.NON_ANONYMOUS) }
+
+    /** Block opens the classic block menu. */
+    @Test
+    fun chatStrangerBanner() {
+        var blocked: Boolean? = null
+        val actions = object : ChatActions by FakeActions {
+            override fun block(domain: Boolean) { blocked = domain }
+        }
+        capture("chat_banner_stranger_menu", darkTheme = false, actions = actions, act = {
+            compose.onNodeWithText("Block").performClick()
+        }) { privateChat(it).copy(banner = ChatBanner.STRANGER, blockMenu = BlockMenu(blockContact = true, reject = false)) }
+        compose.onNodeWithText("Reject request").assertDoesNotExist()
+        compose.onNodeWithText("Block stranger").performClick()
+        assertEquals(false, blocked)
+    }
+
+    /** Add back: a tap adds back, a long press opens the classic menu with Reject first. */
+    @Test
+    fun chatAddBackBlockMenu() {
+        var added = false
+        var rejected = false
+        val actions = object : ChatActions by FakeActions {
+            override fun bannerAction(banner: ChatBanner) { added = banner == ChatBanner.ADD_BACK }
+            override fun rejectSubscription() { rejected = true }
+        }
+        capture("chat_banner_add_back_menu", darkTheme = false, actions = actions, act = {
+            compose.onNodeWithText("Add back").performTouchInput { longClick() }
+        }) { privateChat(it).copy(banner = ChatBanner.ADD_BACK, blockMenu = BlockMenu(blockContact = true, reject = true)) }
+        assertFalse(added)
+        compose.onNodeWithText("Block entire domain").assertExists()
+        compose.onNodeWithText("Reject request").performClick()
+        assertTrue(rejected)
+        compose.onNodeWithText("Add back").performClick()
+        assertTrue(added)
+    }
+
+    /** The server archive row above the oldest message and the contact's DND row below the newest. */
+    @Test
+    fun chatLoadMoreAndDnd() {
+        var loads = 0
+        val actions = object : ChatActions by FakeActions {
+            override fun loadHistory() { loads++ }
+        }
+        capture("chat_load_more_dnd", darkTheme = false, actions = actions) {
+            ChatState(
+                loaded = true,
+                conversationUuid = "c1",
+                header = ChatHeader("Ani", "last seen recently", avatar = letterAvatar("Ani", 0xFFE17076.toInt())),
+                items =
+                    listOf(
+                        ServiceItem("contact-status", "Today", "Ani has paused their notifications"),
+                        it.text("m1", false, GroupPosition.SINGLE, "Talk tomorrow", "09:12"),
+                        it.date("Today"),
+                        LoadMoreItem("Today"),
+                    ),
+                composer = ComposerInfo(hint = "Send message"),
+            )
+        }
+        compose.onNodeWithText("Load more messages").performClick()
+        assertEquals(1, loads)
+    }
+
+    /** Several members typing: the group header's subtitle names them in the accent colour. */
+    @Test
+    fun chatGroupTyping() =
+        capture("chat_group_typing", darkTheme = false) {
+            groupChat(it).copy(
+                header = ChatHeader("Family", "Aram, Mom are typing…", subtitleActive = true, avatar = letterAvatar("Family", 0xFFA695E7.toInt()), isGroup = true),
             )
         }
 
@@ -874,7 +978,7 @@ class ChatScreenshotTest {
     @Test fun chatFloatingBanner() {
         var added = 0
         val actions = object : ChatActions by FakeActions {
-            override fun addBack() { added++ }
+            override fun bannerAction(banner: ChatBanner) { if (banner == ChatBanner.ADD_BACK) added++ }
         }
         capture("chat_floating_banner", darkTheme = false, style = TatrakStyle.GLASS, floating = true, actions = actions) {
             privateChat(it).copy(banner = ChatBanner.ADD_BACK)
@@ -1320,8 +1424,7 @@ class ChatScreenshotTest {
         override fun toggleMute() = Unit
         override fun togglePin() = Unit
         override fun openClassic() = Unit
-        override fun addBack() = Unit
-        override fun allowSubscription() = Unit
+        override fun bannerAction(banner: ChatBanner) = Unit
         override fun selectEncryption(itemId: Int) = Unit
         override fun send() = Unit
         override fun attachGallery() = Unit

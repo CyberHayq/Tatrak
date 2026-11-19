@@ -5,6 +5,7 @@ import am.cyberhayq.chat.ui.media.mediaDecodeDispatcher
 import am.cyberhayq.chat.ui.storage.MediaPrompts
 import am.cyberhayq.chat.ui.chat.ChatSnapshot
 import am.cyberhayq.chat.ui.chat.ChatActions
+import am.cyberhayq.chat.ui.chat.ChatBanner
 import am.cyberhayq.chat.ui.chat.ChatScreen
 import am.cyberhayq.chat.ui.chat.ChatViewModel
 import am.cyberhayq.chat.ui.chat.LocalSwipeBack
@@ -35,6 +36,7 @@ import android.animation.ValueAnimator
 import android.app.Activity
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.media.AudioManager
@@ -106,7 +108,9 @@ import eu.siacs.conversations.xmpp.jingle.AbstractJingleConnection
 import eu.siacs.conversations.xmpp.jingle.Media
 import eu.siacs.conversations.xmpp.manager.HttpUploadManager
 import eu.siacs.conversations.xmpp.manager.JingleManager
+import eu.siacs.conversations.xmpp.manager.MessageArchiveManager
 import eu.siacs.conversations.xmpp.manager.ModerationManager
+import eu.siacs.conversations.xmpp.mam.MamReference
 import im.conversations.android.provider.VCardProvider
 import im.conversations.android.xmpp.model.state.Composing
 import im.conversations.android.xmpp.model.state.Paused
@@ -2086,14 +2090,128 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         refresh()
     }
 
-    override fun addBack() {
+    /** The listeners of ConversationFragment.updateSnackBar, each as there. */
+    override fun bannerAction(banner: ChatBanner) {
         val c = conversation ?: return
-        SubscriptionRequests.addBack(requireXmppActivity(), c.contact)
+        val activity = requireXmppActivity()
+        val service = xmppConnectionService ?: return
+        when (banner) {
+            // mEnableAccountListener
+            ChatBanner.ACCOUNT_DISABLED, ChatBanner.ACCOUNT_LOGGED_OUT -> {
+                val account = c.account
+                account.setOption(Account.OPTION_SOFT_DISABLED, false)
+                account.setOption(Account.OPTION_DISABLED, false)
+                service.updateAccount(account)
+            }
+            // mUnblockClickListener
+            ChatBanner.BLOCKED ->
+                if (c.isDomainBlocked) BlockContactDialog.show(activity, c) else service.sendUnblockRequest(c)
+            ChatBanner.ADD_BACK -> SubscriptionRequests.addBack(activity, c.contact)
+            ChatBanner.ALLOW_SUBSCRIPTION -> {
+                SubscriptionRequests.allow(c.contact)
+                refresh()
+            }
+            // clickToMuc
+            ChatBanner.NICK_IN_USE, ChatBanner.INVALID_NICK -> ConferenceDetailsActivity.open(activity, c)
+            // joinMuc
+            ChatBanner.SERVER_NOT_FOUND_RETRY,
+            ChatBanner.SERVER_TIMEOUT_RETRY,
+            ChatBanner.RESOURCE_CONSTRAINT,
+            ChatBanner.KICKED,
+            ChatBanner.TECHNICAL_PROBLEMS,
+            ChatBanner.UNKNOWN_ERROR,
+            ChatBanner.SHUTDOWN -> service.joinMuc(c)
+            // leaveMuc
+            ChatBanner.SERVER_NOT_FOUND_LEAVE,
+            ChatBanner.SERVER_TIMEOUT_LEAVE,
+            ChatBanner.BANNED,
+            ChatBanner.MEMBERS_ONLY,
+            ChatBanner.DESTROYED -> service.archiveConversation(c)
+            // enterPassword
+            ChatBanner.PASSWORD_REQUIRED ->
+                activity.quickPasswordEdit(c.mucOptions.password ?: "") { value ->
+                    activity.xmppConnectionService.providePasswordForMuc(c, value)
+                    null
+                }
+            // acceptJoin
+            ChatBanner.NON_ANONYMOUS -> {
+                c.setAcceptNonAnonymous(true)
+                service.updateConversation(c)
+                service.joinMuc(c)
+            }
+            // clickToDecryptListener; ConversationsActivity.onActivityResult handles REQUEST_DECRYPT_PGP
+            ChatBanner.PGP_PENDING -> {
+                val pendingIntent = c.account.pgpDecryptionService.pendingIntent
+                if (pendingIntent != null) {
+                    try {
+                        @Suppress("DEPRECATION")
+                        requireActivity()
+                            .startIntentSenderForResult(
+                                pendingIntent.intentSender,
+                                ConversationFragment.REQUEST_DECRYPT_PGP,
+                                null,
+                                0,
+                                0,
+                                0,
+                                Compatibility.pgpStartIntentSenderOptions(),
+                            )
+                    } catch (e: IntentSender.SendIntentException) {
+                        Toast.makeText(activity, R.string.unable_to_connect_to_keychain, Toast.LENGTH_SHORT).show()
+                        c.account.pgpDecryptionService.continueDecryption(true)
+                    }
+                }
+                refresh()
+            }
+            ChatBanner.CONNECTING, ChatBanner.JOINING, ChatBanner.STRANGER -> Unit
+        }
     }
 
-    override fun allowSubscription() {
+    /** The reject item of ConversationFragment.showBlockSubmenu. */
+    override fun rejectSubscription() {
         val c = conversation ?: return
-        SubscriptionRequests.allow(c.contact)
+        xmppConnectionService?.stopPresenceUpdatesTo(c.contact) ?: return
+        refresh()
+    }
+
+    /** The block_domain / block_contact items of ConversationFragment.showBlockSubmenu. */
+    override fun block(domain: Boolean) {
+        val c = conversation ?: return
+        val activity = requireXmppActivity()
+        if (domain) {
+            BlockContactDialog.show(activity, c.account.roster.getContact(c.address.domain))
+        } else {
+            BlockContactDialog.show(activity, c)
+        }
+    }
+
+    /** MessageAdapter.loadMoreMessages. */
+    override fun loadHistory() {
+        val c = conversation ?: return
+        val service = xmppConnectionService ?: return
+        val connection = c.account.xmppConnection ?: return
+        // the row may be stale: a second tap while the first query runs, or a chat archived meanwhile
+        // (MessageArchiveManager refuses archived chats with an exception)
+        if (c.status == Conversation.STATUS_ARCHIVED || !ChatSnapshot.showLoadMore(c)) {
+            refresh()
+            return
+        }
+        c.setLastClearHistory(0, null)
+        service.updateConversation(c)
+        c.setHasMessagesLeftOnServer(true)
+        c.setFirstMamReference(null)
+        var timestamp = c.lastMessageTransmitted.timestamp()
+        if (timestamp == 0L) {
+            timestamp = System.currentTimeMillis()
+        }
+        c.messagesLoaded.set(true)
+        val query =
+            connection.getManager(MessageArchiveManager::class.java).query(c, MamReference(0), timestamp, false)
+        if (query != null) {
+            Toast.makeText(activity, R.string.fetching_history_from_server, Toast.LENGTH_LONG).show()
+        } else {
+            Toast.makeText(activity, R.string.not_fetching_history_retention_period, Toast.LENGTH_SHORT).show()
+        }
+        // the classic list redraws the row away on its next update; the snapshot is rebuilt now
         refresh()
     }
 

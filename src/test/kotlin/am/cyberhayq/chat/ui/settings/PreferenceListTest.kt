@@ -9,12 +9,15 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.fragment.app.FragmentActivity
+import androidx.preference.Preference
 import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SwitchPreferenceCompat
 import org.robolectric.Robolectric
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.test.assertHasClickAction
+import androidx.compose.ui.test.assertHasNoClickAction
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
@@ -29,6 +32,7 @@ import androidx.preference.PreferenceScreen
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.siacs.conversations.R
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -126,6 +130,36 @@ class PreferenceListTest {
         page.findPreference<SwitchPreferenceCompat>("manually_change_presence")!!.isChecked = true
         manual.assertIsOn()
     }
+
+    /** A keyed plain row handled only in onPreferenceTreeClick (remove_trusted_certificates) is a button; the key-less explanation stays text. */
+    @Test
+    fun keyedPlainRowReachesTreeClick() {
+        val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+        val page = TreeClickPage()
+        activity.supportFragmentManager.beginTransaction().add(android.R.id.content, page).commitNow()
+        compose.onNodeWithText("Explanation").assertHasNoClickAction()
+        compose.onNodeWithText("Handled").assertHasClickAction().performClick()
+        assertEquals(listOf("handled"), page.clicked)
+    }
+}
+
+class TreeClickPage : PreferenceFragmentCompat() {
+    val clicked = mutableListOf<String?>()
+
+    override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
+        val screen = preferenceManager.createPreferenceScreen(requireContext())
+        screen.addPreference(Preference(requireContext()).apply { summary = "Explanation" })
+        screen.addPreference(Preference(requireContext()).apply { key = "handled"; title = "Handled" })
+        preferenceScreen = screen
+    }
+
+    override fun onPreferenceTreeClick(preference: Preference): Boolean {
+        clicked += preference.key
+        return true
+    }
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View =
+        preferenceListView(this, super.onCreateView(inflater, container, savedInstanceState))
 }
 
 class AvailabilityPage : PreferenceFragmentCompat() {

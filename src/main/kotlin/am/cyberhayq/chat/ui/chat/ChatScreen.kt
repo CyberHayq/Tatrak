@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.chat
 
+import am.cyberhayq.chat.ui.chatlist.inErrorColor
 import am.cyberhayq.chat.ui.theme.contentOn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -48,6 +49,8 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
@@ -59,9 +62,11 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -92,6 +97,7 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.input.pointer.pointerInput
@@ -101,6 +107,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
@@ -135,11 +142,17 @@ interface ChatActions {
 
     fun openClassic()
 
-    /** Classic snackbar "Add back" (contact not in the roster asked to subscribe). */
-    fun addBack()
+    /** The button of [banner], as the classic snackbar's listener for that case. */
+    fun bannerAction(banner: ChatBanner)
 
-    /** Classic snackbar "Allow" (roster contact asked to subscribe). */
-    fun allowSubscription()
+    /** [BlockMenu]: block the whole domain, or this contact alone. */
+    fun block(domain: Boolean) {}
+
+    /** [BlockMenu]: decline the pending subscription request without blocking. */
+    fun rejectSubscription() {}
+
+    /** The "Load more messages" row: MessageAdapter.loadMoreMessages. */
+    fun loadHistory() {}
 
     /** An R.id.encryption_choice_* of the classic menu. */
     fun selectEncryption(itemId: Int)
@@ -418,7 +431,7 @@ fun ChatScreen(
                         recording = recording,
                         modifier = composerModifier,
                         previews = previews,
-                        newest = state.items.firstOrNull()?.key,
+                        newest = state.items.firstNotNullOfOrNull { it as? MessageItem }?.key,
                         backdrop = backdrop,
                     )
                 }
@@ -432,7 +445,7 @@ fun ChatScreen(
                         topBar = {
                             Column(Modifier.pointerInput(Unit) {}) {
                                 FloatingTopBar(bottom = 0.dp, backdrop = backdrop, content = header)
-                                state.banner?.let { ChatBannerBar(it, actions, Modifier.padding(start = 8.dp, end = 8.dp, top = 6.dp), floating = true, backdrop) }
+                                state.banner?.let { ChatBannerBar(it, state.blockMenu, actions, Modifier.padding(start = 8.dp, end = 8.dp, top = 6.dp), floating = true, backdrop) }
                             }
                         },
                         bottomBar = { composer(Modifier.pointerInput(Unit) {}) },
@@ -449,10 +462,11 @@ fun ChatScreen(
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         header()
+                        // above the list, not over it: a banner that wraps to two lines pushes the messages down
+                        state.banner?.let { ChatBannerBar(it, state.blockMenu, actions) }
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             messages(null)
-                            state.banner?.let { ChatBannerBar(it, actions, Modifier.align(Alignment.TopCenter)) }
-                            ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 56.dp else 12.dp))
+                            ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
                         }
                         composer(Modifier)
                     }
@@ -540,7 +554,7 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
                 Spacer(Modifier.width(12.dp))
                 Column {
                     Text(
-                        header.title,
+                        header.styledTitle?.inErrorColor() ?: AnnotatedString(header.title),
                         fontSize = 18.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
@@ -801,7 +815,7 @@ private fun MessageList(
                 reverseLayout = true,
                 contentPadding =
                     if (bars != null) remember(bars) { BarsPadding(bars, 8.dp) }
-                    else PaddingValues(top = if (state.banner != null) 52.dp else 8.dp, bottom = 8.dp),
+                    else PaddingValues(top = 8.dp, bottom = 8.dp),
                 modifier =
                     Modifier.fillMaxSize()
                         .then(
@@ -835,6 +849,7 @@ private fun MessageList(
                         is DateItem -> DateChip(item.day, Modifier.animateItem().padding(vertical = 6.dp))
                         is UnreadItem -> UnreadDivider(Modifier.animateItem())
                         is ServiceItem -> ServiceMessage(item.text, Modifier.animateItem())
+                        is LoadMoreItem -> LoadMoreRow(actions, Modifier.animateItem())
                     }
                 }
             }
@@ -844,7 +859,7 @@ private fun MessageList(
             padded,
             { index -> items.getOrNull(index)?.day },
             if (bars != null) Modifier.align(Alignment.TopCenter).padding(bars).padding(top = 6.dp)
-            else Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 50.dp else 6.dp),
+            else Modifier.align(Alignment.TopCenter).padding(top = 6.dp),
         )
         val showFab by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
         Column(Modifier.align(Alignment.BottomEnd).then(if (bars != null) Modifier.padding(bars) else Modifier).padding(end = 12.dp, bottom = 12.dp)) {
@@ -959,7 +974,8 @@ private fun InitialScroll(state: ChatState, listState: LazyListState, padded: Bo
 /** Keeps the newest message in view when it arrives while the user is at the bottom. */
 @Composable
 private fun FollowNewMessages(state: ChatState, listState: LazyListState) {
-    val newest = state.items.firstOrNull() as? MessageItem
+    // the newest message, not a status or read row that may sit below it
+    val newest = state.items.firstNotNullOfOrNull { it as? MessageItem }
     val previous = remember(state.generation) { arrayOfNulls<String>(1) }
     val scope = rememberCoroutineScope()
     // SideEffect: before this frame's measure, so the new item lands in the same frame as the composer change
@@ -1167,7 +1183,7 @@ private fun ChatNotice(notice: Int?, onShown: () -> Unit, modifier: Modifier = M
 
 /** [floating]: a pill of its own under the header's (Telegram's pinned bar), in the composer's pill colour; over [backdrop] blurred. */
 @Composable
-private fun ChatBannerBar(banner: ChatBanner, actions: ChatActions, modifier: Modifier = Modifier, floating: Boolean = false, backdrop: BarBackdrop? = null) {
+private fun ChatBannerBar(banner: ChatBanner, blockMenu: BlockMenu?, actions: ChatActions, modifier: Modifier = Modifier, floating: Boolean = false, backdrop: BarBackdrop? = null) {
     Surface(
         color = if (floating) floatingPill(backdrop?.mode ?: BarBlur.OFF) else MaterialTheme.colorScheme.surface,
         shape = if (floating) RoundedCornerShape(24.dp) else RectangleShape,
@@ -1176,33 +1192,88 @@ private fun ChatBannerBar(banner: ChatBanner, actions: ChatActions, modifier: Mo
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(start = 16.dp, end = 4.dp).height(44.dp),
+            // the longer classic texts (a public group's warning) take two lines
+            modifier = Modifier.padding(start = 16.dp, end = 4.dp).heightIn(min = 44.dp).padding(vertical = 4.dp),
         ) {
             Text(
-                stringResource(
-                    when (banner) {
-                        ChatBanner.ACCOUNT_DISABLED -> R.string.tatrak_chat_account_disabled
-                        ChatBanner.CONNECTING -> R.string.tatrak_connecting
-                        ChatBanner.GROUP_OFFLINE -> R.string.tatrak_chat_group_offline
-                        ChatBanner.ADD_BACK -> R.string.contact_added_you
-                        ChatBanner.ALLOW_SUBSCRIPTION -> R.string.contact_asks_for_presence_subscription
-                    }
-                ),
+                stringResource(banner.text),
                 fontSize = 14.sp,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.weight(1f),
             )
-            when (banner) {
-                ChatBanner.GROUP_OFFLINE ->
-                    TextButton(onClick = actions::openClassic) {
-                        Text(stringResource(R.string.tatrak_chat_classic_view))
+            val button = banner.button
+            val withMenu = banner == ChatBanner.STRANGER || banner == ChatBanner.ADD_BACK || banner == ChatBanner.ALLOW_SUBSCRIPTION
+            if (button != null && withMenu && blockMenu != null) {
+                Box {
+                    var menu by remember { mutableStateOf(false) }
+                    val label = stringResource(button)
+                    // a TextButton takes no long press: its look, with the classic snackbar's long-press menu
+                    Text(
+                        label,
+                        style = MaterialTheme.typography.labelLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier =
+                            Modifier.heightIn(min = 40.dp)
+                                .clip(ButtonDefaults.textShape)
+                                .combinedClickable(
+                                    role = Role.Button,
+                                    onClick = { if (banner == ChatBanner.STRANGER) menu = true else actions.bannerAction(banner) },
+                                    onLongClickLabel = stringResource(R.string.block),
+                                    onLongClick = if (banner == ChatBanner.STRANGER) null else ({ menu = true }),
+                                )
+                                .padding(ButtonDefaults.TextButtonContentPadding)
+                                .wrapContentHeight(),
+                    )
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (blockMenu.reject) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.reject_request)) },
+                                onClick = { menu = false; actions.rejectSubscription() },
+                            )
+                        }
+                        DropdownMenuItem(
+                            text = { Text(stringResource(R.string.block_entire_domain)) },
+                            onClick = { menu = false; actions.block(domain = true) },
+                        )
+                        if (blockMenu.blockContact) {
+                            DropdownMenuItem(
+                                text = { Text(stringResource(R.string.block_stranger)) },
+                                onClick = { menu = false; actions.block(domain = false) },
+                            )
+                        }
                     }
-                ChatBanner.ADD_BACK ->
-                    TextButton(onClick = actions::addBack) { Text(stringResource(R.string.add_back)) }
-                ChatBanner.ALLOW_SUBSCRIPTION ->
-                    TextButton(onClick = actions::allowSubscription) { Text(stringResource(R.string.allow)) }
-                else -> Unit
+                }
+            } else if (button != null) {
+                // the classic Unblock hides itself once tapped until the screen updates: no second request while the
+                // first is on its way, back after a while if the server refused or the domain dialog was cancelled
+                var sent by remember(banner) { mutableStateOf(false) }
+                LaunchedEffect(sent) {
+                    if (sent) {
+                        delay(3000)
+                        sent = false
+                    }
+                }
+                TextButton(
+                    onClick = {
+                        if (banner == ChatBanner.BLOCKED) sent = true
+                        actions.bannerAction(banner)
+                    },
+                    enabled = !sent,
+                ) { Text(stringResource(button)) }
             }
+        }
+    }
+}
+
+/** MessageAdapter's load-more row: a text button in the middle. */
+@Composable
+private fun LoadMoreRow(actions: ChatActions, modifier: Modifier = Modifier) {
+    Box(modifier.fillMaxWidth().padding(vertical = 4.dp), contentAlignment = Alignment.Center) {
+        TextButton(
+            onClick = actions::loadHistory,
+            colors = ButtonDefaults.textButtonColors(containerColor = ChatScreenTheme.colors.serviceBackground, contentColor = ChatScreenTheme.colors.serviceText),
+        ) {
+            Text(stringResource(R.string.load_more_messages))
         }
     }
 }

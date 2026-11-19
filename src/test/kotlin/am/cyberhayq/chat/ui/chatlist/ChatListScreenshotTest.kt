@@ -92,10 +92,23 @@ class ChatListScreenshotTest {
     private fun drawer(darkTheme: Boolean, accent: Accent, name: String, night: NightBackground = NightBackground.BLUE_GREY) {
         compose.setContent {
             TatrakTheme(darkTheme = darkTheme, accent = accent, dynamicColors = false, nightBackground = night) {
-                ChatListDrawer(AccountHeader("Test", "test@example.am", null), NoListActions) {}
+                ChatListDrawer(AccountHeader("Test", "test@example.am", null), NoListActions, canInvite = true) {}
             }
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    /** "Invite to server" shows only when an account can invite, and calls the classic picker. */
+    @Test
+    fun drawerInviteToServer() {
+        var invited = 0
+        val actions = object : ChatListActions by NoListActions { override fun inviteToServer() { invited++ } }
+        var canInvite by mutableStateOf(false)
+        compose.setContent { TatrakTheme(darkTheme = false) { ChatListDrawer(null, actions, canInvite = canInvite) {} } }
+        compose.onNodeWithText("Invite to server").assertDoesNotExist()
+        canInvite = true
+        compose.onNodeWithText("Invite to server").performClick()
+        assertEquals(1, invited)
     }
 
     @Test
@@ -754,8 +767,12 @@ class ChatListScreenshotTest {
             archived: Boolean = false,
             saved: Boolean = false,
             thumbnail: Bitmap? = null,
+            call: Boolean = false,
+            mentionsOnly: Boolean = false,
         ) =
             ChatListItem(
+                ongoingCall = call,
+                mentionsOnly = mentionsOnly,
                 isSavedMessages = saved,
                 previewMediaKey = thumbnail?.let { "m-$index" },
                 previewThumbnail = thumbnail,
@@ -788,10 +805,10 @@ class ChatListScreenshotTest {
                 listOf(
                     chat("Saved Messages", "Ideas for the fork", 3 * minute, 0xFF65AADD.toInt(), pinned = true, status = OutgoingStatus.READ, saved = true),
                     chat("Ani", "See you tomorrow at 10?", 12 * minute, 0xFFE17076.toInt(), unread = 2, online = true),
-                    chat("Dev team", "pushed the new build", 40 * minute, 0xFF7BC862.toInt(), sender = "Aram", unread = 14, group = true),
+                    chat("Dev team", "pushed the new build", 40 * minute, 0xFF7BC862.toInt(), sender = "Aram", unread = 14, group = true, mentionsOnly = true),
                     chat("Davit", "", 2 * 60 * minute, 0xFFFAA774.toInt(), typing = true, online = true),
                     chat("Family", "image", day + 3 * 60 * minute, 0xFFA695E7.toInt(), sender = "Mom", unread = 3, muted = true, group = true, thumbnail = thumbnail(video = false)),
-                    chat("Lilit", "Thanks, got it!", 2 * day, 0xFF6EC9CB.toInt(), status = OutgoingStatus.DELIVERED),
+                    chat("Lilit", "Thanks, got it!", 2 * day, 0xFF6EC9CB.toInt(), status = OutgoingStatus.DELIVERED, call = true),
                     chat("Karen", "the meeting notes", 3 * day, 0xFFEE7AAE.toInt(), draft = true),
                     chat("XMPP Armenia", "Prosody 13 is out", 12 * day, 0xFF65AADD.toInt(), sender = "Narek", muted = true, group = true),
                     chat("Sona", "video", 40 * day, 0xFFE17076.toInt(), status = OutgoingStatus.READ, thumbnail = thumbnail(video = true)),

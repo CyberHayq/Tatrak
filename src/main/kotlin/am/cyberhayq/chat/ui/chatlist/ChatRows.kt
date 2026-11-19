@@ -94,7 +94,7 @@ fun ChatRow(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
                 Text(
-                    chat.title,
+                    chat.styledTitle?.inErrorColor() ?: AnnotatedString(chat.title),
                     fontSize = 16.sp,
                     fontWeight = FontWeight.Medium,
                     color = colors.onSurface,
@@ -102,10 +102,18 @@ fun ChatRow(
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false),
                 )
-                if (chat.isMuted) {
+                // ConversationAdapter's order: a running call, then muted, then mentions only
+                val status =
+                    when {
+                        chat.ongoingCall -> R.drawable.ic_phone_in_talk_24dp to R.string.ongoing_call
+                        chat.isMuted -> R.drawable.ic_volume_off_24dp to null
+                        chat.mentionsOnly -> R.drawable.ic_notifications_none_24dp to R.string.notify_only_when_highlighted
+                        else -> null
+                    }
+                status?.let { (icon, description) ->
                     Icon(
-                        painterResource(R.drawable.ic_volume_off_24dp),
-                        contentDescription = null,
+                        painterResource(icon),
+                        contentDescription = description?.let { stringResource(it) },
                         tint = colors.onSurfaceVariant,
                         modifier = Modifier.padding(start = 4.dp).size(14.dp),
                     )

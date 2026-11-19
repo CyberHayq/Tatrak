@@ -52,7 +52,7 @@ Why the fragment lives in `eu.siacs.conversations.ui`: see the
 `ChatListItem` (all `@Immutable`) carries: `uuid`, `title`, `isGroup`, `preview`,
 `previewSender` (first name in groups, "You" for own messages), `isDraft`,
 `isServicePreview` (status/call messages, italic), `isTyping`, `timestamp`, `unreadCount`,
-`isMuted`, `isPinned`, `outgoingStatus` (sending / sent / delivered / read / failed),
+`styledTitle` (2026-11-19: `IrregularUnicodeDetector` marks when the name is the bare address; the chat header, profile, share picker and new-chat addresses use the same `styledAddress`), `isMuted`, `ongoingCall`, `mentionsOnly` (one icon after the title, `ConversationAdapter`'s order: call, muted, mentions only), `isPinned`, `outgoingStatus` (sending / sent / delivered / read / failed),
 `isOnline`, `avatar`.[^state] `ChatListState` adds `loaded`, `account` (drawer header) and
 `connecting` (title shows "Connecting…" while an enabled account is offline).
 
@@ -66,7 +66,8 @@ while it is being swiped.
 # UI (stage 1, implemented)
 
 - Side menu (`DrawerHost`) with account header and items: Contacts, Archive, Calls, Accounts, Scan QR
-  code, Settings (new chat is the pencil FAB only). The day / night toggle in the header recreates
+  code, Invite to server (2026-11-19; shown when `AccountPickerDialog.EasyInvite.hasAnyAccounts()`,
+  opens `EasyOnboardingInviteActivity` as the classic overview menu did), Settings (new chat is the pencil FAB only). The day / night toggle in the header recreates
   the activity; the open state is saved (`rememberDrawerController`), so the menu stays open. The
   drawer width is 80% of the window width, capped at 320 dp.[^screen]
 - Top bar with menu and search; search filters the list and is closed by Back. Message search

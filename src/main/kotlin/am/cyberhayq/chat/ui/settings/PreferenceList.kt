@@ -170,8 +170,9 @@ private fun SectionHeader(title: String) {
 private fun PreferenceRowItem(row: PreferenceRow, iconSpace: Boolean, divider: Boolean) {
     val click = { row.preference.performClick() }
     val preference = row.preference
-    // a plain Preference with nothing to open (UnifiedPush's explanation) is text, not a button
-    val inert = preference.javaClass == Preference::class.java && preference.onPreferenceClickListener == null && preference.intent == null && preference.fragment == null
+    // a key-less plain Preference with nothing to open (UnifiedPush's explanation) is text, not a button;
+    // a keyed one may be handled only in the fragment's onPreferenceTreeClick (remove_trusted_certificates, call_ringtone)
+    val inert = preference.javaClass == Preference::class.java && preference.key == null && preference.onPreferenceClickListener == null && preference.intent == null && preference.fragment == null
     val action =
         if (inert) Modifier
         else if (row.checked != null) Modifier.toggleable(row.checked, enabled = row.enabled, role = Role.Switch) { click() }

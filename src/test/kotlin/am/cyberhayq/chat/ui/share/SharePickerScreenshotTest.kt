@@ -5,6 +5,7 @@ import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import com.github.takahirom.roborazzi.captureRoboImage
+import androidx.compose.ui.text.AnnotatedString
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -33,9 +34,9 @@ class SharePickerScreenshotTest {
         ShareState(
             targets =
                 listOf(
-                    ShareTarget("1", "Ani", "ani@tatrak.am"),
-                    ShareTarget("2", "Tatrak team", "team@conference.tatrak.am"),
-                    ShareTarget("3", "Davit", "davit@example.org"),
+                    ShareTarget("1", "Ani", AnnotatedString("ani@tatrak.am")),
+                    ShareTarget("2", "Tatrak team", AnnotatedString("team@conference.tatrak.am")),
+                    ShareTarget("3", "Davit", AnnotatedString("davit@example.org")),
                 ),
             loaded = true,
         )

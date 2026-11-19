@@ -1,6 +1,7 @@
 package am.cyberhayq.chat.ui.chat
 
 import am.cyberhayq.chat.ui.chatlist.chatTitle
+import am.cyberhayq.chat.ui.chatlist.styledChatTitle
 import am.cyberhayq.chat.ui.chatlist.ChatListSnapshot
 
 import android.content.Context
@@ -17,18 +18,27 @@ import com.google.common.base.Objects
 import eu.siacs.conversations.Config
 import eu.siacs.conversations.crypto.axolotl.FingerprintStatus
 import eu.siacs.conversations.R
+import eu.siacs.conversations.entities.Account
 import eu.siacs.conversations.entities.Contact
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Conversational
 import eu.siacs.conversations.entities.Message
+import eu.siacs.conversations.entities.MucOptions
+import eu.siacs.conversations.entities.ReadByMarker
 import eu.siacs.conversations.entities.ReplyTo
 import eu.siacs.conversations.entities.RtpSessionStatus
 import eu.siacs.conversations.entities.Transferable
 import eu.siacs.conversations.ui.util.ConversationMenuConfigurator
 import eu.siacs.conversations.http.HttpDownloadConnection
 import eu.siacs.conversations.xmpp.manager.BlockingManager
-import eu.siacs.conversations.xmpp.manager.JingleManager
 import eu.siacs.conversations.xmpp.manager.LastActivityManager
+import eu.siacs.conversations.xmpp.manager.EntityTimeManager
+import eu.siacs.conversations.xmpp.manager.MessageArchiveManager
+import im.conversations.android.xmpp.model.stanza.Presence
+import im.conversations.android.xmpp.model.state.Paused
+import android.text.TextUtils
+import java.time.ZonedDateTime
+import java.time.temporal.ChronoUnit
 import android.content.pm.PackageManager
 import eu.siacs.conversations.utils.GeoHelper
 import de.gultsch.common.Linkify
@@ -222,6 +232,8 @@ data class MessageItem(
     val sentAt: Long = 0L,
     /** Tatrak: the key line of the long-press menu; null for call records. */
     val encryptionKey: KeyInfo? = null,
+    /** Tatrak, private groups: who has read this own message or a later one (their read markers). */
+    val readBy: List<String> = emptyList(),
 ) : ChatItem {
     override val contentType: Int
         get() = kind.ordinal * 2 + if (isOutgoing) 1 else 0
@@ -275,6 +287,16 @@ data class ServiceItem(override val key: String, override val day: String, val t
         get() = 102
 }
 
+/** The classic "Load more messages" row: asks the server archive again (after Clear history, or an empty chat). */
+@Immutable
+data class LoadMoreItem(override val day: String) : ChatItem {
+    override val key: String
+        get() = "load-more"
+
+    override val contentType: Int
+        get() = 103
+}
+
 @Immutable
 data class ChatHeader(
     val title: String = "",
@@ -293,18 +315,48 @@ data class ChatHeader(
     val ongoingCall: Boolean = false,
     /** Null when blocking is not available (group, or the server lacks it). */
     val isBlocked: Boolean? = null,
+    /** [title] with look-alike characters marked, when the title is a stranger's address. */
+    val styledTitle: AnnotatedString? = null,
 )
 
-enum class ChatBanner {
-    ACCOUNT_DISABLED,
-    CONNECTING,
-    /** Group chat not joined; the classic screen shows the reason and the fixes. */
-    GROUP_OFFLINE,
-    /** Classic `contact_added_you` + Add back: not in the roster, pending subscription request. */
-    ADD_BACK,
-    /** Classic `contact_asks_for_presence_subscription` + Allow: roster contact, pending request. */
-    ALLOW_SUBSCRIPTION,
+/** The classic snackbar of ConversationFragment.updateSnackBar: its text and button, if any. */
+enum class ChatBanner(@StringRes val text: Int, @StringRes val button: Int? = null) {
+    ACCOUNT_DISABLED(R.string.this_account_is_disabled, R.string.enable),
+    ACCOUNT_LOGGED_OUT(R.string.this_account_is_logged_out, R.string.log_in),
+    BLOCKED(R.string.contact_blocked, R.string.unblock),
+    ADD_BACK(R.string.contact_added_you, R.string.add_back),
+    ALLOW_SUBSCRIPTION(R.string.contact_asks_for_presence_subscription, R.string.allow),
+    CONNECTING(R.string.tatrak_connecting),
+    // a group not joined while the account is online, by MucOptions.Error
+    NICK_IN_USE(R.string.nick_in_use, R.string.edit),
+    JOINING(R.string.joining_conference),
+    SERVER_NOT_FOUND_RETRY(R.string.remote_server_not_found, R.string.try_again),
+    SERVER_NOT_FOUND_LEAVE(R.string.remote_server_not_found, R.string.leave),
+    SERVER_TIMEOUT_RETRY(R.string.remote_server_timeout, R.string.try_again),
+    SERVER_TIMEOUT_LEAVE(R.string.remote_server_timeout, R.string.leave),
+    PASSWORD_REQUIRED(R.string.conference_requires_password, R.string.enter_password),
+    BANNED(R.string.conference_banned, R.string.leave),
+    MEMBERS_ONLY(R.string.conference_members_only, R.string.leave),
+    RESOURCE_CONSTRAINT(R.string.conference_resource_constraint, R.string.try_again),
+    KICKED(R.string.conference_kicked, R.string.join),
+    TECHNICAL_PROBLEMS(R.string.conference_technical_problems, R.string.try_again),
+    UNKNOWN_ERROR(R.string.conference_unknown_error, R.string.try_again),
+    INVALID_NICK(R.string.invalid_muc_nick, R.string.edit),
+    SHUTDOWN(R.string.conference_shutdown, R.string.try_again),
+    DESTROYED(R.string.conference_destroyed, R.string.leave),
+    NON_ANONYMOUS(R.string.group_chat_will_make_your_jabber_id_public, R.string.join),
+    PGP_PENDING(R.string.openpgp_messages_found, R.string.decrypt),
+    /** The button opens [BlockMenu]. */
+    STRANGER(R.string.received_message_from_stranger, R.string.block),
 }
+
+/**
+ * ConversationFragment.showBlockSubmenu: the stranger banner's Block button, and a long press on
+ * Add back / Allow. "Block entire domain" is always there; [blockContact] for an address with a
+ * local part; [reject] (stopPresenceUpdatesTo) for a pending request from someone not a stranger.
+ */
+@Immutable
+data class BlockMenu(val blockContact: Boolean, val reject: Boolean)
 
 @Immutable
 data class EditPreview(val uuid: String, val text: String)
@@ -335,6 +387,8 @@ data class ChatState(
     val items: List<ChatItem> = emptyList(),
     val unreadCount: Int = 0,
     val banner: ChatBanner? = null,
+    /** Non-null for the banners that have the classic block menu. */
+    val blockMenu: BlockMenu? = null,
     val composer: ComposerInfo = ComposerInfo(),
     /** This chat's own wallpaper spec; null follows the app-wide setting. */
     val wallpaper: String? = null,
@@ -403,15 +457,17 @@ object ChatSnapshot {
         messages.removeAll { it.type == Message.TYPE_HIDDEN }
         textCache.prepare(messages.size)
         val builder = Builder(context, service, conversation, params, textCache)
+        val banner = banner(conversation)
         return ChatState(
             loaded = true,
             conversationUuid = conversation.uuid,
             generation = params.generation,
             header =
                 header(context, service, conversation, params.avatarSize, params.avatarsCachedOnly, params.showLastSeen),
-            items = builder.items(messages),
+            items = withStatusRows(context, conversation, builder.items(messages)),
             unreadCount = conversation.unreadCount(),
-            banner = banner(conversation),
+            banner = banner,
+            blockMenu = if (banner == ChatBanner.STRANGER || banner == ChatBanner.ADD_BACK || banner == ChatBanner.ALLOW_SUBSCRIPTION) blockMenu(conversation) else null,
             composer = composer(context, conversation),
             wallpaper = conversation.tatrakWallpaper,
             mentions = builder.mentions(messages),
@@ -433,10 +489,14 @@ object ChatSnapshot {
             if (isGroup) {
                 val mucOptions = conversation.mucOptions
                 val count = mucOptions.userCount
-                if (mucOptions.isPrivateAndNonAnonymous || count < 1) {
-                    null
-                } else {
-                    context.resources.getQuantityString(R.plurals.x_participants, count, count)
+                // the classic screen's typing row (ConversationFragment.updateStatusMessages); "stopped typing" is left out as in one-to-one chats
+                val typing = mucOptions.getUsersWithChatState(5).takeIf { it.chatState == Composing::class.java }?.users.orEmpty()
+                active = typing.isNotEmpty()
+                when {
+                    typing.size == 1 -> context.getString(R.string.contact_is_typing, typing[0].displayName)
+                    typing.size > 1 -> context.getString(R.string.contacts_are_typing, UIHelper.concatNames(typing))
+                    mucOptions.isPrivateAndNonAnonymous || count < 1 -> null
+                    else -> context.resources.getQuantityString(R.plurals.x_participants, count, count)
                 }
             } else if (isTyping(conversation)) {
                 active = true
@@ -459,6 +519,7 @@ object ChatSnapshot {
         val mutedTill = conversation.mutedTill
         return ChatHeader(
             title = chatTitle(context, conversation),
+            styledTitle = styledChatTitle(context, conversation),
             subtitle = subtitle,
             subtitleActive = active,
             avatar =
@@ -469,12 +530,7 @@ object ChatSnapshot {
             isPinned = conversation.isPinnedOnTop,
             canCall = !isGroup,
             canVideo = !isGroup && context.packageManager.hasSystemFeature(PackageManager.FEATURE_CAMERA_ANY),
-            ongoingCall =
-                !isGroup &&
-                    conversation.account.xmppConnection
-                        ?.getManager(JingleManager::class.java)
-                        ?.getOngoingRtpConnection(conversation.contact)
-                        ?.isPresent == true,
+            ongoingCall = !isGroup && ChatListSnapshot.hasOngoingCall(conversation),
             isBlocked =
                 if (!isGroup &&
                     conversation.account.xmppConnection?.getManager(BlockingManager::class.java)?.hasFeature() == true
@@ -492,28 +548,89 @@ object ChatSnapshot {
             Composing::class.java
     }
 
-    private fun banner(conversation: Conversation): ChatBanner? {
+    /** ConversationFragment.updateSnackBar in its order, then [ChatBanner.CONNECTING] where the classic screen shows nothing. */
+    @androidx.annotation.VisibleForTesting
+    internal fun banner(conversation: Conversation): ChatBanner? {
+        if (conversation.status == Conversation.STATUS_ARCHIVED) return null
         val account = conversation.account
-        val subscription =
-            if (conversation.mode == Conversational.MODE_SINGLE) {
-                val contact = conversation.contact
+        val connection = account.xmppConnection
+        val contact = if (conversation.mode == Conversational.MODE_SINGLE) conversation.contact else null
+        return when (account.status) {
+            Account.State.DISABLED -> ChatBanner.ACCOUNT_DISABLED
+            Account.State.LOGGED_OUT -> ChatBanner.ACCOUNT_LOGGED_OUT
+            else ->
                 subscriptionBanner(
                     conversation.isBlocked,
-                    contact.getOption(Contact.Options.PENDING_SUBSCRIPTION_REQUEST),
-                    contact.showInRoster(),
+                    contact?.getOption(Contact.Options.PENDING_SUBSCRIPTION_REQUEST) == true,
+                    contact?.showInRoster() == true,
                 )
-            } else {
-                null
-            }
-        return when {
-            !account.isConnectionEnabled -> ChatBanner.ACCOUNT_DISABLED
-            // same order as ConversationFragment.updateSnackBar: blocked, add back, allow, then the rest
-            subscription != null -> subscription
-            !account.isOnlineAndConnected -> ChatBanner.CONNECTING
-            conversation.mode == Conversational.MODE_MULTI && !conversation.mucOptions.online() ->
-                ChatBanner.GROUP_OFFLINE
-            else -> null
         }
+            ?: when {
+                conversation.mode == Conversational.MODE_MULTI &&
+                    !conversation.mucOptions.online() &&
+                    account.status == Account.State.ONLINE ->
+                    mucBanner(conversation.mucOptions.error, conversation.receivedMessagesCount() > 0)
+                // hasPendingPgpIntent reads the connection's decryption service
+                connection != null && account.hasPendingPgpIntent(conversation) -> ChatBanner.PGP_PENDING
+                connection?.getManager(BlockingManager::class.java)?.hasFeature() == true &&
+                    conversation.countMessages() != 0 &&
+                    !conversation.isBlocked &&
+                    conversation.isWithStranger ->
+                    ChatBanner.STRANGER
+                // Tatrak: where the classic screen shows nothing while offline
+                !account.isOnlineAndConnected -> ChatBanner.CONNECTING
+                else -> null
+            }
+    }
+
+    private fun blockMenu(conversation: Conversation): BlockMenu? {
+        if (conversation.mode != Conversational.MODE_SINGLE) return null
+        return BlockMenu(
+            blockContact = conversation.address.local != null,
+            reject = !conversation.isWithStranger && conversation.contact.getOption(Contact.Options.PENDING_SUBSCRIPTION_REQUEST),
+        )
+    }
+
+    /** ConversationFragment.updateStatusMessages: "Load more messages" above the oldest item, the contact's status row below the newest. */
+    private fun withStatusRows(context: Context, conversation: Conversation, items: List<ChatItem>): List<ChatItem> {
+        val status = contactStatus(context, conversation)
+        val loadMore = showLoadMore(conversation)
+        if (status == null && !loadMore) return items
+        val all = ArrayList<ChatItem>(items.size + 2)
+        status?.let { all += ServiceItem("contact-status", items.firstOrNull()?.day.orEmpty(), it) }
+        all += items
+        if (loadMore) all += LoadMoreItem(items.lastOrNull()?.day.orEmpty())
+        return all
+    }
+
+    /** ConversationFragment.showLoadMoreMessages. */
+    internal fun showLoadMore(conversation: Conversation): Boolean {
+        val connection = conversation.account.xmppConnection ?: return false
+        val archive = connection.getManager(MessageArchiveManager::class.java)
+        val mamSupport =
+            if (conversation.mode == Conversational.MODE_SINGLE) archive.hasFeature() else conversation.mucOptions.mamSupport()
+        return loadMoreRow(
+            mamSupport && !conversation.contact.isBlocked,
+            conversation.lastClearHistory?.timestamp(),
+            conversation.countMessages() == 0 && conversation.messagesLoaded.get() && conversation.hasMessagesLeftOnServer(),
+        ) { archive.queryInProgress(conversation) }
+    }
+
+    /** The one-to-one part of ConversationFragment.updateStatusMessages without the typing rows (the header shows typing). */
+    private fun contactStatus(context: Context, conversation: Conversation): String? {
+        if (conversation.mode != Conversational.MODE_SINGLE) return null
+        val connection = conversation.account.xmppConnection ?: return null
+        val state = connection.getManager(ChatStateManager::class.java).getIncoming(conversation.address)
+        val time = connection.getManager(EntityTimeManager::class.java).getZonedDateTime(conversation.address)
+        if (state == Composing::class.java || state == Paused::class.java) return null
+        return contactStatusRow(
+            context,
+            conversation.name,
+            conversation.contact.shownStatus == Presence.Availability.DND,
+            // as the classic getOrNull: only an answer that is already there
+            if (time.isDone) runCatching { time.get() }.getOrNull() else null,
+            EntityTimeManager.noRecentMessages(conversation),
+        )
     }
 
     private fun composer(context: Context, conversation: Conversation): ComposerInfo {
@@ -641,8 +758,13 @@ object ChatSnapshot {
         /** Set by [items] before any reply is resolved. */
         private var index = MessageIndex(emptyList())
 
+        /** Set by [items]: "… have read up to this point" rows by message index, readers of own messages by uuid. */
+        private var readRows: Map<Int, String> = emptyMap()
+        private var readers: Map<String, List<String>> = emptyMap()
+
         fun items(messages: List<Message>): List<ChatItem> {
             index = MessageIndex(messages)
+            readMarks(messages)
             val items = ArrayList<ChatItem>(messages.size + 8)
             val anchor = params.unreadAnchorUuid
             val anchorIndex = if (anchor == null) -1 else messages.indexOfFirst { it.uuid == anchor }
@@ -667,11 +789,12 @@ object ChatSnapshot {
                     continue
                 }
                 val mergeTop =
-                    !newDay && i != anchorIndex && merge(messages[i - 1], message)
+                    !newDay && i != anchorIndex && i - 1 !in readRows && merge(messages[i - 1], message)
                 val mergeBottom =
                     i + 1 < messages.size &&
                         days[i + 1] == date &&
                         i + 1 != anchorIndex &&
+                        i !in readRows &&
                         merge(message, messages[i + 1])
                 val position =
                     when {
@@ -681,9 +804,75 @@ object ChatSnapshot {
                         else -> GroupPosition.SINGLE
                     }
                 items += toItem(message, day, position, validInSession[i])
+                readRows[i]?.let { items += ServiceItem("read-${message.uuid}", day, it) }
             }
             items.reverse()
             return items
+        }
+
+        /**
+         * The walk of ConversationFragment.updateStatusMessages over group read markers, newest
+         * first: a row under the message where a member's marker first shows (members who wrote
+         * later are left out, as there), and for every own message all members whose marker is on
+         * it or a later one.
+         */
+        private fun readMarks(messages: List<Message>) {
+            readRows = emptyMap()
+            readers = emptyMap()
+            if (!isGroup) return
+            val mucOptions = conversation.mucOptions
+            if (!mucOptions.isPrivateAndNonAnonymous) return
+            val allUsers = mucOptions.users
+            val rows = HashMap<Int, String>()
+            val byUuid = HashMap<String, List<String>>()
+            val added = HashSet<ReadByMarker>() // markers in a row below and senders below
+            val seen = HashSet<ReadByMarker>() // markers only
+            val names = ArrayList<String>()
+            var readersSoFar = emptyList<String>() // one copy per new reader, shared by the messages above it
+            var everyone = false
+            for (i in messages.indices.reversed()) {
+                val message = messages[i]
+                val markers = message.readByMarkers
+                for (marker in markers) {
+                    if (!ReadByMarker.contains(marker, seen)) {
+                        seen += marker
+                        mucOptions.getUser(marker)?.let { names += it.displayName }
+                    }
+                }
+                if (readersSoFar.size != names.size) readersSoFar = names.toList()
+                // sent messages only: a failed or waiting one was not read; a private one reached one member,
+                // so later public markers say nothing about it
+                val sent =
+                    message.status == Message.STATUS_SEND ||
+                        message.status == Message.STATUS_SEND_RECEIVED ||
+                        message.status == Message.STATUS_SEND_DISPLAYED
+                if (sent && message.type != Message.TYPE_STATUS && !message.isPrivateMessage && readersSoFar.isNotEmpty()) {
+                    byUuid[message.uuid] = readersSoFar
+                }
+                if (everyone) continue
+                val shown = ArrayList<MucOptions.User>()
+                for (marker in markers) {
+                    if (!ReadByMarker.contains(marker, added)) {
+                        added += marker
+                        mucOptions.getUser(marker)?.let { shown += it }
+                    }
+                }
+                val sender = ReadByMarker.from(message)
+                val size = shown.size
+                when {
+                    size == 1 -> context.getString(R.string.contact_has_read_up_to_this_point, shown[0].displayName)
+                    size in 2..4 -> context.getString(R.string.contacts_have_read_up_to_this_point, UIHelper.concatNames(shown))
+                    size > 4 && ReadByMarker.allUsersRepresented(allUsers, markers, sender) ->
+                        context.getString(R.string.everyone_has_read_up_to_this_point)
+                    size > 4 ->
+                        context.getString(R.string.contacts_and_n_more_have_read_up_to_this_point, UIHelper.concatNames(shown, 3), size - 3)
+                    else -> null
+                }?.let { rows[i] = it }
+                added += sender
+                everyone = ReadByMarker.allUsersRepresented(allUsers, added)
+            }
+            readRows = rows
+            readers = byUuid
         }
 
         private fun dayLabel(date: LocalDate): String =
@@ -752,6 +941,7 @@ object ChatSnapshot {
                     receivedAt = receivedAt,
                     sentAt = if (receivedAt != null) message.timeSent else 0L,
                     encryptionKey = if (message.type == Message.TYPE_RTP_SESSION) null else keyInfo(message, trust),
+                    readBy = readers[message.uuid].orEmpty(),
                 )
             // Tatrak: after content(), so no attachment state (deleted, downloading, cancelled) hides it
             val caption = message.caption
@@ -1303,12 +1493,61 @@ internal fun isSticker(message: Message, params: Message.FileParams): Boolean {
 internal fun showsEdited(message: Message): Boolean =
     message.edited() && message.type != Message.TYPE_RETRACTED && message.type != Message.TYPE_HIDDEN
 
-/** The classic snackbar's add-back / allow cases; a blocked chat shows neither. */
+/** The classic snackbar's blocked / add-back / allow cases. */
 internal fun subscriptionBanner(blocked: Boolean, pendingRequest: Boolean, inRoster: Boolean): ChatBanner? =
     when {
-        blocked || !pendingRequest -> null
+        blocked -> ChatBanner.BLOCKED
+        !pendingRequest -> null
         !inRoster -> ChatBanner.ADD_BACK
         else -> ChatBanner.ALLOW_SUBSCRIPTION
+    }
+
+/** ConversationFragment.updateSnackBar for a group not joined while the account is online. */
+internal fun mucBanner(error: MucOptions.Error, receivedMessages: Boolean): ChatBanner? =
+    when (error) {
+        MucOptions.Error.NICK_IN_USE -> ChatBanner.NICK_IN_USE
+        MucOptions.Error.NO_RESPONSE -> ChatBanner.JOINING
+        MucOptions.Error.SERVER_NOT_FOUND ->
+            if (receivedMessages) ChatBanner.SERVER_NOT_FOUND_RETRY else ChatBanner.SERVER_NOT_FOUND_LEAVE
+        MucOptions.Error.REMOTE_SERVER_TIMEOUT ->
+            if (receivedMessages) ChatBanner.SERVER_TIMEOUT_RETRY else ChatBanner.SERVER_TIMEOUT_LEAVE
+        MucOptions.Error.PASSWORD_REQUIRED -> ChatBanner.PASSWORD_REQUIRED
+        MucOptions.Error.BANNED -> ChatBanner.BANNED
+        MucOptions.Error.MEMBERS_ONLY -> ChatBanner.MEMBERS_ONLY
+        MucOptions.Error.RESOURCE_CONSTRAINT -> ChatBanner.RESOURCE_CONSTRAINT
+        MucOptions.Error.KICKED -> ChatBanner.KICKED
+        MucOptions.Error.TECHNICAL_PROBLEMS -> ChatBanner.TECHNICAL_PROBLEMS
+        MucOptions.Error.UNKNOWN -> ChatBanner.UNKNOWN_ERROR
+        MucOptions.Error.INVALID_NICK -> ChatBanner.INVALID_NICK
+        MucOptions.Error.SHUTDOWN -> ChatBanner.SHUTDOWN
+        MucOptions.Error.DESTROYED -> ChatBanner.DESTROYED
+        MucOptions.Error.NON_ANONYMOUS -> ChatBanner.NON_ANONYMOUS
+        MucOptions.Error.NONE -> null
+    }
+
+/** ConversationFragment.showLoadMoreMessages; [queryInProgress] is asked last, as there. */
+internal fun loadMoreRow(mam: Boolean, lastClearHistory: Long?, emptyWithHistoryLeft: Boolean, queryInProgress: () -> Boolean): Boolean =
+    mam && ((lastClearHistory != null && lastClearHistory != 0L) || (emptyWithHistoryLeft && !queryInProgress()))
+
+/** MessageAdapter's DND and local-time rows under ConversationFragment.updateStatusMessages's conditions. */
+internal fun contactStatusRow(
+    context: Context,
+    name: CharSequence,
+    dnd: Boolean,
+    contactTime: ZonedDateTime?,
+    noRecentMessages: Boolean,
+): String? =
+    when {
+        dnd && noRecentMessages -> context.getString(R.string.contact_has_paused_their_notifications, name)
+        contactTime != null &&
+            EntityTimeManager.isDifferentTimeZone(contactTime) &&
+            EntityTimeManager.isNightTime(contactTime) &&
+            noRecentMessages -> {
+            // the time is taken when shown, as MessageAdapter does; the classic one is bold
+            val time = Instant.now().atZone(contactTime.offset).toLocalTime().truncatedTo(ChronoUnit.MINUTES).toString()
+            TextUtils.expandTemplate(context.getString(R.string.its_time_for_contact), time, name).toString()
+        }
+        else -> null
     }
 
 internal const val StickerMaxPx = 512

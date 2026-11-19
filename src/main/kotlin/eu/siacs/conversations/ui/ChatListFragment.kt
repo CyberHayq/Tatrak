@@ -11,6 +11,8 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.lifecycle.ViewModelProvider
@@ -28,6 +30,7 @@ import eu.siacs.conversations.ui.interfaces.OnConversationArchived
 import eu.siacs.conversations.ui.interfaces.OnConversationSelected
 import eu.siacs.conversations.ui.interfaces.OnSearchResultsAvailable
 import eu.siacs.conversations.ui.util.ChangeWatcher
+import eu.siacs.conversations.ui.widget.AccountPickerDialog
 import eu.siacs.conversations.utils.FtsUtils
 import eu.siacs.conversations.utils.AccountUtils
 import java.time.Instant
@@ -47,6 +50,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         MessageSearchResults(requireContext().applicationContext, lifecycleScope, { xmppConnectionService }, true)
     }
     private val currentSearch = ChangeWatcher<List<String>>()
+    private var canInvite by mutableStateOf(false)
     /** Typed before the service was bound. */
     private var pendingSearch: List<String>? = null
 
@@ -63,7 +67,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                 TatrakTheme {
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     val messages by messageResults.state.collectAsStateWithLifecycle()
-                    ChatListScreen(state, this@ChatListFragment, messages = messages)
+                    ChatListScreen(state, this@ChatListFragment, messages = messages, canInvite = canInvite)
                 }
             }
         }
@@ -88,6 +92,8 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
 
     override fun refresh() {
         val service = xmppConnectionService ?: return
+        // ConversationsOverviewFragment.onCreateMenu's condition for "Invite to server"
+        canInvite = AccountPickerDialog.EasyInvite(requireXmppActivity()).hasAnyAccounts()
         unarchiveOnNewMessage(service)
         viewModel.invalidate(service)
     }
@@ -165,6 +171,11 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
 
     override fun openContacts() {
         startActivity(Intent(requireContext(), StartConversationActivity::class.java).putExtra(NewChatCompose.EXTRA_CONTACTS, true))
+    }
+
+    /** ConversationsOverviewFragment.selectAccountToStartEasyInvite. */
+    override fun inviteToServer() {
+        AccountPickerDialog.EasyInvite(requireXmppActivity()).pick { account -> EasyOnboardingInviteActivity.launch(account, requireContext()) }
     }
 
     override fun manageAccounts() = AccountUtils.launchManageAccounts(requireActivity())

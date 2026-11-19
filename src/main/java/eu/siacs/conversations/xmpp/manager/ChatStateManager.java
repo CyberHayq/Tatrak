@@ -63,7 +63,10 @@ public class ChatStateManager extends AbstractManager {
             if (user == null) {
                 return;
             }
-            if (user.setChatState(chatState)) {}
+            if (user.setChatState(chatState)) {
+                // Tatrak (owner-approved xmpp/ change): redraw so group typing shows at once
+                this.service.updateConversationUi();
+            }
 
         } else {
             final var account = getAccount().getJid().asBareJid();

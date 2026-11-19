@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.profile
 
+import am.cyberhayq.chat.ui.chatlist.inErrorColor
 import am.cyberhayq.chat.ui.chat.ChatHeader
 import am.cyberhayq.chat.ui.chat.LetterAvatar
 import am.cyberhayq.chat.ui.theme.TatrakTheme
@@ -57,6 +58,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -76,7 +78,8 @@ data class ProfileMedia(val key: String, val thumbnail: Bitmap)
 data class ProfileState(
     val loaded: Boolean = false,
     val header: ChatHeader = ChatHeader(),
-    val address: String = "",
+    /** Look-alike characters marked, as ContactDetailsActivity shows the address. */
+    val address: AnnotatedString = AnnotatedString(""),
     /** Group subject; null for 1:1 chats. */
     val about: String? = null,
     val canCall: Boolean = false,
@@ -155,7 +158,7 @@ fun ProfileScreen(state: ProfileState, actions: ProfileActions, modifier: Modifi
                     }
                     Spacer(Modifier.height(12.dp))
                     Text(
-                        header.title,
+                        header.styledTitle?.inErrorColor() ?: AnnotatedString(header.title),
                         fontSize = 22.sp,
                         fontWeight = FontWeight.Medium,
                         textAlign = TextAlign.Center,
@@ -179,10 +182,10 @@ fun ProfileScreen(state: ProfileState, actions: ProfileActions, modifier: Modifi
             item(key = "info") {
                 Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
                     if (state.about != null) {
-                        InfoRow(state.about, stringResource(R.string.tatrak_profile_subject), {}, copy = false)
+                        InfoRow(AnnotatedString(state.about), stringResource(R.string.tatrak_profile_subject), {}, copy = false)
                         HorizontalDivider(Modifier.padding(start = 16.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     }
-                    InfoRow(state.address, stringResource(R.string.account_settings_jabber_id), actions::copyAddress)
+                    InfoRow(state.address.inErrorColor(), stringResource(R.string.account_settings_jabber_id), actions::copyAddress)
                 }
                 Spacer(Modifier.height(10.dp))
             }
@@ -357,7 +360,7 @@ private fun MediaStrip(media: List<ProfileMedia>, actions: ProfileActions) {
 const val MEDIA_THUMBNAIL_DP = 80
 
 @Composable
-private fun InfoRow(value: String, label: String, onClick: () -> Unit, copy: Boolean = true) {
+private fun InfoRow(value: AnnotatedString, label: String, onClick: () -> Unit, copy: Boolean = true) {
     Column(
         Modifier.fillMaxWidth()
             .clickable(enabled = copy, role = Role.Button, onClick = onClick)
