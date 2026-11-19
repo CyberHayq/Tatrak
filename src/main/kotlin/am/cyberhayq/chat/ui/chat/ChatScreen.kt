@@ -40,7 +40,11 @@ import androidx.compose.foundation.gestures.scrollBy
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Row
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -848,7 +852,7 @@ private fun MessageList(
                             )
                         is DateItem -> DateChip(item.day, Modifier.animateItem().padding(vertical = 6.dp))
                         is UnreadItem -> UnreadDivider(Modifier.animateItem())
-                        is ServiceItem -> ServiceMessage(item.text, Modifier.animateItem())
+                        is ServiceItem -> ServiceMessage(item, Modifier.animateItem())
                         is LoadMoreItem -> LoadMoreRow(actions, Modifier.animateItem())
                     }
                 }
@@ -1040,18 +1044,27 @@ private fun DateChip(text: String, modifier: Modifier = Modifier) {
 }
 
 @Composable
-private fun ServiceMessage(text: String, modifier: Modifier = Modifier) {
+private fun ServiceMessage(item: ServiceItem, modifier: Modifier = Modifier) {
+    val colors = ChatScreenTheme.colors
     Box(modifier.fillMaxWidth().padding(horizontal = 40.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
-        Text(
-            text,
-            color = ChatScreenTheme.colors.serviceText,
-            fontSize = 14.sp,
-            textAlign = TextAlign.Center,
-            modifier =
-                Modifier.clip(RoundedCornerShape(12.dp))
-                    .background(ChatScreenTheme.colors.serviceBackground)
-                    .padding(horizontal = 10.dp, vertical = 4.dp),
-        )
+        Row(
+            Modifier.clip(RoundedCornerShape(12.dp)).background(colors.serviceBackground).padding(horizontal = 10.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            // decorative: the text names the readers; the classic avatar is half transparent
+            item.avatar?.let { avatar ->
+                Image(
+                    remember(avatar) { avatar.asImageBitmap() },
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.padding(end = 6.dp).size(20.dp).clip(CircleShape).alpha(0.5f),
+                )
+            }
+            if (item.icon != 0) {
+                Icon(painterResource(item.icon), null, Modifier.padding(end = 6.dp).size(16.dp), tint = colors.serviceText)
+            }
+            Text(item.text, color = colors.serviceText, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.weight(1f, fill = false))
+        }
     }
 }
 

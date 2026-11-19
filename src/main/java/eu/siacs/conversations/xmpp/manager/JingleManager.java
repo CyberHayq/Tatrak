@@ -55,7 +55,7 @@ import im.conversations.android.xmpp.model.jmi.Reject;
 import im.conversations.android.xmpp.model.jmi.Ringing;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import java.lang.ref.WeakReference;
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
@@ -68,6 +68,11 @@ import java.util.concurrent.TimeUnit;
 
 public class JingleManager extends AbstractManager {
     public static final ScheduledExecutorService SCHEDULED_EXECUTOR_SERVICE =
+            Executors.newSingleThreadScheduledExecutor();
+    // Tatrak: proposal work that waits for the rtpSessionProposals lock (stream-ack updates, rebind
+    // resend, discovery timeout) runs here, in order, never on SCHEDULED_EXECUTOR_SERVICE, whose
+    // thread WebRTC's ICE-gathering timeout needs while processProceed holds that lock
+    public static final ScheduledExecutorService PROPOSAL_EXECUTOR =
             Executors.newSingleThreadScheduledExecutor();
     private final HashMap<RtpSessionProposal, DeviceDiscoveryState> rtpSessionProposals =
             new HashMap<>();
@@ -224,9 +229,11 @@ public class JingleManager extends AbstractManager {
                 processProceed(packet, id, serverMsgId, timestamp, proceed);
             }
         } else if (addressedDirectly && message instanceof Reject) {
-            final RtpSessionProposal proposal =
-                    getRtpSessionProposal(from.asBareJid(), id.sessionId);
             synchronized (rtpSessionProposals) {
+                // Tatrak: looked up under the lock, so a proposal the timeout removed meanwhile is
+                // not finished a second time
+                final RtpSessionProposal proposal =
+                        getRtpSessionProposal(from.asBareJid(), id.sessionId);
                 if (proposal != null) {
                     setTerminalSessionState(proposal, RtpEndUserState.DECLINED_OR_BUSY);
                     rtpSessionProposals.remove(proposal);
@@ -555,10 +562,13 @@ public class JingleManager extends AbstractManager {
     }
 
     private RtpSessionProposal getRtpSessionProposal(final Jid from, final String sessionId) {
-        for (RtpSessionProposal rtpSessionProposal : rtpSessionProposals.keySet()) {
-            if (rtpSessionProposal.sessionId.equals(sessionId)
-                    && rtpSessionProposal.with.equals(from)) {
-                return rtpSessionProposal;
+        // Tatrak: every access to the HashMap under its lock (owner-approved xmpp/ change)
+        synchronized (this.rtpSessionProposals) {
+            for (RtpSessionProposal rtpSessionProposal : rtpSessionProposals.keySet()) {
+                if (rtpSessionProposal.sessionId.equals(sessionId)
+                        && rtpSessionProposal.with.equals(from)) {
+                    return rtpSessionProposal;
+                }
             }
         }
         return null;
@@ -623,16 +633,18 @@ public class JingleManager extends AbstractManager {
     }
 
     public Optional<OngoingRtpSession> getOngoingRtpConnection(final Contact contact) {
-        for (final var entry : this.connections.entrySet()) {
-            if (entry.getValue() instanceof JingleRtpConnection jingleRtpConnection) {
-                final AbstractJingleConnection.Id id = entry.getKey();
-                if (id.account == contact.getAccount()
-                        && id.with.asBareJid().equals(contact.getAddress().asBareJid())) {
-                    return Optional.of(jingleRtpConnection);
-                }
-            }
+        // Tatrak: an established call is found without the lock (processProceed can hold it while
+        // ICE gathers); the second scan runs under the lock that processProceed holds while it
+        // moves a proposal into connections, so the call is not missed in between
+        final var connection = findRtpConnection(contact);
+        if (connection != null) {
+            return Optional.of(connection);
         }
         synchronized (this.rtpSessionProposals) {
+            final var promoted = findRtpConnection(contact);
+            if (promoted != null) {
+                return Optional.of(promoted);
+            }
             for (final var entry : this.rtpSessionProposals.entrySet()) {
                 final RtpSessionProposal proposal = entry.getKey();
                 if (contact.getAddress().asBareJid().equals(proposal.with)) {
@@ -645,6 +657,19 @@ public class JingleManager extends AbstractManager {
             }
         }
         return Optional.absent();
+    }
+
+    private JingleRtpConnection findRtpConnection(final Contact contact) {
+        for (final var entry : this.connections.entrySet()) {
+            if (entry.getValue() instanceof JingleRtpConnection jingleRtpConnection) {
+                final AbstractJingleConnection.Id id = entry.getKey();
+                if (id.account == contact.getAccount()
+                        && id.with.asBareJid().equals(contact.getAddress().asBareJid())) {
+                    return jingleRtpConnection;
+                }
+            }
+        }
+        return null;
     }
 
     public JingleRtpConnection getOngoingRtpConnection() {
@@ -709,7 +734,10 @@ public class JingleManager extends AbstractManager {
                 account.getJid().asBareJid()
                         + ": retracting rtp session proposal with "
                         + rtpSessionProposal.with);
-        this.rtpSessionProposals.remove(rtpSessionProposal);
+        // Tatrak: under the lock, like every other access to the map
+        synchronized (this.rtpSessionProposals) {
+            this.rtpSessionProposals.remove(rtpSessionProposal);
+        }
         rtpSessionProposal.callIntegration.retracted();
         if (refresh) {
             this.service.notifyJingleRtpConnectionUpdate(
@@ -794,42 +822,66 @@ public class JingleManager extends AbstractManager {
             final boolean triggerTimeout =
                     Config.JINGLE_MESSAGE_INIT_STRICT_DEVICE_TIMEOUT
                             || contact.mutualPresenceSubscription();
-            SCHEDULED_EXECUTOR_SERVICE.schedule(
-                    () -> {
-                        final var currentProposalState = rtpSessionProposals.get(proposal);
-                        Log.d(
-                                Config.LOGTAG,
-                                "proposal state after timeout " + currentProposalState);
-                        if (triggerTimeout
-                                && Arrays.asList(
-                                                DeviceDiscoveryState.SEARCHING,
-                                                DeviceDiscoveryState.SEARCHING_ACKNOWLEDGED)
-                                        .contains(currentProposalState)) {
-                            deviceDiscoveryTimeout(account, proposal);
-                        }
-                    },
-                    Config.DEVICE_DISCOVERY_TIMEOUT,
-                    TimeUnit.MILLISECONDS);
+            if (triggerTimeout) {
+                PROPOSAL_EXECUTOR.schedule(
+                        () -> {
+                            synchronized (rtpSessionProposals) {
+                                final DeviceDiscoveryState currentProposalState =
+                                        rtpSessionProposals.get(proposal);
+                                Log.d(
+                                        Config.LOGTAG,
+                                        "proposal state after timeout " + currentProposalState);
+                                if (!isSearching(currentProposalState)) {
+                                    return;
+                                }
+                            }
+                            // Tatrak: asked outside the lock, then checked again, published and
+                            // removed in one step (the call screen reads the terminal state and the
+                            // proposal), so a proposal that started ringing meanwhile is not failed
+                            final RtpEndUserState endUserState = deviceDiscoveryTimeoutState();
+                            synchronized (rtpSessionProposals) {
+                                if (!isSearching(rtpSessionProposals.get(proposal))) {
+                                    return;
+                                }
+                                Log.d(
+                                        Config.LOGTAG,
+                                        "call proposal still in device discovery state after"
+                                                + " timeout");
+                                setTerminalSessionState(proposal, endUserState);
+                                rtpSessionProposals.remove(proposal);
+                            }
+                            deviceDiscoveryTimeout(account, proposal, endUserState);
+                        },
+                        Config.DEVICE_DISCOVERY_TIMEOUT,
+                        TimeUnit.MILLISECONDS);
+            }
             this.sendSessionProposal(proposal);
             return proposal;
         }
     }
 
-    private void deviceDiscoveryTimeout(final Account account, final RtpSessionProposal proposal) {
+    private static boolean isSearching(final DeviceDiscoveryState state) {
+        return state == DeviceDiscoveryState.SEARCHING
+                || state == DeviceDiscoveryState.SEARCHING_ACKNOWLEDGED;
+    }
+
+    private RtpEndUserState deviceDiscoveryTimeoutState() {
         // 'endUserState' is what we display in the UI. There is an argument to use 'BUSY' here
         // instead
         // we may or may not want to match this with the tone we are playing (see
         // callIntegration.error() or callIntegration.busy())
-        final RtpEndUserState endUserState;
         if (new NetworkManager(this.context).getHint() == NetworkManager.Hint.ACTIVE) {
-            endUserState = RtpEndUserState.CONNECTIVITY_ERROR;
+            return RtpEndUserState.CONNECTIVITY_ERROR;
         } else {
-            endUserState = RtpEndUserState.NO_INTERNET;
+            return RtpEndUserState.NO_INTERNET;
         }
-        Log.d(Config.LOGTAG, "call proposal still in device discovery state after timeout");
-        setTerminalSessionState(proposal, endUserState);
+    }
 
-        rtpSessionProposals.remove(proposal);
+    // Tatrak: the caller has set the terminal state and removed the proposal under the lock
+    private void deviceDiscoveryTimeout(
+            final Account account,
+            final RtpSessionProposal proposal,
+            final RtpEndUserState endUserState) {
         // error and busy would probably be both appropriate tones to play
         // playing the error tone is probably more in line with what happens on a technical level
         // and would be a similar UX to what happens when you call a user that doesn't exist
@@ -918,7 +970,20 @@ public class JingleManager extends AbstractManager {
             connection.notifyRebound();
         }
         if (this.connection.getFeatures().sm()) {
-            resendSessionProposals();
+            // Tatrak: the proposals of the old stream, resent after the pending stream-ack updates
+            // queued before them (MessageAcknowledgedProcessor), so an acknowledged proposal or a
+            // call placed after the bind is not sent again
+            final List<RtpSessionProposal> searching = new ArrayList<>();
+            synchronized (this.rtpSessionProposals) {
+                for (final var entry : this.rtpSessionProposals.entrySet()) {
+                    if (entry.getValue() == DeviceDiscoveryState.SEARCHING) {
+                        searching.add(entry.getKey());
+                    }
+                }
+            }
+            if (!searching.isEmpty()) {
+                PROPOSAL_EXECUTOR.execute(() -> resendSessionProposals(searching));
+            }
         }
     }
 
@@ -933,11 +998,10 @@ public class JingleManager extends AbstractManager {
         return null;
     }
 
-    private void resendSessionProposals() {
+    private void resendSessionProposals(final List<RtpSessionProposal> proposals) {
         synchronized (this.rtpSessionProposals) {
-            for (final var entry : this.rtpSessionProposals.entrySet()) {
-                final RtpSessionProposal proposal = entry.getKey();
-                if (entry.getValue() == DeviceDiscoveryState.SEARCHING) {
+            for (final RtpSessionProposal proposal : proposals) {
+                if (this.rtpSessionProposals.get(proposal) == DeviceDiscoveryState.SEARCHING) {
                     Log.d(
                             Config.LOGTAG,
                             getAccount().getJid().asBareJid()

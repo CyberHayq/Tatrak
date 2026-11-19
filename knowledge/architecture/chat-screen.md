@@ -224,7 +224,9 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   `ConversationFragment.updateStatusMessages`, newest first: a `ServiceItem` ("Anya, Boris have read
   up to this point", upstream strings, "Everyone…" / "+N others" past four names) under the message
   where a member's marker first shows, members who wrote later left out, and the walk stops when
-  every member is represented. The row splits the bubble run. Members typing are not left out as
+  every member is represented. The row splits the bubble run and carries the classic row's avatar
+  (`AvatarService.get` on the same status message: the reader, or the readers combined; half
+  transparent, decorative). Members typing are not left out as
   in the classic screen: typing shows in the header, not as a row. `MessageItem.readBy` lists, for
   each own message, every member whose marker is on it or a later message (markers only, not later
   senders); the info sheet shows them under "Read by" (`tatrak_chat_info_read_by`). Blue checks are
@@ -395,7 +397,11 @@ Ported from the classic screen after a parity check against `ConversationFragmen
   condition; `ChatFragment.loadHistory` is a port of `MessageAdapter.loadMoreMessages`.
 - One-to-one, not typing: a `ServiceItem` under the newest message for DND
   (`contact_has_paused_their_notifications`) or the contact's night time (`its_time_for_contact`),
-  same conditions as the classic screen; the time zone answer is used only if already there.
+  same conditions as the classic screen; the time zone answer is used only if already there. As
+  in `MessageAdapter`, the row has the paused-bell / clock icon (`ServiceItem.icon`) and the time
+  is bold (the classic `StyleSpan` through `toAnnotatedString`).
+- The order of the checks after the account and roster ones (group error, OpenPGP, stranger,
+  `CONNECTING`) is `laterBanner`, so a unit test can hold it without a connection.
 
 ## Classic view fallback
 

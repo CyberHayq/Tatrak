@@ -22,7 +22,7 @@ import com.google.common.base.Joiner;
 import com.google.common.base.Strings;
 import com.google.common.cache.Cache;
 import com.google.common.cache.CacheBuilder;
-import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashMultimap;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.Iterables;
 import com.google.common.collect.Multimap;
@@ -78,7 +78,8 @@ public class AvatarService {
                                             : avatar.bitmap.getAllocationByteCount())
                     .build();
     private final Set<Integer> sizes = new HashSet<>();
-    private final Multimap<String, String> conversationDependentKeys = ArrayListMultimap.create();
+    // Tatrak: a set per conversation; each tile lookup registers its key again (owner-approved)
+    private final Multimap<String, String> conversationDependentKeys = HashMultimap.create();
 
     protected final XmppConnectionService mXmppConnectionService;
 

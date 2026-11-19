@@ -25,11 +25,15 @@ public class MessageAcknowledgedProcessor extends XmppConnection.Delegate
         if (id.startsWith(JingleRtpConnection.JINGLE_MESSAGE_PROPOSE_ID_PREFIX)) {
             final String sessionId =
                     id.substring(JingleRtpConnection.JINGLE_MESSAGE_PROPOSE_ID_PREFIX.length());
-            getManager(JingleManager.class)
-                    .updateProposedSessionDiscovered(
-                            to,
-                            sessionId,
-                            JingleManager.DeviceDiscoveryState.SEARCHING_ACKNOWLEDGED);
+            final var jingleManager = getManager(JingleManager.class);
+            // Tatrak: off this thread; it holds mStanzaQueue, and JingleManager sends while holding
+            // its proposal lock (opposite lock order, a deadlock when a call is cancelled now)
+            JingleManager.PROPOSAL_EXECUTOR.execute(
+                    () ->
+                            jingleManager.updateProposedSessionDiscovered(
+                                    to,
+                                    sessionId,
+                                    JingleManager.DeviceDiscoveryState.SEARCHING_ACKNOWLEDGED));
         }
 
         final Jid bare = to.asBareJid();

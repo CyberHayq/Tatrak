@@ -190,10 +190,11 @@ object ChatListSnapshot {
                         it.isNotEmpty()
                     }
             }
+        val name = conversation.name
         return ChatListItem(
             uuid = conversation.uuid,
-            title = chatTitle(context, conversation),
-            styledTitle = styledChatTitle(context, conversation),
+            title = chatTitle(context, conversation, name),
+            styledTitle = styledChatTitle(context, conversation, name),
             isGroup = isGroup,
             preview = preview,
             previewSender = previewSender,
@@ -338,16 +339,16 @@ internal fun hasThumbnail(mime: String?, width: Int, height: Int): Boolean =
 internal fun isSavedMessages(conversation: Conversation): Boolean =
     conversation.mode == Conversational.MODE_SINGLE && conversation.contact.isSelf
 
-internal fun chatTitle(context: Context, conversation: Conversation): String =
+internal fun chatTitle(context: Context, conversation: Conversation, name: CharSequence = conversation.name): String =
     if (isSavedMessages(conversation)) {
         context.getString(R.string.tatrak_saved_messages)
     } else {
-        conversation.name.toString()
+        name.toString()
     }
 
 /** ConversationAdapter: a name that is the stranger's address gets its look-alike characters marked. */
-internal fun styledChatTitle(context: Context, conversation: Conversation): AnnotatedString? =
-    if (isSavedMessages(conversation)) null else (conversation.name as? Jid)?.let { styledAddress(context, it) }
+internal fun styledChatTitle(context: Context, conversation: Conversation, name: CharSequence = conversation.name): AnnotatedString? =
+    if (isSavedMessages(conversation)) null else (name as? Jid)?.let { styledAddress(context, it) }
 
 /**
  * [IrregularUnicodeDetector]'s marks on look-alike characters, as the classic lists draw an address.

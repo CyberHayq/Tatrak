@@ -59,10 +59,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             val fast =
                 ChatSnapshot.build(application, service, binding.conversation, params(true), textCache)
             publishIfCurrent(fast)
-            val missingAvatar =
-                fast.header.avatar == null ||
-                    fast.items.any { it is MessageItem && it.showAvatar && it.avatar == null }
-            if (missingAvatar) {
+            if (missingAvatar(fast)) {
                 publishIfCurrent(
                     ChatSnapshot.build(application, service, binding.conversation, params(false), textCache)
                 )
@@ -137,3 +134,12 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         source.invalidate(service)
     }
 }
+
+/** The cached-only snapshot lacks an avatar it should show, so a full pass must follow. */
+internal fun missingAvatar(state: ChatState): Boolean =
+    state.header.avatar == null ||
+        state.items.any {
+            (it is MessageItem && it.showAvatar && it.avatar == null) ||
+                // a read row always has an avatar ("read-" rows from ChatSnapshot.readMarks)
+                (it is ServiceItem && it.key.startsWith("read-") && it.avatar == null)
+        }

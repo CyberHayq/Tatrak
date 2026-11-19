@@ -36,7 +36,12 @@ import eu.siacs.conversations.xmpp.manager.EntityTimeManager
 import eu.siacs.conversations.xmpp.manager.MessageArchiveManager
 import im.conversations.android.xmpp.model.stanza.Presence
 import im.conversations.android.xmpp.model.state.Paused
+import android.graphics.Typeface
+import android.text.SpannableString
+import android.text.Spanned
+import android.text.SpannedString
 import android.text.TextUtils
+import android.text.style.StyleSpan
 import java.time.ZonedDateTime
 import java.time.temporal.ChronoUnit
 import android.content.pm.PackageManager
@@ -281,8 +286,17 @@ data class UnreadItem(override val key: String, override val day: String, val co
 }
 
 @Immutable
-data class ServiceItem(override val key: String, override val day: String, val text: String) :
-    ChatItem {
+data class ServiceItem(
+    override val key: String,
+    override val day: String,
+    val text: AnnotatedString,
+    /** MessageAdapter's status icon: paused notifications, the contact's night time. */
+    @DrawableRes val icon: Int = 0,
+    /** MessageAdapter's avatar on a read row: the reader, or the readers combined. */
+    val avatar: Bitmap? = null,
+) : ChatItem {
+    constructor(key: String, day: String, text: String) : this(key, day, AnnotatedString(text))
+
     override val contentType: Int
         get() = 102
 }
@@ -517,9 +531,10 @@ object ChatSnapshot {
                 null
             }
         val mutedTill = conversation.mutedTill
+        val name = conversation.name
         return ChatHeader(
-            title = chatTitle(context, conversation),
-            styledTitle = styledChatTitle(context, conversation),
+            title = chatTitle(context, conversation, name),
+            styledTitle = styledChatTitle(context, conversation, name),
             subtitle = subtitle,
             subtitleActive = active,
             avatar =
@@ -565,25 +580,22 @@ object ChatSnapshot {
                     contact?.showInRoster() == true,
                 )
         }
-            ?: when {
-                conversation.mode == Conversational.MODE_MULTI &&
-                    !conversation.mucOptions.online() &&
-                    account.status == Account.State.ONLINE ->
-                    mucBanner(conversation.mucOptions.error, conversation.receivedMessagesCount() > 0)
+            ?: laterBanner(
+                conversation.mode == Conversational.MODE_MULTI && !conversation.mucOptions.online() && account.status == Account.State.ONLINE,
+                { mucBanner(conversation.mucOptions.error, conversation.receivedMessagesCount() > 0) },
                 // hasPendingPgpIntent reads the connection's decryption service
-                connection != null && account.hasPendingPgpIntent(conversation) -> ChatBanner.PGP_PENDING
-                connection?.getManager(BlockingManager::class.java)?.hasFeature() == true &&
-                    conversation.countMessages() != 0 &&
-                    !conversation.isBlocked &&
-                    conversation.isWithStranger ->
-                    ChatBanner.STRANGER
-                // Tatrak: where the classic screen shows nothing while offline
-                !account.isOnlineAndConnected -> ChatBanner.CONNECTING
-                else -> null
-            }
+                { connection != null && account.hasPendingPgpIntent(conversation) },
+                {
+                    connection?.getManager(BlockingManager::class.java)?.hasFeature() == true &&
+                        conversation.countMessages() != 0 &&
+                        !conversation.isBlocked &&
+                        conversation.isWithStranger
+                },
+                { account.isOnlineAndConnected },
+            )
     }
 
-    private fun blockMenu(conversation: Conversation): BlockMenu? {
+    internal fun blockMenu(conversation: Conversation): BlockMenu? {
         if (conversation.mode != Conversational.MODE_SINGLE) return null
         return BlockMenu(
             blockContact = conversation.address.local != null,
@@ -593,11 +605,11 @@ object ChatSnapshot {
 
     /** ConversationFragment.updateStatusMessages: "Load more messages" above the oldest item, the contact's status row below the newest. */
     private fun withStatusRows(context: Context, conversation: Conversation, items: List<ChatItem>): List<ChatItem> {
-        val status = contactStatus(context, conversation)
+        val status = contactStatus(context, conversation, items.firstOrNull()?.day.orEmpty())
         val loadMore = showLoadMore(conversation)
         if (status == null && !loadMore) return items
         val all = ArrayList<ChatItem>(items.size + 2)
-        status?.let { all += ServiceItem("contact-status", items.firstOrNull()?.day.orEmpty(), it) }
+        status?.let { all += it }
         all += items
         if (loadMore) all += LoadMoreItem(items.lastOrNull()?.day.orEmpty())
         return all
@@ -617,7 +629,7 @@ object ChatSnapshot {
     }
 
     /** The one-to-one part of ConversationFragment.updateStatusMessages without the typing rows (the header shows typing). */
-    private fun contactStatus(context: Context, conversation: Conversation): String? {
+    private fun contactStatus(context: Context, conversation: Conversation, day: String): ServiceItem? {
         if (conversation.mode != Conversational.MODE_SINGLE) return null
         val connection = conversation.account.xmppConnection ?: return null
         val state = connection.getManager(ChatStateManager::class.java).getIncoming(conversation.address)
@@ -630,6 +642,7 @@ object ChatSnapshot {
             // as the classic getOrNull: only an answer that is already there
             if (time.isDone) runCatching { time.get() }.getOrNull() else null,
             EntityTimeManager.noRecentMessages(conversation),
+            day,
         )
     }
 
@@ -759,7 +772,7 @@ object ChatSnapshot {
         private var index = MessageIndex(emptyList())
 
         /** Set by [items]: "… have read up to this point" rows by message index, readers of own messages by uuid. */
-        private var readRows: Map<Int, String> = emptyMap()
+        private var readRows: Map<Int, Pair<String, Bitmap?>> = emptyMap()
         private var readers: Map<String, List<String>> = emptyMap()
 
         fun items(messages: List<Message>): List<ChatItem> {
@@ -804,7 +817,7 @@ object ChatSnapshot {
                         else -> GroupPosition.SINGLE
                     }
                 items += toItem(message, day, position, validInSession[i])
-                readRows[i]?.let { items += ServiceItem("read-${message.uuid}", day, it) }
+                readRows[i]?.let { (text, avatar) -> items += ServiceItem("read-${message.uuid}", day, AnnotatedString(text), avatar = avatar) }
             }
             items.reverse()
             return items
@@ -823,7 +836,7 @@ object ChatSnapshot {
             val mucOptions = conversation.mucOptions
             if (!mucOptions.isPrivateAndNonAnonymous) return
             val allUsers = mucOptions.users
-            val rows = HashMap<Int, String>()
+            val rows = HashMap<Int, Pair<String, Bitmap?>>()
             val byUuid = HashMap<String, List<String>>()
             val added = HashSet<ReadByMarker>() // markers in a row below and senders below
             val seen = HashSet<ReadByMarker>() // markers only
@@ -867,12 +880,24 @@ object ChatSnapshot {
                     size > 4 ->
                         context.getString(R.string.contacts_and_n_more_have_read_up_to_this_point, UIHelper.concatNames(shown, 3), size - 3)
                     else -> null
-                }?.let { rows[i] = it }
+                }?.let { rows[i] = it to readAvatar(it, shown) }
                 added += sender
                 everyone = ReadByMarker.allUsersRepresented(allUsers, added)
             }
             readRows = rows
             readers = byUuid
+        }
+
+        /** The avatar MessageAdapter draws for the classic read row, from the same status message. */
+        private fun readAvatar(body: String, shown: List<MucOptions.User>): Bitmap? {
+            val status = Message.createStatusMessage(conversation, body)
+            if (shown.size == 1) {
+                status.counterpart = shown[0].fullJid
+                status.trueCounterpart = shown[0].realJid
+            } else {
+                status.counterparts = shown
+            }
+            return service.avatarService.get(status, params.avatarSize, params.avatarsCachedOnly)
         }
 
         private fun dayLabel(date: LocalDate): String =
@@ -1502,6 +1527,23 @@ internal fun subscriptionBanner(blocked: Boolean, pendingRequest: Boolean, inRos
         else -> ChatBanner.ALLOW_SUBSCRIPTION
     }
 
+/** The rest of ConversationFragment.updateSnackBar, in its order; each check runs only when reached. */
+internal fun laterBanner(
+    groupOffline: Boolean,
+    groupError: () -> ChatBanner?,
+    pgpPending: () -> Boolean,
+    stranger: () -> Boolean,
+    connected: () -> Boolean,
+): ChatBanner? =
+    when {
+        groupOffline -> groupError()
+        pgpPending() -> ChatBanner.PGP_PENDING
+        stranger() -> ChatBanner.STRANGER
+        // Tatrak: where the classic screen shows nothing while offline
+        !connected() -> ChatBanner.CONNECTING
+        else -> null
+    }
+
 /** ConversationFragment.updateSnackBar for a group not joined while the account is online. */
 internal fun mucBanner(error: MucOptions.Error, receivedMessages: Boolean): ChatBanner? =
     when (error) {
@@ -1536,16 +1578,25 @@ internal fun contactStatusRow(
     dnd: Boolean,
     contactTime: ZonedDateTime?,
     noRecentMessages: Boolean,
-): String? =
+    day: String = "",
+): ServiceItem? =
     when {
-        dnd && noRecentMessages -> context.getString(R.string.contact_has_paused_their_notifications, name)
+        dnd && noRecentMessages ->
+            ServiceItem(
+                "contact-status",
+                day,
+                AnnotatedString(context.getString(R.string.contact_has_paused_their_notifications, name)),
+                R.drawable.ic_notifications_paused_24dp,
+            )
         contactTime != null &&
             EntityTimeManager.isDifferentTimeZone(contactTime) &&
             EntityTimeManager.isNightTime(contactTime) &&
             noRecentMessages -> {
-            // the time is taken when shown, as MessageAdapter does; the classic one is bold
-            val time = Instant.now().atZone(contactTime.offset).toLocalTime().truncatedTo(ChronoUnit.MINUTES).toString()
-            TextUtils.expandTemplate(context.getString(R.string.its_time_for_contact), time, name).toString()
+            // the time is taken when shown and set in bold, as MessageAdapter does
+            val time = SpannableString(Instant.now().atZone(contactTime.offset).toLocalTime().truncatedTo(ChronoUnit.MINUTES).toString())
+            time.setSpan(StyleSpan(Typeface.BOLD), 0, time.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            val text = SpannedString(TextUtils.expandTemplate(context.getString(R.string.its_time_for_contact), time, name))
+            ServiceItem("contact-status", day, text.toAnnotatedString(), R.drawable.ic_schedule_24dp)
         }
         else -> null
     }

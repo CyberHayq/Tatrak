@@ -2,7 +2,9 @@ package am.cyberhayq.chat.ui.chat
 
 import android.app.Application
 import android.content.Context
+import androidx.compose.ui.text.font.FontWeight
 import androidx.test.core.app.ApplicationProvider
+import eu.siacs.conversations.R
 import eu.siacs.conversations.entities.Account
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Conversational
@@ -99,16 +101,20 @@ class ChatBannerTest {
 
     @Test
     fun contactStatusRows() {
-        assertEquals(
-            "Ani has paused their notifications",
-            contactStatusRow(context, "Ani", dnd = true, contactTime = null, noRecentMessages = true),
-        )
+        val dnd = contactStatusRow(context, "Ani", dnd = true, contactTime = null, noRecentMessages = true)!!
+        assertEquals("Ani has paused their notifications", dnd.text.text)
+        assertEquals(R.drawable.ic_notifications_paused_24dp, dnd.icon)
         assertNull(contactStatusRow(context, "Ani", dnd = true, contactTime = null, noRecentMessages = false))
         val local = ZonedDateTime.now().offset
         val away = if (local == ZoneOffset.ofHours(9)) ZoneOffset.ofHours(-5) else ZoneOffset.ofHours(9)
         val night = ZonedDateTime.of(2026, 11, 19, 23, 30, 0, 0, away)
-        val row = contactStatusRow(context, "Ani", dnd = false, contactTime = night, noRecentMessages = true)
-        assertTrue(row, row!!.startsWith("It’s ") && row.endsWith(" for Ani"))
+        val row = contactStatusRow(context, "Ani", dnd = false, contactTime = night, noRecentMessages = true)!!
+        val text = row.text.text
+        assertTrue(text, text.startsWith("It’s ") && text.endsWith(" for Ani"))
+        assertEquals(R.drawable.ic_schedule_24dp, row.icon)
+        // only the time is bold, as in the classic row
+        val bold = row.text.spanStyles.single { it.item.fontWeight == FontWeight.Bold }
+        assertTrue(Regex("\\d{2}:\\d{2}").matches(text.substring(bold.start, bold.end)))
         assertNull(contactStatusRow(context, "Ani", false, night.withHour(12), true))
         assertNull(contactStatusRow(context, "Ani", false, night.withZoneSameLocal(local), true))
     }
@@ -129,5 +135,47 @@ class ChatBannerTest {
         boris.setChatState(Composing::class.java)
         // in MucOptions' user order
         assertTrue(header().subtitle in setOf("Anya, Boris are typing…", "Boris, Anya are typing…"))
+    }
+
+    /** A one-to-one chat with someone not in the roster. */
+    private fun chat(address: Jid): Conversation =
+        object : Conversation(
+            "c1", "Stranger", null, "a1", address, 0, Conversation.STATUS_AVAILABLE,
+            Conversational.MODE_SINGLE, Conversation.Attributes.parse(null),
+        ) {
+            override fun isWithStranger() = true // the roster needs the connection
+        }.apply { account = Account(Jid.of("tester@example.com"), "secret") }
+
+    /** ConversationFragment.updateSnackBar: group error, then OpenPGP, then the stranger; later checks are not asked. */
+    @Test
+    fun laterBannersFollowTheClassicOrder() {
+        val asked = ArrayList<String>()
+        fun banner(groupOffline: Boolean, pgp: Boolean, stranger: Boolean, connected: Boolean = true) =
+            laterBanner(
+                groupOffline,
+                { asked += "group"; null },
+                { asked += "pgp"; pgp },
+                { asked += "stranger"; stranger },
+                { asked += "connected"; connected },
+            )
+        assertEquals(ChatBanner.PGP_PENDING, banner(groupOffline = false, pgp = true, stranger = true))
+        assertEquals(listOf("pgp"), asked)
+        asked.clear()
+        assertEquals(ChatBanner.STRANGER, banner(groupOffline = false, pgp = false, stranger = true, connected = false))
+        assertEquals(listOf("pgp", "stranger"), asked)
+        asked.clear()
+        assertEquals(ChatBanner.CONNECTING, banner(groupOffline = false, pgp = false, stranger = false, connected = false))
+        assertEquals(listOf("pgp", "stranger", "connected"), asked)
+        asked.clear()
+        // a group that is not joined ends the chain even without an error banner, as the classic one
+        assertNull(banner(groupOffline = true, pgp = true, stranger = true))
+        assertEquals(listOf("group"), asked)
+    }
+
+    /** showBlockSubmenu: a server address offers only "Block entire domain", as the classic menu. */
+    @Test
+    fun domainStrangerHasNoBlockStranger() {
+        assertEquals(BlockMenu(blockContact = false, reject = false), ChatSnapshot.blockMenu(chat(Jid.of("example.org"))))
+        assertEquals(BlockMenu(blockContact = true, reject = false), ChatSnapshot.blockMenu(chat(Jid.of("stranger@example.org"))))
     }
 }

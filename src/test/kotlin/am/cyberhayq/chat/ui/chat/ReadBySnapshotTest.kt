@@ -15,6 +15,8 @@ import im.conversations.android.xmpp.model.muc.Affiliation
 import im.conversations.android.xmpp.model.muc.Role
 import im.conversations.android.xmpp.model.reactions.Restrictions
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -87,7 +89,7 @@ class ReadBySnapshotTest {
             )
         // newest first, each row right below its message
         assertEquals(listOf("m3", "read-m2", "m2", "read-m1", "m1"), items.filter { it !is DateItem }.map { it.key })
-        val rows = items.filterIsInstance<ServiceItem>().associate { it.key to it.text }
+        val rows = items.filterIsInstance<ServiceItem>().associate { it.key to it.text.text }
         assertEquals("Boris has read up to this point", rows["read-m2"])
         assertEquals("Anya has read up to this point", rows["read-m1"])
         val messages = items.filterIsInstance<MessageItem>().associateBy { it.key }
@@ -122,5 +124,17 @@ class ReadBySnapshotTest {
         val items = items(conversation, message(conversation, "m1", Message.STATUS_SEND_RECEIVED, "Anya"))
         assertEquals(emptyList<ServiceItem>(), items.filterIsInstance<ServiceItem>())
         assertEquals(emptyList<String>(), (items.first { it.key == "m1" } as MessageItem).readBy)
+    }
+
+    /** A read row whose avatar was not cached asks for the full pass even when nothing else is missing. */
+    @Test
+    fun readRowWithoutAvatarAsksForTheFullPass() {
+        val avatar = android.graphics.Bitmap.createBitmap(1, 1, android.graphics.Bitmap.Config.ARGB_8888)
+        val header = ChatHeader("Room", "", avatar = avatar)
+        val read = ServiceItem("read-m1", "Today", "Anya has read up to this point")
+        assertTrue(missingAvatar(ChatState(header = header, items = listOf(read))))
+        assertFalse(missingAvatar(ChatState(header = header, items = listOf(read.copy(avatar = avatar)))))
+        // other service rows have no avatar
+        assertFalse(missingAvatar(ChatState(header = header, items = listOf(ServiceItem("s1", "Today", "Narek joined")))))
     }
 }

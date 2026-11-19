@@ -771,7 +771,7 @@ class ChatScreenshotTest {
                 header = ChatHeader("Ani", "last seen recently", avatar = letterAvatar("Ani", 0xFFE17076.toInt())),
                 items =
                     listOf(
-                        ServiceItem("contact-status", "Today", "Ani has paused their notifications"),
+                        ServiceItem("contact-status", "Today", AnnotatedString("Ani has paused their notifications"), R.drawable.ic_notifications_paused_24dp),
                         it.text("m1", false, GroupPosition.SINGLE, "Talk tomorrow", "09:12"),
                         it.date("Today"),
                         LoadMoreItem("Today"),
@@ -783,12 +783,16 @@ class ChatScreenshotTest {
         assertEquals(1, loads)
     }
 
-    /** Several members typing: the group header's subtitle names them in the accent colour. */
+    /** Several members typing, and a read row with the readers' avatar under the own message. */
     @Test
     fun chatGroupTyping() =
         capture("chat_group_typing", darkTheme = false) {
-            groupChat(it).copy(
+            val chat = groupChat(it)
+            val read = ServiceItem("read-g4", "Today", AnnotatedString("Aram, Mom have read up to this point"), avatar = letterAvatar("Aram", 0xFF2E8B57.toInt()))
+            val items = chat.items.toMutableList().apply { add(indexOfFirst { item -> item.key == "g4" }, read) }
+            chat.copy(
                 header = ChatHeader("Family", "Aram, Mom are typing…", subtitleActive = true, avatar = letterAvatar("Family", 0xFFA695E7.toInt()), isGroup = true),
+                items = items,
             )
         }
 
