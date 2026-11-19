@@ -98,7 +98,7 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
 | Main session: plans, designs, resolving reviews, re-checking others' changes | Claude Opus 5.5 | xhigh |
 | A feature or fix with a written plan | Claude Opus 5.5 subagent | high |
 | Mechanical work: strings and translations, screenshot tests, throwaway probes, emulator checks | Claude Sonnet 5.5 | medium |
-| Measurements on the `benchmark` build, a batch of fixes in its own worktree | Codex `gpt-6.1-sol` | high |
+| Measurements on the `benchmark` build, a batch of fixes in its own worktree | Codex `gpt-6.2-sol` | high |
 | Very complex work: Tatrak's own storage and encryption code, migrations, races | Claude Opus 5.5 subagent writes, Codex `gpt-6-astra` reviews | high / high |
 | Small fixes to storage or encryption code from a review whose findings already give the fix | Claude Opus 5.5 (main session) | xhigh |
 | A bug whose root cause the main session did not find | Codex `gpt-6-astra` | high |
@@ -113,7 +113,7 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
 - A Codex brief for code says to call the legacy methods as they are, not rewrite them (a Codex
   fix batch once replaced the legacy Settings intent and lost the profile media fallback).
 - A non-trivial change is reviewed by the other vendor's model than the one that wrote it
-  (Claude's by Codex `gpt-6.1-sol` high, Codex's by the main session).
+  (Claude's by Codex `gpt-6.2-sol` high, Codex's by the main session).
 - When Codex is out of limits, do not start an Opus instance in its place: run the Claude
   reviewers that are due, mark the Codex one "deferred (Codex limit)" and tell the owner. A Claude
   review runs instead only when the owner asks for it, and is recorded as a Claude review.
@@ -138,12 +138,12 @@ evidence: `knowledge/ops/egm-review-routing.md`.
 |---|---|---|
 | 5, 8: zoom-out | opus, high | - |
 | 6: comprehension | opus, medium | - |
-| 7: design | opus, high | gpt-6.1-sol, high |
+| 7: design | opus, high | gpt-6.2-sol, high |
 | 7, 9: structural, style | sonnet, medium | - |
-| 9: implementation-readiness, codebase-details | opus, high | gpt-6.1-sol, high |
+| 9: implementation-readiness, codebase-details | opus, high | gpt-6.2-sol, high |
 
 - A document about Tatrak's own storage or encryption (database, attachments, backup/import)
-  gets Codex `gpt-6-astra` at high instead of `gpt-6.1-sol` (`-m` and
+  gets Codex `gpt-6-astra` at high instead of `gpt-6.2-sol` (`-m` and
   `model_reasoning_effort` in the command below).
 - These are starting efforts. Raise a lens to xhigh only after a later round or the owner finds
   something it missed, and say so in `knowledge/log.md`.
@@ -158,7 +158,7 @@ evidence: `knowledge/ops/egm-review-routing.md`.
 
   ```sh
   orca terminal create --worktree current --title "goldfish <lens> (codex)" --command \
-    "codex exec --ephemeral -s read-only -m gpt-6.1-sol -c model_reasoning_effort=high \
+    "codex exec --ephemeral -s read-only -m gpt-6.2-sol -c model_reasoning_effort=high \
      -c features.memories=false -c features.apps=false -c features.plugins=false \
      -c features.multi_agent=false -c features.goals=false -c features.image_generation=false \
      -c web_search=disabled -c project_doc_max_bytes=0 \
