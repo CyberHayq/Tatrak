@@ -1,1 +1,9 @@
-Floating interface like Telegram 13: the bars of the chat list, a new bottom tab bar, and the chat's header and composer float over the content, with an optional blur on Android 12 and later. Three new styles: Glass, Warm Glass and Tinted Glass. Settings pages drawn in the new interface. Chat: select several messages, a Message info sheet, the attach menu in place of the keyboard with Contact, smoother opening and sending. OMEMO reactions from other clients no longer show as messages.
+- Floating bars like Telegram 13 over the chat list and the chat, with a new bottom tab bar
+- Optional blur under the floating bars on Android 12 and later
+- Three new styles: Glass, Warm Glass and Tinted Glass
+- Settings pages drawn in the new interface
+- Select several messages in a chat
+- Message info sheet
+- Attach menu in place of the keyboard, with Contact
+- Smoother chat opening and sending
+- OMEMO reactions from other clients no longer show as messages

@@ -1,1 +1,5 @@
-First F-Droid release, based on Conversations 2.21.0 with its OMEMO and OpenPGP unchanged. Data on the device is encrypted: history in an SQLCipher database; attachments, voice messages, avatars and stickers in encrypted files. New interface: chat folders, archive, multi-select, replies, swipe to reply, delete for everyone, sticker packs, nine accents and an AMOLED night theme. The message menu shows send and receive times and the encrypting key. Restores Conversations and monocles backups.
+- First F-Droid release, based on Conversations 2.21.0 with its OMEMO and OpenPGP unchanged
+- Data on the device is encrypted: history in SQLCipher; attachments, voice messages, avatars and stickers in encrypted files
+- New interface: chat folders, archive, multi-select, replies, swipe to reply, delete for everyone, sticker packs, nine accents, AMOLED night theme
+- The message menu shows send and receive times and the encrypting key
+- Restores Conversations and monocles backups
