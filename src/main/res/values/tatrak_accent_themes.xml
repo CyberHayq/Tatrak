@@ -96,6 +96,102 @@
         <item name="colorSurfaceContainerHighest">@color/tatrak_slate_amoled_neutral_container_highest</item>
         <item name="colorOutlineVariant">@color/tatrak_slate_amoled_neutral_outline_variant</item>
     </style>
+    <!-- Glass (and Tinted Glass, whose tint is Compose only) neutrals (blue-grey night): applied after ThemeOverlay.Tatrak and before the accent -->
+    <style name="ThemeOverlay.Tatrak.Glass" parent="">
+        <item name="android:colorBackground">@color/tatrak_glass_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_glass_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_glass_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_glass_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_glass_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_glass_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_glass_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_glass_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_glass_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_glass_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_glass_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_glass_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_glass_neutral_outline_variant</item>
+    </style>
+    <!-- Glass (and Tinted Glass, whose tint is Compose only) with the graphite night: applied instead of ThemeOverlay.Tatrak.Glass; equals it by day -->
+    <style name="ThemeOverlay.Tatrak.Glass.Graphite" parent="">
+        <item name="android:colorBackground">@color/tatrak_glass_graphite_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_glass_graphite_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_glass_graphite_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_glass_graphite_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_glass_graphite_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_glass_graphite_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_glass_graphite_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_glass_graphite_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_glass_graphite_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_glass_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_glass_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_glass_graphite_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_glass_graphite_neutral_outline_variant</item>
+    </style>
+    <!-- Glass (and Tinted Glass, whose tint is Compose only) with the AMOLED night: applied instead of ThemeOverlay.Tatrak.Glass; equals it by day -->
+    <style name="ThemeOverlay.Tatrak.Glass.Amoled" parent="">
+        <item name="android:colorBackground">@color/tatrak_glass_amoled_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_glass_amoled_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_glass_amoled_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_glass_amoled_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_glass_amoled_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_glass_amoled_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_glass_amoled_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_glass_amoled_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_glass_amoled_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_glass_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_glass_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_glass_amoled_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_glass_amoled_neutral_outline_variant</item>
+    </style>
+    <!-- Warm Glass neutrals (blue-grey night): applied after ThemeOverlay.Tatrak and before the accent -->
+    <style name="ThemeOverlay.Tatrak.Warm" parent="">
+        <item name="android:colorBackground">@color/tatrak_warm_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_warm_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_warm_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_warm_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_warm_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_warm_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_warm_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_warm_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_warm_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_warm_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_warm_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_warm_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_warm_neutral_outline_variant</item>
+    </style>
+    <!-- Warm Glass with the graphite night: applied instead of ThemeOverlay.Tatrak.Warm; equals it by day -->
+    <style name="ThemeOverlay.Tatrak.Warm.Graphite" parent="">
+        <item name="android:colorBackground">@color/tatrak_warm_graphite_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_warm_graphite_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_warm_graphite_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_warm_graphite_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_warm_graphite_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_warm_graphite_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_warm_graphite_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_warm_graphite_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_warm_graphite_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_warm_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_warm_graphite_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_warm_graphite_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_warm_graphite_neutral_outline_variant</item>
+    </style>
+    <!-- Warm Glass with the AMOLED night: applied instead of ThemeOverlay.Tatrak.Warm; equals it by day -->
+    <style name="ThemeOverlay.Tatrak.Warm.Amoled" parent="">
+        <item name="android:colorBackground">@color/tatrak_warm_amoled_neutral_background</item>
+        <item name="colorOnBackground">@color/tatrak_warm_amoled_neutral_on_background</item>
+        <item name="colorSurface">@color/tatrak_warm_amoled_neutral_surface</item>
+        <item name="colorOnSurface">@color/tatrak_warm_amoled_neutral_on_surface</item>
+        <item name="colorSurfaceVariant">@color/tatrak_warm_amoled_neutral_surface_variant</item>
+        <item name="colorOnSurfaceVariant">@color/tatrak_warm_amoled_neutral_on_surface_variant</item>
+        <item name="colorOutline">@color/tatrak_warm_amoled_neutral_outline</item>
+        <item name="colorSurfaceContainerLowest">@color/tatrak_warm_amoled_neutral_container_lowest</item>
+        <item name="colorSurfaceContainerLow">@color/tatrak_warm_amoled_neutral_background</item>
+        <item name="colorSurfaceContainer">@color/tatrak_warm_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHigh">@color/tatrak_warm_amoled_neutral_container</item>
+        <item name="colorSurfaceContainerHighest">@color/tatrak_warm_amoled_neutral_container_highest</item>
+        <item name="colorOutlineVariant">@color/tatrak_warm_amoled_neutral_outline_variant</item>
+    </style>
     <style name="ThemeOverlay.Tatrak.Accent" parent="" />
     <style name="ThemeOverlay.Tatrak.Accent.Blue">
         <item name="colorPrimary">@color/tatrak_accent_blue_primary</item>

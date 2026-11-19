@@ -3,12 +3,17 @@ package am.cyberhayq.chat.ui.settings
 import am.cyberhayq.chat.ui.theme.Accent
 import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
+import am.cyberhayq.chat.ui.theme.neutralsOf
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.IntrinsicSize
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -30,6 +35,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
@@ -39,41 +45,50 @@ import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
 
 /**
- * What a style card draws, as fixed colours so a card shows its own style whatever the current one is. They mirror the
- * wallpaper, incoming bubble and text colours of art/tatrak/gen_accents.py (Slate) and of ChatColors in Theme.kt (Telegram).
+ * What a style card draws, as fixed colours so a card shows its own style whatever the current one is: the wallpaper, incoming
+ * bubble and text of the style's generated neutrals ([neutralsOf]), or of ChatColors in Theme.kt where Telegram has none.
  */
 private class CardLook(val wallpaper: Color, val incoming: Color, val text: Color, val bubble: Shape, val avatar: Shape)
 
-private fun cardLook(style: TatrakStyle, dark: Boolean, night: NightBackground): CardLook {
+private fun cardLook(style: TatrakStyle, accent: Accent, dark: Boolean, night: NightBackground): CardLook {
     val slate = style == TatrakStyle.SLATE_SEA
     val bubble = RoundedCornerShape(if (slate) 14.dp else 10.dp)
     val avatar = if (slate) RoundedCornerShape(36) else CircleShape
-    fun look(wallpaper: Long, incoming: Long, text: Long) = CardLook(Color(wallpaper), Color(incoming), Color(text), bubble, avatar)
+    val n = neutralsOf(style, dark, night, accent)
     return when {
-        !dark -> if (slate) look(0xFFE3E9EE, 0xFFF8FAFB, 0xFF14191F) else look(0xFFCBD9C0, 0xFFFFFFFF, 0xFF000000)
-        night == NightBackground.AMOLED -> look(0xFF000000, 0xFF1A1A1A, 0xFFE8E8E8)
-        night == NightBackground.GRAPHITE -> if (slate) look(0xFF0B0C0E, 0xFF1E2124, 0xFFE8EBED) else look(0xFF0B0B0D, 0xFF1E1E22, 0xFFECE9E6)
-        else -> if (slate) look(0xFF0F1316, 0xFF1F262B, 0xFFE6EAEE) else look(0xFF0E1621, 0xFF182533, 0xFFF5F5F5)
+        n != null -> CardLook(n.chatBackground, n.bubbleIn, n.text ?: Color.Unspecified, bubble, avatar)
+        dark -> CardLook(Color(0xFF0E1621), Color(0xFF182533), Color(0xFFF5F5F5), bubble, avatar)
+        else -> CardLook(Color(0xFFCBD9C0), Color.White, Color.Black, bubble, avatar)
     }
 }
 
-/** The two style choices as cards; side by side, stacked when the text is large or the screen narrow. */
+private val styleLabels =
+    listOf(
+        Triple(TatrakStyle.TELEGRAM, R.string.tatrak_style_telegram, R.string.tatrak_style_telegram_summary),
+        Triple(TatrakStyle.SLATE_SEA, R.string.tatrak_style_slate_sea, R.string.tatrak_style_slate_sea_summary),
+        Triple(TatrakStyle.GLASS, R.string.tatrak_style_glass, R.string.tatrak_style_glass_summary),
+        Triple(TatrakStyle.WARM, R.string.tatrak_style_warm, R.string.tatrak_style_warm_summary),
+        Triple(TatrakStyle.TINTED, R.string.tatrak_style_tinted, R.string.tatrak_style_tinted_summary),
+    )
+
+/** The style choices as cards: a row that scrolls sideways, stacked when the text is large or the screen narrow. */
 @Composable
 internal fun StyleCards(style: TatrakStyle, accent: Accent, dark: Boolean, night: NightBackground, onStyle: (TatrakStyle) -> Unit) {
     val configuration = LocalConfiguration.current
     val stacked = configuration.fontScale > 1.3f || configuration.screenWidthDp < 340
-    val cards: List<@Composable (Modifier) -> Unit> =
-        listOf(
-            { m -> StyleCard(TatrakStyle.TELEGRAM, R.string.tatrak_style_telegram, R.string.tatrak_style_telegram_summary, style, accent, dark, night, onStyle, m) },
-            { m -> StyleCard(TatrakStyle.SLATE_SEA, R.string.tatrak_style_slate_sea, R.string.tatrak_style_slate_sea_summary, style, accent, dark, night, onStyle, m) },
-        )
     if (stacked) {
         Column(Modifier.selectableGroup().padding(horizontal = 16.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            cards.forEach { it(Modifier.fillMaxWidth()) }
+            styleLabels.forEach { (card, title, summary) -> StyleCard(card, title, summary, style, accent, dark, night, onStyle, Modifier.fillMaxWidth()) }
         }
     } else {
-        Row(Modifier.selectableGroup().padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            cards.forEach { it(Modifier.weight(1f)) }
+        // opens with the chosen card in view, as the second one (ScrollState clamps the offset to the row's end)
+        val chosen = styleLabels.indexOfFirst { it.first == style }
+        val start = with(LocalDensity.current) { ((chosen - 1).coerceAtLeast(0) * 160).dp.roundToPx() }
+        Row(
+            Modifier.selectableGroup().horizontalScroll(rememberScrollState(start)).height(IntrinsicSize.Max).padding(horizontal = 16.dp, vertical = 4.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            styleLabels.forEach { (card, title, summary) -> StyleCard(card, title, summary, style, accent, dark, night, onStyle, Modifier.width(148.dp).fillMaxHeight()) }
         }
     }
 }
@@ -101,7 +116,7 @@ private fun StyleCard(
             .semantics(mergeDescendants = true) {}
             .padding(10.dp)
     ) {
-        CardPreview(cardLook(card, dark, night), accent.swatch)
+        CardPreview(cardLook(card, accent, dark, night), accent.swatch)
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
             Text(stringResource(title), fontSize = 16.sp, color = MaterialTheme.colorScheme.onSurface, modifier = Modifier.weight(1f))
             // not colour alone: the selected card also carries a check

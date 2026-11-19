@@ -18,18 +18,21 @@ enum class NightBackground(val key: String) {
     /** The XML neutrals overlay `BaseActivity` applies under the accent (equal to the style's day neutrals by day); 0 = none. */
     @StyleRes
     fun overlay(style: TatrakStyle): Int =
-        if (style == TatrakStyle.SLATE_SEA) {
-            when (this) {
-                BLUE_GREY -> R.style.ThemeOverlay_Tatrak_SlateSea
-                GRAPHITE -> R.style.ThemeOverlay_Tatrak_SlateSea_Graphite
-                AMOLED -> R.style.ThemeOverlay_Tatrak_SlateSea_Amoled
-            }
-        } else {
-            when (this) {
-                BLUE_GREY -> 0
-                GRAPHITE -> R.style.ThemeOverlay_Tatrak_Graphite
-                AMOLED -> R.style.ThemeOverlay_Tatrak_Amoled
-            }
+        when (style) {
+            TatrakStyle.TELEGRAM -> pick(0, R.style.ThemeOverlay_Tatrak_Graphite, R.style.ThemeOverlay_Tatrak_Amoled)
+            TatrakStyle.SLATE_SEA ->
+                pick(R.style.ThemeOverlay_Tatrak_SlateSea, R.style.ThemeOverlay_Tatrak_SlateSea_Graphite, R.style.ThemeOverlay_Tatrak_SlateSea_Amoled)
+            // Tinted Glass tints Compose only; its XML screens take the neutral Glass surfaces (owner, 2026-11-19)
+            TatrakStyle.GLASS, TatrakStyle.TINTED ->
+                pick(R.style.ThemeOverlay_Tatrak_Glass, R.style.ThemeOverlay_Tatrak_Glass_Graphite, R.style.ThemeOverlay_Tatrak_Glass_Amoled)
+            TatrakStyle.WARM -> pick(R.style.ThemeOverlay_Tatrak_Warm, R.style.ThemeOverlay_Tatrak_Warm_Graphite, R.style.ThemeOverlay_Tatrak_Warm_Amoled)
+        }
+
+    private fun pick(blueGrey: Int, graphite: Int, amoled: Int): Int =
+        when (this) {
+            BLUE_GREY -> blueGrey
+            GRAPHITE -> graphite
+            AMOLED -> amoled
         }
 
     companion object {

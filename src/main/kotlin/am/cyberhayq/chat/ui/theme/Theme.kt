@@ -211,6 +211,9 @@ fun TatrakTheme(
     dynamicColors: Boolean = rememberDynamicColors(),
     nightBackground: NightBackground = NightBackground.remember(),
     avatarShape: AvatarShape = AvatarShape.remember(style),
+    floatingBars: Boolean = FloatingBars.remember(style),
+    /** "Blur under bars" in effect (off below API 31); used only with [floatingBars]. */
+    barBlur: BarBlur = BarBlur.remember(),
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -220,7 +223,7 @@ fun TatrakTheme(
             if (dynamic) dynamicAccent(context, darkTheme) else resolveAccent(context, accent, darkTheme)
         }
     // the style's and night background's surfaces give way to the system's dynamic colours (the setting keeps its value)
-    val neutrals = if (dynamic) null else neutralsOf(style, darkTheme, nightBackground)
+    val neutrals = if (dynamic) null else neutralsOf(style, darkTheme, nightBackground, accent)
     val chatColors =
         remember(colors, darkTheme, neutrals) {
             (if (darkTheme) DarkChatColors else LightChatColors).let { base ->
@@ -254,6 +257,8 @@ fun TatrakTheme(
         LocalAvatarDotOffset provides avatarDotOffsetOf(avatarShape),
         LocalTatrakStyle provides style,
         LocalTatrakFont provides font,
+        LocalFloatingBars provides floatingBars,
+        LocalBarBlur provides barBlur,
     ) {
         if (font == null) {
             MaterialTheme(colorScheme = scheme, shapes = menuShapes, content = content)

@@ -65,13 +65,67 @@ AMOLED=dict(background='000000',on_background='E8E8E8',surface='000000',on_surfa
         top_bar='121212',on_top_bar='E8E8E8',on_top_bar_muted='A0A0A0',drawer_header='1A1A1A',archive='3A3A3A',chat_background='000000',bubble_in='1A1A1A',
         time_in='999999',text='E8E8E8',service='CC262626',divider='1A1A1A',outline_variant='2E2E2E',container_lowest='000000',container='1A1A1A',container_highest='262626')
 SLATE_AMOLED={**AMOLED,'online':'4CC38A'}
-DAY=[TELEGRAM_L,SLATE_L]; NIGHT=[TELEGRAM_D,GRAPHITE,AMOLED,SLATE_D,SLATE_GRAPHITE,SLATE_AMOLED]
+# Glass (owner, 2026-11-19): Telegram 13 / iOS neutral greys; white bars and bubbles by day, near-black layers at night.
+# Starting colours; fit_neutrals() below nudges the text slots until every pair of check_contrast.py passes.
+GLASS_L=dict(background='F2F2F7',on_background='111114',surface='F2F2F7',on_surface='111114',surface_variant='E5E5EA',on_surface_variant='6B6B72',outline='8A8A8E',
+        top_bar='FFFFFF',on_top_bar='111114',on_top_bar_muted='6B6B72',drawer_header='2C2C2E',archive='8E8E93',chat_background='E5E5EA',bubble_in='FFFFFF',
+        time_in='6B6B72',text='111114',service='B3'+'3A3A3C',divider='FFFFFF',outline_variant='D1D1D6',container_lowest='FFFFFF',container='FFFFFF',container_highest='E5E5EA')
+GLASS_D=dict(background='0E0E10',on_background='F2F2F5',surface='0E0E10',on_surface='F2F2F5',surface_variant='1F1F22',on_surface_variant='9C9CA3',outline='5E5E64',
+        top_bar='1C1C1E',on_top_bar='F2F2F5',on_top_bar_muted='9C9CA3',drawer_header='1F1F22',archive='3A3A3E',chat_background='0E0E10',bubble_in='1F1F22',
+        time_in='9C9CA3',text='F2F2F5',service='CC1F1F22',divider='1F1F22',outline_variant='252528',container_lowest='0E0E10',container='1C1C1E',container_highest='2C2C2E')
+# Glass with the graphite night: a softer charcoal (lighter ground, darker chat) in the same neutral cast
+GLASS_GRAPHITE=dict(background='151517',on_background='ECECEE',surface='151517',on_surface='ECECEE',surface_variant='1F1F22',on_surface_variant='A3A3A8',outline='636368',
+        top_bar='1D1D20',on_top_bar='ECECEE',on_top_bar_muted='A3A3A8',drawer_header='252528',archive='3C3C40',chat_background='0B0B0C',bubble_in='232326',
+        time_in='95959A',text='ECECEE',service='CC232326',divider='232326',outline_variant='2B2B2E',container_lowest='0B0B0C',container='1F1F22',container_highest='2C2C30')
+GLASS_AMOLED=dict(AMOLED)  # the neutral AMOLED set; its own overlay only because the day half differs
+# Warm Glass: the same structure with a warm cast
+WARM_L=dict(background='F5F3EF',on_background='1A1816',surface='F5F3EF',on_surface='1A1816',surface_variant='EBE8E2',on_surface_variant='6E6A64',outline='8C877F',
+        top_bar='FFFDF9',on_top_bar='1A1816',on_top_bar_muted='6E6A64',drawer_header='3A342D',archive='958F86',chat_background='ECE8E1',bubble_in='FFFDF9',
+        time_in='6E6A64',text='1A1816',service='B3'+'3D3731',divider='FFFDF9',outline_variant='DDD9D2',container_lowest='FFFDF9',container='FFFDF9',container_highest='EBE8E2')
+WARM_D=dict(background='121110',on_background='F2EFEA',surface='121110',on_surface='F2EFEA',surface_variant='22201E',on_surface_variant='A09B94',outline='625D57',
+        top_bar='1E1C1A',on_top_bar='F2EFEA',on_top_bar_muted='A09B94',drawer_header='22201E',archive='3D3935',chat_background='121110',bubble_in='22201E',
+        time_in='A09B94',text='F2EFEA',service='CC22201E',divider='22201E',outline_variant='282624',container_lowest='121110',container='1E1C1A',container_highest='2E2B28')
+WARM_GRAPHITE=dict(background='161514',on_background='EDE9E4',surface='161514',on_surface='EDE9E4',surface_variant='201E1C',on_surface_variant='A8A39C',outline='67625C',
+        top_bar='1E1C1A',on_top_bar='EDE9E4',on_top_bar_muted='A8A39C',drawer_header='262321',archive='3E3A36',chat_background='0D0C0B',bubble_in='242220',
+        time_in='99948D',text='EDE9E4',service='CC242220',divider='242220',outline_variant='2C2926',container_lowest='0D0C0B',container='201E1C',container_highest='2E2B28')
+# AMOLED with a warm cast in the raised layers only; the grounds stay 000000
+WARM_AMOLED={**AMOLED,'surface_variant':'1C1A17','on_surface_variant':'A39E97','top_bar':'141210','on_top_bar_muted':'A39E97','drawer_header':'1C1A17','archive':'3D3935',
+        'bubble_in':'1C1A17','time_in':'9C978F','service':'CC282522','divider':'1C1A17','outline_variant':'302D29','container':'1C1A17','container_highest':'282522'}
+GROUNDS=('background','surface','chat_background','container_lowest')
+SURFACES=GROUNDS+('surface_variant','outline','top_bar','drawer_header','archive','bubble_in','service','divider','outline_variant','container','container_highest')
+TEXT_SURFACES=('background','top_bar','bubble_in','chat_background','container','container_highest','surface_variant')
+MUTED_SURFACES=('background','top_bar','bubble_in','container','container_highest','surface_variant')  # muted text is never drawn on the bare wallpaper
+def fit_neutrals(S,day):  # the new styles' text slots nudged until check_contrast.py's neutral pairs pass; surfaces stay
+    away=K if day else W
+    S['text']=fit_all(S['text'],[S[s] for s in TEXT_SURFACES],4.5,away)
+    for k in ('on_background','on_surface','on_top_bar'): S[k]=S['text']
+    S['on_surface_variant']=fit_all(S['on_surface_variant'],[S[s] for s in MUTED_SURFACES],4.5,away)
+    S['on_top_bar_muted']=fit(S['on_top_bar_muted'],S['top_bar'],4.5,away)
+    S['time_in']=fit(S['time_in'],S['bubble_in'],4.5,away)
+    S['outline']=fit(S['outline'],S['background'],3,away)
+    S['drawer_header']=fit(S['drawer_header'],W,4.5)  # white text
+    S['archive']=fit(S['archive'],W,3)  # white icon
+    a=int(S['service'][:2],16)/255; t=0  # the date chip: white text on the chip over the chat background
+    while cr(W,mix(S['chat_background'],mix(S['service'][2:],K,t),a))<4.5 and t<1: t+=.01
+    S['service']=S['service'][:2]+mix(S['service'][2:],K,t)
+    return S
+for S,day in ((GLASS_L,1),(GLASS_D,0),(GLASS_GRAPHITE,0),(GLASS_AMOLED,0),(WARM_L,1),(WARM_D,0),(WARM_GRAPHITE,0),(WARM_AMOLED,0)): fit_neutrals(S,day)
+# Tinted Glass (Compose only; XML screens use the Glass overlays): each accent's seed mixed into the Glass surfaces,
+# 4 % by day and 6 % at night; AMOLED keeps its black grounds and tints only the raised layers. Order: day, blue-grey, graphite, AMOLED.
+def tint(S,seed,t,keep=()):
+    T=dict(S)
+    for k in SURFACES:
+        if k in keep: continue
+        T[k]=T[k][:2]+mix(T[k][2:],seed,t) if len(T[k])==8 else mix(T[k],seed,t)
+    return fit_neutrals(T,S is GLASS_L)
+TINTED={a:[tint(GLASS_L,s,.04),tint(GLASS_D,s,.06),tint(GLASS_GRAPHITE,s,.06),tint(GLASS_AMOLED,s,.06,GROUNDS)] for a,s in ACC}
+DAY=[TELEGRAM_L,SLATE_L,GLASS_L,WARM_L]; NIGHT=[TELEGRAM_D,GRAPHITE,AMOLED,SLATE_D,SLATE_GRAPHITE,SLATE_AMOLED,GLASS_D,GLASS_GRAPHITE,GLASS_AMOLED,WARM_D,WARM_GRAPHITE,WARM_AMOLED]
 
-# Contrast fit (check_contrast.py verifies every pair): each accent slot must read on every surface of the mode, in both styles
+# Contrast fit (check_contrast.py verifies every pair): each accent slot must read on every surface of the mode, in every style
 # and under every night background. Slots that already pass keep their (hand-picked) value.
-for mode,T,S,away in (('day',L,DAY,K),('night',D,NIGHT,W)):
+for mode,T,SETS,away in (('day',L,DAY,K),('night',D,NIGHT,W)):
     for a,seed in ACC:
-        t=T[a]
+        t=T[a]; S=SETS+(TINTED[a][:1] if mode=='day' else TINTED[a][1:])  # an accent meets only its own tinted sets
         bgs=[s['background'] for s in S]; bubbles=[s['bubble_in'] for s in S]
         if mode=='day':
             if cr(W,seed)>=3: t['primary']=fit(t['primary'],W,4.5); t['on_primary']=W  # white button text
@@ -99,7 +153,8 @@ for mode,T,S,away in (('day',L,DAY,K),('night',D,NIGHT,W)):
 XML_KEYS=list(NEUTRAL_L)
 HEAD='<?xml version="1.0" encoding="utf-8"?>\n<!-- generated: one seed per accent, art/tatrak/gen_accents.py; blue keeps the original Compose colours where they pass contrast -->\n<resources>\n'
 # night overlays: equal to their style's day neutrals by day, so BaseActivity can apply them in either mode
-OVERLAYS=[('graphite',NEUTRAL_L,GRAPHITE),('amoled',NEUTRAL_L,AMOLED),('slate',SLATE_L,SLATE_D),('slate_graphite',SLATE_L,SLATE_GRAPHITE),('slate_amoled',SLATE_L,SLATE_AMOLED)]
+OVERLAYS=[('graphite',NEUTRAL_L,GRAPHITE),('amoled',NEUTRAL_L,AMOLED),('slate',SLATE_L,SLATE_D),('slate_graphite',SLATE_L,SLATE_GRAPHITE),('slate_amoled',SLATE_L,SLATE_AMOLED),
+          ('glass',GLASS_L,GLASS_D),('glass_graphite',GLASS_L,GLASS_GRAPHITE),('glass_amoled',GLASS_L,GLASS_AMOLED),('warm',WARM_L,WARM_D),('warm_graphite',WARM_L,WARM_GRAPHITE),('warm_amoled',WARM_L,WARM_AMOLED)]
 def colors(table,neutral,night):
     out=HEAD
     for k,v in neutral.items(): out+=f'    <color name="tatrak_neutral_{k}">#FF{v}</color>\n'
@@ -123,6 +178,10 @@ out+=neutral_style('ThemeOverlay.Tatrak.Amoled','tatrak_amoled_neutral','night b
 out+=neutral_style('ThemeOverlay.Tatrak.SlateSea','tatrak_slate_neutral','Slate and Sea neutrals (blue-grey night): applied after ThemeOverlay.Tatrak and before the accent')
 out+=neutral_style('ThemeOverlay.Tatrak.SlateSea.Graphite','tatrak_slate_graphite_neutral','Slate and Sea with the graphite night: applied instead of ThemeOverlay.Tatrak.SlateSea; equals it by day')
 out+=neutral_style('ThemeOverlay.Tatrak.SlateSea.Amoled','tatrak_slate_amoled_neutral','Slate and Sea with the AMOLED night: applied instead of ThemeOverlay.Tatrak.SlateSea; equals it by day')
+for name,label in (('Glass','Glass (and Tinted Glass, whose tint is Compose only)'),('Warm','Warm Glass')):
+    out+=neutral_style(f'ThemeOverlay.Tatrak.{name}',f'tatrak_{name.lower()}_neutral',f'{label} neutrals (blue-grey night): applied after ThemeOverlay.Tatrak and before the accent')
+    out+=neutral_style(f'ThemeOverlay.Tatrak.{name}.Graphite',f'tatrak_{name.lower()}_graphite_neutral',f'{label} with the graphite night: applied instead of ThemeOverlay.Tatrak.{name}; equals it by day')
+    out+=neutral_style(f'ThemeOverlay.Tatrak.{name}.Amoled',f'tatrak_{name.lower()}_amoled_neutral',f'{label} with the AMOLED night: applied instead of ThemeOverlay.Tatrak.{name}; equals it by day')
 # parent="": without it aapt2 makes the dotted name inherit ThemeOverlay.Tatrak, and every accent would re-apply the default neutrals over the night background
 out+='    <style name="ThemeOverlay.Tatrak.Accent" parent="" />\n'
 for a,_ in ACC:
@@ -138,25 +197,35 @@ KT_KEYS=[k for k in GRAPHITE if k not in ('surface','on_surface','on_background'
 NULLABLE={'drawer_header','service','divider','text','on_top_bar','online'}
 def val(name,n): return f'private val {name}: Neutrals =\n    Neutrals(\n'+''.join(f'        {camel(k)} = {col(n.get(k))},\n' for k in KT_KEYS)+'    )\n'
 kt=('package am.cyberhayq.chat.ui.theme\n\nimport androidx.compose.ui.graphics.Color\n\n// generated by art/tatrak/gen_accents.py, do not edit by hand: re-run the generator\n\n'
- '/** Neutral surfaces of the Slate and Sea style or of a night background (instead of Telegram\'s blue night / plain day); null = keep the default. */\n'
+ '/** Neutral surfaces of a style or of a night background (instead of Telegram\'s blue night / plain day); null = keep the default. */\n'
  'internal class Neutrals(\n'+''.join(f'    val {camel(k)}: Color{"?" if k in NULLABLE else ""},\n' for k in KT_KEYS)+')\n\n'
- '/**\n * The style\'s surfaces: Slate and Sea by day, the [night] background\'s by night (each style has its own blue-grey and graphite);\n'
- ' * null = the default Telegram look. (Dynamic colours drop all of them in the caller.)\n */\n'
- 'internal fun neutralsOf(style: TatrakStyle, dark: Boolean, night: NightBackground): Neutrals? =\n'
- '    when {\n'
- '        !dark -> if (style == TatrakStyle.SLATE_SEA) slateDay else null\n'
- '        style == TatrakStyle.SLATE_SEA ->\n'
- '            when (night) {\n'
- '                NightBackground.BLUE_GREY -> slateNight\n'
- '                NightBackground.GRAPHITE -> slateGraphiteNight\n'
- '                NightBackground.AMOLED -> slateAmoledNight\n'
- '            }\n'
- '        else ->\n'
- '            when (night) {\n'
- '                NightBackground.BLUE_GREY -> null\n'
- '                NightBackground.GRAPHITE -> graphiteNight\n'
- '                NightBackground.AMOLED -> amoledNight\n'
- '            }\n'
+ '/**\n * The style\'s surfaces by day, the [night] background\'s by night (each style has its own blue-grey and graphite); Tinted Glass has\n'
+ ' * one set per [accent]. null = the default Telegram look. (Dynamic colours drop all of them in the caller.)\n */\n'
+ 'internal fun neutralsOf(style: TatrakStyle, dark: Boolean, night: NightBackground, accent: Accent): Neutrals? =\n'
+ '    when (style) {\n'
+ '        TatrakStyle.TELEGRAM -> pick(telegram, dark, night)\n'
+ '        TatrakStyle.SLATE_SEA -> pick(slate, dark, night)\n'
+ '        TatrakStyle.GLASS -> pick(glass, dark, night)\n'
+ '        TatrakStyle.WARM -> pick(warm, dark, night)\n'
+ '        TatrakStyle.TINTED -> pick(tinted.getValue(accent), dark, night)\n'
  '    }\n\n'
- +'\n'.join(val(n,d) for n,d in (('graphiteNight',GRAPHITE),('amoledNight',AMOLED),('slateNight',SLATE_D),('slateGraphiteNight',SLATE_GRAPHITE),('slateAmoledNight',SLATE_AMOLED),('slateDay',SLATE_L))))
+ '/** [set] = day, blue-grey, graphite, AMOLED. */\n'
+ 'private fun pick(set: Array<Neutrals?>, dark: Boolean, night: NightBackground): Neutrals? =\n'
+ '    if (!dark) set[0]\n'
+ '    else when (night) {\n'
+ '        NightBackground.BLUE_GREY -> set[1]\n'
+ '        NightBackground.GRAPHITE -> set[2]\n'
+ '        NightBackground.AMOLED -> set[3]\n'
+ '    }\n\n'
+ +'\n'.join(val(n,d) for n,d in (('graphiteNight',GRAPHITE),('amoledNight',AMOLED),('slateNight',SLATE_D),('slateGraphiteNight',SLATE_GRAPHITE),('slateAmoledNight',SLATE_AMOLED),('slateDay',SLATE_L),
+    ('glassDay',GLASS_L),('glassNight',GLASS_D),('glassGraphiteNight',GLASS_GRAPHITE),('glassAmoledNight',GLASS_AMOLED),('warmDay',WARM_L),('warmNight',WARM_D),('warmGraphiteNight',WARM_GRAPHITE),('warmAmoledNight',WARM_AMOLED))
+    +tuple((f'tinted{a.capitalize()}{n}',TINTED[a][i]) for a,_ in ACC for i,n in enumerate(('Day','Night','GraphiteNight','AmoledNight'))))+'\n'+
+ '// after the sets: top-level vals initialise in file order\n'
+ 'private val telegram: Array<Neutrals?> = arrayOf(null, null, graphiteNight, amoledNight)\n'
+ 'private val slate: Array<Neutrals?> = arrayOf(slateDay, slateNight, slateGraphiteNight, slateAmoledNight)\n'
+ 'private val glass: Array<Neutrals?> = arrayOf(glassDay, glassNight, glassGraphiteNight, glassAmoledNight)\n'
+ 'private val warm: Array<Neutrals?> = arrayOf(warmDay, warmNight, warmGraphiteNight, warmAmoledNight)\n'
+ 'private val tinted: Map<Accent, Array<Neutrals?>> =\n    mapOf(\n'
+ +''.join(f'        Accent.{a.upper()} to arrayOf(' + ', '.join(f'tinted{a.capitalize()}{n}' for n in ('Day','Night','GraphiteNight','AmoledNight')) + '),\n' for a,_ in ACC)
+ +'    )\n')
 open(os.path.join(res,'..','kotlin/am/cyberhayq/chat/ui/theme/Neutrals.kt'),'w').write(kt)

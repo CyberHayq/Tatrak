@@ -3,6 +3,8 @@ package am.cyberhayq.chat.ui.chatlist
 import am.cyberhayq.chat.ui.search.SearchResult
 import am.cyberhayq.chat.ui.search.SearchState
 import am.cyberhayq.chat.ui.theme.Accent
+import am.cyberhayq.chat.ui.theme.BarBlur
+import am.cyberhayq.chat.ui.theme.LocalBarBlur
 import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
@@ -24,6 +26,16 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.assertCountEquals
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.getUnclippedBoundsInRoot
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
@@ -494,6 +506,199 @@ class ChatListScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_slate_gold_day.png")
     }
 
+    /** Glass, Warm Glass and Tinted Glass (violet) by day and under the blue-grey night (each style's own night set). */
+    @Test
+    fun chatListGlassStyles() {
+        var style by mutableStateOf(TatrakStyle.GLASS)
+        var dark by mutableStateOf(false)
+        compose.setContent {
+            TatrakTheme(darkTheme = dark, style = style, accent = if (style == TatrakStyle.TINTED) Accent.VIOLET else Accent.BLUE, nightBackground = NightBackground.BLUE_GREY, barBlur = BarBlur.OFF) {
+                ChatListScreen(sampleState(), NoListActions)
+            }
+        }
+        for (option in listOf(TatrakStyle.GLASS, TatrakStyle.WARM, TatrakStyle.TINTED)) for (night in listOf(false, true)) {
+            compose.runOnIdle { style = option; dark = night }
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_${option.key}_${if (night) "dark" else "light"}.png")
+        }
+    }
+
+    // ---- floating bars ----
+
+    /** Floating bars in the styles that default to the fixed bars (the setting wins over the style). */
+    @Test
+    fun chatListFloatingTelegramAndSlate() {
+        var style by mutableStateOf(TatrakStyle.TELEGRAM)
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = style, accent = if (style == TatrakStyle.SLATE_SEA) Accent.SEA else Accent.BLUE, floatingBars = true, barBlur = BarBlur.OFF) {
+                ChatListScreen(sampleState(), NoListActions)
+            }
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_telegram_light.png")
+        compose.runOnIdle { style = TatrakStyle.SLATE_SEA }
+        compose.waitForIdle()
+        // Slate's own dock and search pill give way to the floating bar
+        compose.onNodeWithText("Search chats").assertDoesNotExist()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_slate_light.png")
+    }
+
+    private fun longState(): ChatListState {
+        val sample = sampleState()
+        return sample.copy(chats = (0 until 3).flatMap { n -> sample.chats.map { it.copy(uuid = "${it.uuid}-$n", title = "${it.title} $n") } })
+    }
+
+    /** Rows under both bars fade out; the first and last rows clear the bars; the snackbar sits above the bottom bar and the FAB. */
+    @Test
+    fun floatingBarsPadAndFadeTheList() {
+        val long = longState()
+        compose.setContent { TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.OFF) { ChatListScreen(long, NoListActions) } }
+        val barBottom = compose.onNodeWithText("All").getUnclippedBoundsInRoot().bottom
+        assertTrue(compose.onNodeWithText(long.chats.first().title).getUnclippedBoundsInRoot().top >= barBottom)
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_scrolled.png")
+        // the end of the list: the last row stops above the FAB and the bottom bar
+        compose.onRoot().performTouchInput { swipeUp(startY = bottom - 400f, endY = top + 200f, durationMillis = 300) }
+        compose.onRoot().performTouchInput { swipeUp(startY = bottom - 400f, endY = top + 200f, durationMillis = 300) }
+        compose.waitForIdle()
+        val fabTop = compose.onNodeWithContentDescription("New chat").getUnclippedBoundsInRoot().top
+        assertTrue(compose.onNodeWithText(long.chats.last().title).getUnclippedBoundsInRoot().bottom <= fabTop)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_end.png")
+        compose.onNodeWithText(long.chats.last().title).performTouchInput { longClick() }
+        compose.waitForIdle()
+        // selecting: the selection bar in the pill, the bottom bar and the FAB gone
+        compose.onNodeWithText("Chats").assertDoesNotExist()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_selection.png")
+        compose.onNodeWithContentDescription("Archive").performClick()
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_snackbar.png")
+    }
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun chatListFloatingAmoledDark() {
+        compose.setContent {
+            TatrakTheme(darkTheme = true, style = TatrakStyle.GLASS, nightBackground = NightBackground.AMOLED, barBlur = BarBlur.OFF) { ChatListScreen(longState(), NoListActions) }
+        }
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_amoled_dark.png")
+    }
+
+    /**
+     * Blur under bars (API 31+), frosted (the default): at the top the hidden archive row stays invisible under the top pill;
+     * scrolled, rows run under both pills and show through them blurred; the round search button blurs too; selection keeps it.
+     */
+    @Test
+    @Config(sdk = [35])
+    fun chatListFloatingFrosted() {
+        compose.setContent { TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.FROSTED) { ChatListScreen(longState(), NoListActions) } }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_frosted_top.png")
+        scrollUnderBothBars()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_frosted_light.png")
+        compose.onNodeWithText(longState().chats[6].title).performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_frosted_selection.png")
+    }
+
+    @Test
+    @Config(sdk = [35], qualifiers = "+night")
+    fun chatListFloatingFrostedDark() = blurred(BarBlur.FROSTED, dark = true, "chat_list_floating_frosted_dark")
+
+    /** Clear (Telegram's thin glass, every pill at 0.72). */
+    @Test
+    @Config(sdk = [35])
+    fun chatListFloatingClear() = blurred(BarBlur.CLEAR, dark = false, "chat_list_floating_clear_light")
+
+    @Test
+    @Config(sdk = [35], qualifiers = "+night")
+    fun chatListFloatingClearDark() = blurred(BarBlur.CLEAR, dark = true, "chat_list_floating_clear_dark")
+
+    private fun blurred(mode: BarBlur, dark: Boolean, name: String) {
+        compose.setContent { TatrakTheme(darkTheme = dark, style = TatrakStyle.GLASS, barBlur = mode) { ChatListScreen(longState(), NoListActions) } }
+        scrollUnderBothBars()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    private fun scrollUnderBothBars() {
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+        compose.waitForIdle()
+    }
+
+    /** Below API 31 the stored "Blur under bars" (on by default) is not in effect: the step 3 translucent bars and fade. */
+    @Test
+    @Config(sdk = [30])
+    fun chatListFloatingNoBlurBelowApi31() {
+        var blur = BarBlur.FROSTED
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS) {
+                blur = LocalBarBlur.current
+                ChatListScreen(longState(), NoListActions)
+            }
+        }
+        assertEquals(BarBlur.OFF, blur)
+        compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_blur_api30.png")
+    }
+
+    /** Each tab is a 48 dp button with its label; Chats is selected; the shortcuts call the existing actions. */
+    @Test
+    fun floatingBottomBarCallsTheExistingActions() {
+        val calls = mutableListOf<String>()
+        val actions =
+            object : ChatListActions by NoListActions {
+                override fun openContacts() { calls += "contacts" }
+                override fun openCalls() { calls += "calls" }
+                override fun openSettings() { calls += "settings" }
+                override fun newChat() { calls += "new" }
+            }
+        compose.setContent { TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.OFF) { ChatListScreen(sampleState(), actions) } }
+        compose.onNodeWithText("Chats").assertIsSelected()
+        for (label in listOf("Chats", "Contacts", "Calls", "Profile")) {
+            val b = compose.onNodeWithText(label).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).getUnclippedBoundsInRoot()
+            assertTrue(label, b.bottom - b.top >= 48.dp && b.right - b.left >= 48.dp)
+        }
+        compose.onNodeWithText("Profile").assertIsNotSelected()
+        compose.onNodeWithText("Contacts").performClick()
+        compose.onNodeWithText("Calls").performClick()
+        compose.onNodeWithText("Profile").performClick()
+        compose.onNodeWithContentDescription("New chat").performClick()
+        assertEquals(listOf("contacts", "calls", "settings", "new"), calls)
+        // the plain top bar keeps the menu; search moved to the bottom bar
+        compose.onAllNodesWithContentDescription("Search").assertCountEquals(1)
+        compose.onNodeWithContentDescription("Search").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Chats").assertDoesNotExist()
+        compose.onNodeWithContentDescription("New chat").assertDoesNotExist()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_search.png")
+    }
+
+    /** Pull-to-archive, swipe back and the menu by swipe with the list running under the bars. */
+    @Test
+    fun floatingBarsKeepTheGestures() {
+        compose.setContent { TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.OFF) { ChatListScreen(sampleState(), NoListActions) } }
+        // the list's top padding: where the first chat starts, just below the top bar
+        val barBottom = compose.onNodeWithText("Saved Messages").getUnclippedBoundsInRoot().top
+        assertTrue(barBottom >= compose.onNodeWithText("All").getUnclippedBoundsInRoot().bottom)
+        // hidden: the row waits under the top bar, faded out
+        assertTrue(compose.onNodeWithText("Archive").getUnclippedBoundsInRoot().bottom <= barBottom)
+        fullPull()
+        assertTrue(compose.onNodeWithText("Archive").getUnclippedBoundsInRoot().top >= barBottom)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_archive_pulled.png")
+        compose.onNodeWithText("Archive").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("Old project").assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_archive.png")
+        compose.onRoot().performTouchInput { swipeRight() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Old project").assertDoesNotExist()
+        assertTrue(compose.onNodeWithText("Archive").getUnclippedBoundsInRoot().bottom <= barBottom)
+        compose.onRoot().performTouchInput { swipeRight() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Settings").assertExists()
+    }
+
     @Test
     @Config(qualifiers = "+night")
     fun chatListSlateDark() = capture(darkTheme = true, "chat_list_slate_dark", Accent.SEA, TatrakStyle.SLATE_SEA)
@@ -522,7 +727,7 @@ class ChatListScreenshotTest {
 
     private fun capture(darkTheme: Boolean, name: String, accent: Accent = Accent.BLUE, style: TatrakStyle = TatrakStyle.TELEGRAM) {
         compose.setContent {
-            TatrakTheme(darkTheme = darkTheme, style = style, accent = accent) { ChatListScreen(sampleState(), NoListActions) }
+            TatrakTheme(darkTheme = darkTheme, style = style, accent = accent, barBlur = BarBlur.OFF) { ChatListScreen(sampleState(), NoListActions) }
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }

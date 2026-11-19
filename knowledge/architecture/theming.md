@@ -1,10 +1,10 @@
 ---
 type: Concept
 title: Theming and accent colours
-description: How Tatrak colours both the Compose UI and the classic XML screens from nine accent presets, the style (Telegram, Slate and Sea) and the night background (blue-grey, graphite, AMOLED), with a contrast check of every pair.
+description: How Tatrak colours both the Compose UI and the classic XML screens from nine accent presets, the style (Telegram, Slate and Sea, Glass, Warm Glass, Tinted Glass) and the night background (blue-grey, graphite, AMOLED), with a contrast check of every pair.
 tags: [ui, theme, compose, accent]
 status: stable
-generated: { by: claude-code/claude-opus-5-5, at: 2026-11-15T15:00:00Z }
+generated: { by: claude-code/claude-opus-5-5, at: 2026-11-19T12:00:00Z }
 sources:
   - id: accents
     resource: ../../src/main/kotlin/am/cyberhayq/chat/ui/theme/Accents.kt
@@ -89,7 +89,12 @@ sources:
   value is kept), as the elegant switch was.
 - Contrast (2026-11-15, `python3 art/tatrak/check_contrast.py`, `-v` for every pair; exit 1 on a
   failure): 9 accents x {Telegram, Slate and Sea} x {day, blue-grey, graphite, AMOLED}, 1541
-  pairs, all pass. Per surface set: text on background / top bar / incoming bubble / chat background
+  pairs, all pass; since 2026-11-19 also Glass, Warm Glass and Tinted Glass (below), 4365 pairs, and the floating
+  bars' text, tabs and link over the translucent bar on pure black and white
+  (floating bars), 6165 pairs, and the chat's floating composer and banner pills, 7965 pairs, and both again for "Blur under bars:
+  Frosted" over the style's own content (background, chat background, incoming bubble, the accent's
+  outgoing bubble, primary; primary added to the alpha search as a 3:1 part), 16965 pairs, all pass.
+  "Clear" (fixed 0.72) is reported, not failed: 9000 more pairs, the ones below the need listed per set. Per surface set: text on background / top bar / incoming bubble / chat background
   / sheets / highest container / surface variant (4.5), muted text on the same except the bare chat
   background (4.5), top-bar muted, incoming time, warning bubble (4.5); for the generated sets also
   outline (3), date chip, drawer header (4.5) and the archive icon (3). Per accent: text, time and
@@ -178,4 +183,64 @@ Setting `tatrak_style` (`telegram` default, `slate_sea`), read by key in `ui/the
 ## Slate and Sea phase 2 (2026-11-04)
 
 `TatrakTheme` provides `LocalTatrakStyle` and `LocalTatrakFont` (Manrope family in Slate, null otherwise); composables read the locals, never the preference. Slate-only branches (the Telegram code path is the old code verbatim): chat list `bottomBar` with `ChatListBottomBar` (floating search pill, compose button, dock of four shortcuts, hidden by `dockVisible` while searching, in the archive or selecting; no FAB; no top-bar search icon), `SlateComposer` in `Composer.kt` (pill over the wallpaper, insets outside the pill, reply or edit and emoji panels as separate blocks, recording halo and mic ring), `BubbleShape(soft = true)` with `bubbleRadii` (20 dp and 6 dp, no tail), a `Typography` with only the font family changed, `StyleCards` in Appearance (fixed preview colours mirroring the generator). The font is applied explicitly to `BodyStyle`, `MetaStyle` and the composer `BasicTextField`; XML screens keep the system font. Font facts: Manrope.
+
+## Glass, Warm Glass and Tinted Glass (2026-11-19)
+
+Plan and owner decisions: floating style (steps 1 and 2). Keys of
+`tatrak_style`: `glass`, `warm`, `tinted` (`TatrakStyle.GLASS`, `WARM`, `TINTED`). Cards "Glass",
+"Warm Glass", "Tinted Glass" (the Russian labels translate them literally).
+
+- Telegram's look except the colours: round avatars unless `tatrak_avatar_shape` says otherwise,
+  system font (`LocalTatrakFont` null), Telegram bubbles, Telegram composer and chat list (no dock;
+  every `== TatrakStyle.SLATE_SEA` branch stays Slate-only). An unset accent stays blue.
+- Precedence as for Slate: dynamic colours drop the neutrals; otherwise
+  `neutralsOf(style, dark, night, accent)` gives the style's day set or the night background's set
+  of the style. `accent` matters only for Tinted (the accent in effect, as `TatrakTheme` gets it).
+- Sets in `art/tatrak/gen_accents.py`: `GLASS_L`, `GLASS_D` (the blue-grey choice = the style's own
+  night), `GLASS_GRAPHITE`, `GLASS_AMOLED` (= the neutral `AMOLED` set) and `WARM_L`, `WARM_D`,
+  `WARM_GRAPHITE`, `WARM_AMOLED` (AMOLED's black grounds, warm raised layers). The owner's starting
+  colours, then `fit_neutrals()` nudges only text-like slots (text, muted, incoming time, top-bar
+  muted, outline, white-text drawer header, archive, date chip) until the contrast pairs pass. Final
+  values (day / blue-grey / graphite / AMOLED; background, top bar, chat background, incoming bubble,
+  text, muted):
+
+  | Set | background | top bar | chat | incoming | text | muted |
+  |---|---|---|---|---|---|---|
+  | Glass day | `F2F2F7` | `FFFFFF` | `E5E5EA` | `FFFFFF` | `111114` | `66666C` (fit, was `6B6B72`) |
+  | Glass night | `0E0E10` | `1C1C1E` | `0E0E10` | `1F1F22` | `F2F2F5` | `9C9CA3` |
+  | Glass graphite | `151517` | `1D1D20` | `0B0B0C` | `232326` | `ECECEE` | `A3A3A8` |
+  | Glass AMOLED | `000000` | `121212` | `000000` | `1A1A1A` | `E8E8E8` | `A0A0A0` |
+  | Warm day | `F5F3EF` | `FFFDF9` | `ECE8E1` | `FFFDF9` | `1A1816` | `6C6862` (fit, was `6E6A64`) |
+  | Warm night | `121110` | `1E1C1A` | `121110` | `22201E` | `F2EFEA` | `A09B94` |
+  | Warm graphite | `161514` | `1E1C1A` | `0D0C0B` | `242220` | `EDE9E4` | `A8A39C` |
+  | Warm AMOLED | `000000` | `141210` | `000000` | `1C1A17` | `E8E8E8` | `A39E97` |
+
+  Other slots follow the Slate pattern: surface variant and highest container one step from the
+  ground (`E5E5EA` / `EBE8E2` by day), dividers `D1D1D6` / `DDD9D2`, drawer header dark (`2C2C2E` /
+  `3A342D` by day, the bubble colour at night) with white text, date chip `B3` + `3A3A3C` / `3D3731` by
+  day and `CC` + the bubble at night, unread divider = incoming bubble, online green = Telegram's.
+  The fit pass also changed the night outline: Glass `5E5E64` -> `606066`, Warm `625D57` -> `65605A`.
+- Graphite for Glass and Warm: the style's own night is already near-black, so graphite is a
+  softer charcoal (lighter ground, darker chat background) in the same cast.
+- Tinted Glass (Compose only): `TINTED[accent]` = the Glass sets with the accent's seed mixed into
+  every surface slot, 4 % by day and 6 % at night; AMOLED keeps `000000` grounds (background,
+  surface, chat background, lowest container) and tints the raised layers; text slots stay neutral
+  and are re-fitted (by day the muted text moves one step darker for every accent). 9 accents x 4
+  sets = 36 sets, emitted as `tinted<Accent><Day|Night|GraphiteNight|AmoledNight>` in `Neutrals.kt`.
+  Example, violet: day background `EEECF5`, top bar `FAF9FD`; night `16131B`, `232029`.
+- XML: `NightBackground.overlay(style)` gives `ThemeOverlay.Tatrak.Glass` / `.Glass.Graphite` /
+  `.Glass.Amoled` for Glass and for Tinted (owner: the tint is Compose only, settings pages are
+  neutral grey), `ThemeOverlay.Tatrak.Warm` / `.Warm.Graphite` / `.Warm.Amoled` for Warm. Each
+  equals its style's day set by day; `NightOverlayTest` compares them with `neutralsOf`.
+- Accent fit: an accent's slots are fitted against every style's sets and its own tinted sets.
+  Adding the new sets moved four day slots slightly: blue link `2472AD` -> `2370A9`, cyan primary
+  `1C99A7` -> `1B97A6`, pink `accent_in` `D95789` -> `D75687`, orange link `9F5D20` -> `9D5C1F`.
+- Contrast: the same pairs as Slate's (without the dock and composer-pill pairs, which are
+  Slate-only) for Glass and Warm under each night, and for each tinted set with its own accent only:
+  4365 pairs in all, all pass.
+- Appearance: five style cards in a row that scrolls sideways (148 dp each; it opens with the chosen
+  card second from the left), stacked as before when
+  the font scale is above 1.3 or the screen is narrower than 340 dp. The card previews read their
+  colours from `neutralsOf` (Telegram's fixed colours where it has none), so Tinted's card shows the
+  chosen accent.
 

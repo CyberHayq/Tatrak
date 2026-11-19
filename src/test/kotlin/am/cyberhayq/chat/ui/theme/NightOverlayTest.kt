@@ -39,7 +39,7 @@ class NightOverlayTest {
     }
 
     private fun assertSame(style: TatrakStyle, night: NightBackground, dark: Boolean) {
-        val n = neutralsOf(style, dark, night)!!
+        val n = neutralsOf(style, dark, night, TatrakStyle.effectiveAccent(style, null))!!
         val a = themed(style, night)
         val what = "$style $night dark=$dark"
         assertEquals(what, n.background, a.color(android.R.attr.colorBackground))
@@ -55,13 +55,15 @@ class NightOverlayTest {
     @Config(qualifiers = "+night")
     fun nightOverlaysMatchCompose() {
         for (night in listOf(NightBackground.GRAPHITE, NightBackground.AMOLED)) assertSame(TatrakStyle.TELEGRAM, night, dark = true)
-        for (night in NightBackground.entries) assertSame(TatrakStyle.SLATE_SEA, night, dark = true)
+        for (style in ownSurfaces) for (night in NightBackground.entries) assertSame(style, night, dark = true)
     }
+
+    private val ownSurfaces = listOf(TatrakStyle.SLATE_SEA, TatrakStyle.GLASS, TatrakStyle.WARM)
 
     /** By day the night overlays equal the style's day surfaces. */
     @Test
     fun dayIsTheStylesOwn() {
-        for (night in NightBackground.entries) assertSame(TatrakStyle.SLATE_SEA, night, dark = false)
+        for (style in ownSurfaces) for (night in NightBackground.entries) assertSame(style, night, dark = false)
         // Telegram day has no Compose neutrals: the overlays keep the white containers of LightScheme
         for (night in NightBackground.entries) {
             assertEquals(Color.White, themed(TatrakStyle.TELEGRAM, night).color(MaterialR.attr.colorSurfaceContainer))

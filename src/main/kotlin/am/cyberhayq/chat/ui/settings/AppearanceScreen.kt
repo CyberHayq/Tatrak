@@ -7,7 +7,10 @@ import am.cyberhayq.chat.ui.chat.ChatScreenTheme
 import am.cyberhayq.chat.ui.chat.ChatWallpaper
 import am.cyberhayq.chat.ui.chat.WallpaperGrid
 import am.cyberhayq.chat.ui.theme.Accent
+import android.os.Build
 import am.cyberhayq.chat.ui.theme.AvatarShape
+import am.cyberhayq.chat.ui.theme.BarBlur
+import am.cyberhayq.chat.ui.theme.FloatingBars
 import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
@@ -73,6 +76,10 @@ fun AppearanceScreen(
     onWallpaperPhoto: () -> Unit,
     avatarShape: AvatarShape = AvatarShape.effective(style, null),
     onAvatarShape: (AvatarShape) -> Unit = {},
+    floatingBars: Boolean = FloatingBars.effective(style, null),
+    onFloatingBars: (Boolean) -> Unit = {},
+    barBlur: BarBlur = BarBlur.FROSTED,
+    onBarBlur: (BarBlur) -> Unit = {},
 ) {
     // Text without a colour would fall back to black outside a Surface (unreadable in the dark theme)
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
@@ -93,6 +100,17 @@ fun AppearanceScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 20.dp, vertical = 4.dp),
                 )
+            }
+            SwitchRow(R.string.tatrak_floating_bars, R.string.tatrak_floating_bars_summary, floatingBars, onFloatingBars)
+            // the blur needs API 31 (RenderEffect); below it the bars always fade
+            if (floatingBars && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                Section(R.string.tatrak_bar_blur)
+                for ((option, label, summary) in
+                    listOf(
+                        Triple(BarBlur.OFF, R.string.tatrak_bar_blur_off, null),
+                        Triple(BarBlur.FROSTED, R.string.tatrak_bar_blur_frosted, R.string.tatrak_bar_blur_frosted_summary),
+                        Triple(BarBlur.CLEAR, R.string.tatrak_bar_blur_clear, null),
+                    )) RadioRow(stringResource(label), option == barBlur, summary?.let { stringResource(it) }) { onBarBlur(option) }
             }
             Section(R.string.tatrak_appearance_theme)
             for ((value, label) in themes) RadioRow(label, value == theme) { onTheme(value) }
@@ -139,13 +157,20 @@ private fun SwitchRow(@StringRes title: Int, @StringRes summary: Int, checked: B
 }
 
 @Composable
-private fun RadioRow(label: String, selected: Boolean, onClick: () -> Unit) {
+private fun RadioRow(label: String, selected: Boolean, summary: String? = null, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(horizontal = 8.dp),
     ) {
         RadioButton(selected = selected, onClick = null, modifier = Modifier.padding(12.dp))
-        Text(label, fontSize = 16.sp)
+        if (summary == null) {
+            Text(label, fontSize = 16.sp)
+        } else {
+            Column(Modifier.padding(vertical = 8.dp)) {
+                Text(label, fontSize = 16.sp)
+                Text(summary, fontSize = 14.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
     }
 }
 

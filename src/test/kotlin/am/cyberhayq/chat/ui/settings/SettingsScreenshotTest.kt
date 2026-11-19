@@ -1,6 +1,7 @@
 package am.cyberhayq.chat.ui.settings
 
 import am.cyberhayq.chat.ui.theme.Accent
+import am.cyberhayq.chat.ui.theme.FloatingBars
 import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
@@ -13,6 +14,11 @@ import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.getUnclippedBoundsInRoot
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assertIsOff
+import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.unit.dp
 import androidx.test.core.app.ApplicationProvider
@@ -99,7 +105,11 @@ class SettingsScreenshotTest {
         for (option in TatrakStyle.entries) for (background in NightBackground.entries) {
             compose.runOnIdle { style = option; night = background }
             compose.waitForIdle()
-            val prefix = if (option == TatrakStyle.SLATE_SEA) "appearance_slate" else "appearance"
+            val prefix = when (option) {
+                TatrakStyle.TELEGRAM -> "appearance"
+                TatrakStyle.SLATE_SEA -> "appearance_slate"
+                else -> "appearance_${option.key}"
+            }
             compose.onRoot().captureRoboImage("build/outputs/roborazzi/${prefix}_${background.key}_dark.png")
         }
     }
@@ -109,6 +119,53 @@ class SettingsScreenshotTest {
         // a stored night background changes nothing by day
         compose.setContent { Appearance(TatrakStyle.SLATE_SEA, Accent.SEA, dark = false, NightBackground.GRAPHITE) }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_slate_light.png")
+    }
+
+    /** Five style cards on a 360 dp phone: a row that scrolls sideways; Tinted's card shows the chosen accent. */
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun appearanceStyleCardsNarrow() {
+        var dark by mutableStateOf(false)
+        compose.setContent { Appearance(TatrakStyle.TINTED, Accent.VIOLET, dark, NightBackground.BLUE_GREY) }
+        for (night in listOf(false, true)) {
+            compose.runOnIdle { dark = night }
+            compose.waitForIdle()
+            compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_cards_360_${if (night) "dark" else "light"}.png")
+        }
+        // scrolled to the end: the last two cards and the selected Tinted card
+        compose.onNodeWithText("Tinted Glass").performScrollTo()
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_cards_360_scrolled.png")
+    }
+
+    /**
+     * "Floating bars" under the style cards shows the value in effect: on for Glass while never set, off for Telegram.
+     * "Blur under bars" (off / frosted / clear radio rows, frosted unless chosen) sits under it while floating bars are on
+     * (API 35 here; hidden below 31).
+     */
+    @Test
+    fun appearanceFloatingBarsSwitch() {
+        var style by mutableStateOf(TatrakStyle.GLASS)
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = style, dynamicColors = false) {
+                AppearanceScreen(
+                    style = style, onStyle = {}, themes = listOf("light" to "Light"), theme = "light", onTheme = {},
+                    dynamicColorsAvailable = false, dynamicColors = false, onDynamicColors = {},
+                    nightBackground = NightBackground.BLUE_GREY, onNightBackground = {}, accent = Accent.BLUE, onAccent = {},
+                    wallpaper = null, onWallpaper = {}, onWallpaperPhoto = {},
+                    floatingBars = FloatingBars.effective(style, null),
+                )
+            }
+        }
+        compose.onNodeWithText("Floating bars").assertIsOn()
+        compose.onNodeWithText("Blur under bars").assertExists()
+        compose.onNodeWithText("Frosted", substring = true).assertIsSelected()
+        compose.onNodeWithText("Clear, like Telegram").assertIsNotSelected()
+        compose.onNodeWithText("Off").assertIsNotSelected()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/appearance_floating_light.png")
+        compose.runOnIdle { style = TatrakStyle.TELEGRAM }
+        compose.onNodeWithText("Floating bars").assertIsOff()
+        compose.onNodeWithText("Blur under bars").assertDoesNotExist()
     }
 
     @Test

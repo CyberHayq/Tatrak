@@ -4,4 +4,20 @@
     <string name="tatrak_dock_chats">Chats</string>
     <string name="tatrak_search_chats">Search chats</string>
     <string name="tatrak_topic_unread">%1$d unread</string>
+    <!-- the Glass styles (style cards in Appearance) -->
+    <string name="tatrak_style_glass">Glass</string>
+    <string name="tatrak_style_glass_summary">Neutral greys, white bars</string>
+    <string name="tatrak_style_warm">Warm Glass</string>
+    <string name="tatrak_style_warm_summary">Greys with a warm cast</string>
+    <string name="tatrak_style_tinted">Tinted Glass</string>
+    <string name="tatrak_style_tinted_summary">Surfaces tinted with the accent</string>
+    <!-- floating bars (Appearance switch; the chat list's bottom tab bar) -->
+    <string name="tatrak_floating_bars">Floating bars</string>
+    <string name="tatrak_floating_bars_summary">Bars float over the chat list, which fades out under them</string>
+    <string name="tatrak_tab_profile">Profile</string>
+    <string name="tatrak_bar_blur">Blur under bars</string>
+    <string name="tatrak_bar_blur_off">Off</string>
+    <string name="tatrak_bar_blur_frosted">Frosted</string>
+    <string name="tatrak_bar_blur_frosted_summary">Readable over any chat</string>
+    <string name="tatrak_bar_blur_clear">Clear, like Telegram</string>
 </resources>

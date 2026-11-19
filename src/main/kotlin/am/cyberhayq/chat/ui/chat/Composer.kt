@@ -5,6 +5,12 @@ import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.LocalTatrakFont
 import am.cyberhayq.chat.ui.theme.LocalTatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.theme.BarBlur
+import am.cyberhayq.chat.ui.theme.frostedContent
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
+import am.cyberhayq.chat.ui.theme.backdropBlur
+import am.cyberhayq.chat.ui.theme.barAlpha
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import androidx.compose.foundation.lazy.items
@@ -181,9 +187,13 @@ fun Composer(
     previews: List<String> = emptyList(),
     /** Key of the newest message in the list: a sent text keeps the field's height until it lands there. */
     newest: String? = null,
+    /** Floating bars with blur: the pills draw it blurred behind them. */
+    backdrop: BarBackdrop? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val density = LocalDensity.current
+    // floating bars, in any style: Slate's pill composer over the messages
+    val pills = LocalTatrakStyle.current == TatrakStyle.SLATE_SEA || LocalFloatingBars.current
     var panel by rememberSaveable { mutableStateOf(KeyboardPanel.NONE) }
     // the keyboard was asked back in place of this panel: it stays until the keyboard is up
     var leaving by remember { mutableStateOf(KeyboardPanel.NONE) }
@@ -231,7 +241,7 @@ fun Composer(
                 if (composer.contacts) picked(actions::attachContact) else null,
             )
         } else {
-            EmojiPanel(panelHeight, input, onInputChange, actions, emojiPicker, if (LocalTatrakStyle.current == TatrakStyle.SLATE_SEA) colors.surfaceContainer else colors.surface)
+            EmojiPanel(panelHeight, input, onInputChange, actions, emojiPicker, if (pills) colors.surfaceContainer else colors.surface)
         }
     }
     val mentions =
@@ -241,8 +251,9 @@ fun Composer(
             onInputChange,
             actions,
         )
-    if (LocalTatrakStyle.current == TatrakStyle.SLATE_SEA) {
-        SlateComposer(composer, input, onInputChange, reply, actions, recording, modifier, previews, panel, onPanel, panelShown, panelContent, insets, focus, mentions, newest)
+    if (pills) {
+        val fill = if (LocalFloatingBars.current) floatingPill(backdrop?.mode ?: BarBlur.OFF) else colors.surfaceContainer
+        SlateComposer(composer, input, onInputChange, reply, actions, recording, modifier, previews, panel, onPanel, panelShown, panelContent, insets, focus, mentions, newest, fill, backdrop)
         return
     }
     Surface(color = colors.surface, shadowElevation = 3.dp, modifier = modifier.fillMaxWidth()) {
@@ -290,8 +301,26 @@ fun Composer(
 }
 
 /**
- * Slate and Sea: the same content in a floating pill over the wallpaper. The insets stay outside the pill (so the keyboard
- * height is measured as before), the reply or edit panel and the emoji panel are separate blocks around it.
+ * Floating bars: the fill of the composer's and the banner's pills, surfaceContainer (raised over the wallpaper) at
+ * [barAlpha] for the text, hint and link on it, as the floating top bar is (per the [blur] mode).
+ */
+@Composable
+internal fun floatingPill(blur: BarBlur = BarBlur.OFF): Color {
+    val scheme = MaterialTheme.colorScheme
+    val chat = TatrakTheme.chatColors
+    val link = chat.link
+    return remember(scheme, chat, blur) {
+        // the recording dot and primary (send, reply title) are the non-text parts: Telegram's blue-grey night needs 0.98 for the dot
+        scheme.surfaceContainer.copy(
+            alpha = barAlpha(scheme.surfaceContainer, scheme.onSurface, scheme.onSurfaceVariant, link, listOf(RecordingRed, scheme.primary), blur, frostedContent(chat, scheme.background, scheme.primary))
+        )
+    }
+}
+
+/**
+ * Slate and Sea, and floating bars in any style: the same content in a floating pill over the wallpaper. The insets stay
+ * outside the pill (so the keyboard height is measured as before), the reply or edit panel and the emoji panel are separate
+ * blocks around it. [fill] colours the pills; the emoji or attach panel stays opaque.
  */
 @Composable
 private fun SlateComposer(
@@ -311,6 +340,8 @@ private fun SlateComposer(
     focus: FocusRequester,
     mentions: MentionSuggestions?,
     newest: String?,
+    fill: Color,
+    backdrop: BarBackdrop?,
 ) {
     val colors = MaterialTheme.colorScheme
     // raised over the wallpaper (in the night style the plain surface equals it)
@@ -318,10 +349,10 @@ private fun SlateComposer(
     Column(modifier.fillMaxWidth().windowInsetsPadding(insets)) {
         if (mentions != null) {
             Surface(
-                color = pill,
+                color = fill,
                 shape = RoundedCornerShape(16.dp),
                 shadowElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 6.dp).backdropBlur(backdrop, RoundedCornerShape(16.dp)),
             ) {
                 MentionList(mentions, actions)
             }
@@ -339,18 +370,18 @@ private fun SlateComposer(
             }
         if (contextPanel != null) {
             Surface(
-                color = pill,
+                color = fill,
                 shape = RoundedCornerShape(16.dp),
                 shadowElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 6.dp),
+                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 6.dp).backdropBlur(backdrop, RoundedCornerShape(16.dp)),
                 content = contextPanel,
             )
         }
         Surface(
-            color = pill,
+            color = fill,
             shape = RoundedCornerShape(28.dp),
             shadowElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 8.dp),
+            modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 8.dp).backdropBlur(backdrop, RoundedCornerShape(28.dp)),
         ) {
             when {
                 composer.requiresClassic -> Notice(stringResource(R.string.tatrak_chat_pgp_notice), actions)
@@ -795,12 +826,12 @@ private fun RecordingIndicator(
         if (LocalTatrakStyle.current == TatrakStyle.SLATE_SEA) {
             // a static halo behind the blinking dot (no second animation)
             Box(Modifier.size(22.dp), contentAlignment = Alignment.Center) {
-                Box(Modifier.fillMaxSize().clip(CircleShape).background(Color(0xFFE53935).copy(alpha = 0.18f)))
-                Box(Modifier.size(10.dp).alpha(blink).clip(CircleShape).background(Color(0xFFE53935)))
+                Box(Modifier.fillMaxSize().clip(CircleShape).background(RecordingRed.copy(alpha = 0.18f)))
+                Box(Modifier.size(10.dp).alpha(blink).clip(CircleShape).background(RecordingRed))
             }
             Spacer(Modifier.width(6.dp))
         } else {
-            Box(Modifier.size(10.dp).alpha(blink).clip(CircleShape).background(Color(0xFFE53935)))
+            Box(Modifier.size(10.dp).alpha(blink).clip(CircleShape).background(RecordingRed))
             Spacer(Modifier.width(10.dp))
         }
         val seconds = elapsed / 1000
@@ -1115,6 +1146,9 @@ internal fun TextFieldValue.insertLinkAtCursor(link: String): TextFieldValue {
 
 internal fun appendToDraft(draft: String, link: String): String =
     draft + (if (draft.isNotEmpty() && !draft.last().isWhitespace()) " " else "") + link
+
+/** The recording dot. */
+private val RecordingRed = Color(0xFFE53935)
 
 private const val HoldMillis = 250L
 private const val MinRecordingMillis = 1000L

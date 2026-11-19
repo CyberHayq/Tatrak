@@ -3,6 +3,8 @@ package eu.siacs.conversations.ui.fragment.settings
 import am.cyberhayq.chat.ui.chat.Wallpapers
 import am.cyberhayq.chat.ui.settings.AppearanceScreen
 import am.cyberhayq.chat.ui.theme.AvatarShape
+import am.cyberhayq.chat.ui.theme.BarBlur
+import am.cyberhayq.chat.ui.theme.FloatingBars
 import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
@@ -92,6 +94,10 @@ class AppearanceFragment : Fragment() {
                         },
                         avatarShape = AvatarShape.remember(style),
                         onAvatarShape = { AvatarShape.set(requireContext(), it) },
+                        floatingBars = FloatingBars.remember(style),
+                        onFloatingBars = { FloatingBars.set(requireContext(), it) },
+                        barBlur = BarBlur.remember(),
+                        onBarBlur = { BarBlur.set(requireContext(), it) },
                     )
                 }
             }

@@ -16,6 +16,13 @@ import am.cyberhayq.chat.ui.search.SearchState
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.LocalTatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBlur
+import am.cyberhayq.chat.ui.theme.LocalBarBlur
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
+import am.cyberhayq.chat.ui.theme.backdropSource
+import am.cyberhayq.chat.ui.theme.fadeUnderBars
+import am.cyberhayq.chat.ui.theme.rememberBarBackdrop
+import androidx.compose.animation.AnimatedVisibility
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
 import am.cyberhayq.chat.ui.theme.contentOn
 import am.cyberhayq.chat.ui.theme.fabFill
@@ -202,6 +209,8 @@ fun ChatListScreen(
     val chatColors = TatrakTheme.chatColors
     val context = LocalContext.current
     val slate = LocalTatrakStyle.current == TatrakStyle.SLATE_SEA
+    // floating bars replace the Telegram and Slate bars (Slate's dock included) when on, in any style
+    val floating = LocalFloatingBars.current
     var scrollToTop by remember { mutableIntStateOf(0) }
 
     StatusBarIcons(dark = chatColors.topBar.luminance() > 0.5f)
@@ -302,19 +311,88 @@ fun ChatListScreen(
             transitionSpec = { archiveTransition(targetState) },
             label = "archive",
         ) { inArchive ->
+            val dock = dockVisible(searching, inArchive, selectionMode)
+            // one per screen of the archive transition: both lists are drawn while it runs
+            val backdrop = rememberBarBackdrop()
+            val bars = @Composable {
+                when {
+                    selectionMode ->
+                        SelectionTopBar(
+                            selected = selected.mapNotNull(byUuid::get),
+                            onClose = ::clearSelection,
+                            onPin = { pinned ->
+                                actions.setPinned(selected, pinned)
+                                clearSelection()
+                            },
+                            onMute = { muted ->
+                                if (muted) {
+                                    muteDialog = selected
+                                } else {
+                                    actions.setMuted(selected, null)
+                                    clearSelection()
+                                }
+                            },
+                            onArchive = { archived -> archive(selected, archived) },
+                            onMarkRead = {
+                                actions.markRead(selected)
+                                clearSelection()
+                            },
+                            onDelete = { deleteDialog = selected },
+                        )
+                    searching ->
+                        SearchTopBar(
+                            query = query,
+                            onQueryChange = { query = it },
+                            onClose = {
+                                searching = false
+                                query = ""
+                            },
+                        )
+                    inArchive ->
+                        PlainTopBar(
+                            title = stringResource(R.string.tatrak_archive),
+                            navigationIcon = R.drawable.ic_arrow_back_24dp,
+                            navigationLabel = stringResource(R.string.tatrak_close_search),
+                            onNavigation = { showArchive = false },
+                            onSearch = { searching = true },
+                        )
+                    else ->
+                        PlainTopBar(
+                            title =
+                                stringResource(
+                                    if (state.connecting) R.string.tatrak_connecting else R.string.app_name
+                                ),
+                            navigationIcon = R.drawable.tatrak_ic_menu_24dp,
+                            navigationLabel = stringResource(R.string.tatrak_open_menu),
+                            onNavigation = { drawer.open() },
+                            onSearch = { searching = true },
+                            // floating: the search button sits in the bottom bar
+                            showSearch = !slate && !floating,
+                        )
+                }
+                if (!searching && !inArchive) {
+                    FolderTabs(
+                        chats = state.chats,
+                        selectedIndex = pagerState.currentPage,
+                        onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
+                    )
+                }
+            }
             Scaffold(
                 contentWindowInsets = WindowInsets(0),
-                // Slate and Sea: the bottom bar carries the navigation bar inset, and the snackbar sits above it
+                // Slate and Sea and floating bars: the bottom bar carries the navigation bar inset, and the snackbar sits above it
                 snackbarHost = {
                     SnackbarHost(
                         snackbar,
-                        if (slate && dockVisible(searching, inArchive, selectionMode)) Modifier else Modifier.navigationBarsPadding(),
+                        if ((slate || floating) && dock) Modifier else Modifier.navigationBarsPadding(),
                     )
                 },
                 bottomBar = {
-                    if (slate) {
+                    if (floating) {
+                        FloatingBottomBar(dock, state.account, actions, onSearch = { searching = true }, onChats = { scrollToTop++ }, backdrop)
+                    } else if (slate) {
                         ChatListBottomBar(
-                            visible = dockVisible(searching, inArchive, selectionMode),
+                            visible = dock,
                             actions = actions,
                             onSearch = { searching = true },
                             onChats = { scrollToTop++ },
@@ -322,144 +400,98 @@ fun ChatListScreen(
                     }
                 },
                 topBar = {
-                    Column(Modifier.background(chatColors.topBar)) {
-                        when {
-                            selectionMode ->
-                                SelectionTopBar(
-                                    selected = selected.mapNotNull(byUuid::get),
-                                    onClose = ::clearSelection,
-                                    onPin = { pinned ->
-                                        actions.setPinned(selected, pinned)
-                                        clearSelection()
-                                    },
-                                    onMute = { muted ->
-                                        if (muted) {
-                                            muteDialog = selected
-                                        } else {
-                                            actions.setMuted(selected, null)
-                                            clearSelection()
-                                        }
-                                    },
-                                    onArchive = { archived -> archive(selected, archived) },
-                                    onMarkRead = {
-                                        actions.markRead(selected)
-                                        clearSelection()
-                                    },
-                                    onDelete = { deleteDialog = selected },
-                                )
-                            searching ->
-                                SearchTopBar(
-                                    query = query,
-                                    onQueryChange = { query = it },
-                                    onClose = {
-                                        searching = false
-                                        query = ""
-                                    },
-                                )
-                            inArchive ->
-                                PlainTopBar(
-                                    title = stringResource(R.string.tatrak_archive),
-                                    navigationIcon = R.drawable.ic_arrow_back_24dp,
-                                    navigationLabel = stringResource(R.string.tatrak_close_search),
-                                    onNavigation = { showArchive = false },
-                                    onSearch = { searching = true },
-                                )
-                            else ->
-                                PlainTopBar(
-                                    title =
-                                        stringResource(
-                                            if (state.connecting) R.string.tatrak_connecting else R.string.app_name
-                                        ),
-                                    navigationIcon = R.drawable.tatrak_ic_menu_24dp,
-                                    navigationLabel = stringResource(R.string.tatrak_open_menu),
-                                    onNavigation = { drawer.open() },
-                                    onSearch = { searching = true },
-                                    showSearch = !slate,
-                                )
+                    if (floating) {
+                        FloatingTopBar(backdrop = backdrop, content = bars)
+                    } else {
+                        Column(Modifier.background(chatColors.topBar)) {
+                            bars()
+                            HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                         }
-                        if (!searching && !inArchive) {
-                            FolderTabs(
-                                chats = state.chats,
-                                selectedIndex = pagerState.currentPage,
-                                onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
-                            )
-                        }
-                        HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                     }
                 },
                 floatingActionButton = {
-                    if (!slate && !searching && !inArchive && !selectionMode) {
-                        FloatingActionButton(
-                            onClick = actions::newChat,
-                            shape = CircleShape,
-                            containerColor = fabFill(MaterialTheme.colorScheme.primary),
-                            contentColor = Color.White,
-                            modifier = Modifier.navigationBarsPadding(),
-                        ) {
-                            Icon(
-                                painterResource(R.drawable.ic_edit_24dp),
-                                contentDescription = stringResource(R.string.tatrak_new_chat),
-                            )
+                    if (floating) {
+                        // above the bottom bar, following it in and out
+                        AnimatedVisibility(dock, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
+                            NewChatButton(actions::newChat, Modifier)
                         }
+                    } else if (!slate && !searching && !inArchive && !selectionMode) {
+                        NewChatButton(actions::newChat, Modifier.navigationBarsPadding())
                     }
                 },
             ) { padding ->
-                val listModifier = Modifier.fillMaxSize().padding(padding)
-                when {
-                    !state.loaded -> Box(listModifier)
-                    searching -> {
-                        val found =
-                            remember(all, query) {
-                                if (query.isBlank()) all else all.filter { it.title.contains(query.trim(), true) }
+                // floating: the content runs under the bars, which the lists pad for (FAB included) and fade into
+                val nav = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+                val pad =
+                    if (!floating) null
+                    else PaddingValues(
+                        top = padding.calculateTopPadding(),
+                        bottom = maxOf(padding.calculateBottomPadding(), nav) + if (dock) FabClearance else 0.dp,
+                    )
+                val listModifier = if (floating) Modifier.fillMaxSize() else Modifier.fillMaxSize().padding(padding)
+                Box(
+                    // with blur the bars draw the content under them themselves (unfaded: the source is inside the fade)
+                    if (floating) Modifier.fillMaxSize().fadeUnderBars(padding, blurred = backdrop != null).backdropSource(backdrop)
+                    else Modifier
+                ) {
+                    when {
+                        !state.loaded -> Box(listModifier)
+                        searching -> {
+                            val found =
+                                remember(all, query) {
+                                    if (query.isBlank()) all else all.filter { it.title.contains(query.trim(), true) }
+                                }
+                            if (query.isBlank()) {
+                                ChatList(found, null, rowCallbacks, selected, listModifier, EmptyKind.NOTHING_FOUND, dock = if (slate) false else null, pad = pad)
+                            } else {
+                                SearchResults(found, messages, query, rowCallbacks, selected, actions::openMessage, listModifier, pad)
                             }
-                        if (query.isBlank()) {
-                            ChatList(found, null, rowCallbacks, selected, listModifier, EmptyKind.NOTHING_FOUND, dock = if (slate) false else null)
-                        } else {
-                            SearchResults(found, messages, query, rowCallbacks, selected, actions::openMessage, listModifier)
                         }
-                    }
-                    inArchive -> {
-                        // Telegram's swipe back; unlike the menu it does not follow the finger
-                        val sign = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
-                        val widthPx = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
-                        ChatList(
-                            state.archived,
-                            null,
-                            rowCallbacks,
-                            selected,
-                            listModifier.claimHorizontalDrag(
-                                canClaim = { dx -> dx * sign > 0f && !selectionMode },
-                                onEnd = { velocity, dx ->
-                                    if (drawerOpensOnRelease(dx * sign / widthPx, velocity * sign, false)) showArchive = false
-                                },
-                            ),
-                            EmptyKind.ARCHIVE,
-                            dock = if (slate) false else null,
-                        )
-                    }
-                    else ->
-                        HorizontalPager(
-                            state = pagerState,
-                            // only the page on screen is composed; the neighbour doubled every list update
-                            beyondViewportPageCount = 0,
-                            key = { ChatFolder.entries[it] },
-                            modifier = listModifier,
-                        ) { page ->
-                            val folder = ChatFolder.entries[page]
-                            val chats = remember(state.chats, folder) { state.chats.filter(folder::matches) }
-                            val archive =
-                                state.archived.takeIf { folder == ChatFolder.ALL && it.isNotEmpty() }
+                        inArchive -> {
+                            // Telegram's swipe back; unlike the menu it does not follow the finger
+                            val sign = if (LocalLayoutDirection.current == LayoutDirection.Rtl) -1f else 1f
+                            val widthPx = with(LocalDensity.current) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
                             ChatList(
-                                chats = chats,
-                                archive = archive?.let { ArchiveEntry(it, archiveHidden, openArchive, toggleArchiveHidden) },
-                                callbacks = rowCallbacks,
-                                selected = selected,
-                                modifier = Modifier.fillMaxSize(),
-                                empty = EmptyKind.NO_CHATS,
-                                scrollToTop = scrollToTop,
-                                dock = if (slate) dockVisible(searching, inArchive, selectionMode) else null,
+                                state.archived,
+                                null,
+                                rowCallbacks,
+                                selected,
+                                listModifier.claimHorizontalDrag(
+                                    canClaim = { dx -> dx * sign > 0f && !selectionMode },
+                                    onEnd = { velocity, dx ->
+                                        if (drawerOpensOnRelease(dx * sign / widthPx, velocity * sign, false)) showArchive = false
+                                    },
+                                ),
+                                EmptyKind.ARCHIVE,
+                                dock = if (slate) false else null,
+                                pad = pad,
                             )
                         }
+                        else ->
+                            HorizontalPager(
+                                state = pagerState,
+                                // only the page on screen is composed; the neighbour doubled every list update
+                                beyondViewportPageCount = 0,
+                                key = { ChatFolder.entries[it] },
+                                modifier = listModifier,
+                            ) { page ->
+                                val folder = ChatFolder.entries[page]
+                                val chats = remember(state.chats, folder) { state.chats.filter(folder::matches) }
+                                val archive =
+                                    state.archived.takeIf { folder == ChatFolder.ALL && it.isNotEmpty() }
+                                ChatList(
+                                    chats = chats,
+                                    archive = archive?.let { ArchiveEntry(it, archiveHidden, openArchive, toggleArchiveHidden) },
+                                    callbacks = rowCallbacks,
+                                    selected = selected,
+                                    modifier = Modifier.fillMaxSize(),
+                                    empty = EmptyKind.NO_CHATS,
+                                    scrollToTop = scrollToTop,
+                                    dock = if (slate) dockVisible(searching, inArchive, selectionMode) else null,
+                                    pad = pad,
+                                )
+                            }
+                    }
                 }
             }
         }
@@ -537,9 +569,11 @@ private fun ChatList(
     scrollToTop: Int = 0,
     /** Slate and Sea: whether the dock is shown (the Scaffold already reserves its height); null = the Telegram padding. */
     dock: Boolean? = null,
+    /** Floating bars: the list runs under them and pads for them; replaces [dock]. */
+    pad: PaddingValues? = null,
 ) {
     if (chats.isEmpty() && archive == null) {
-        EmptyChatList(empty, modifier)
+        EmptyChatList(empty, if (pad == null) modifier else modifier.padding(pad))
         return
     }
     val formatter = rememberChatTimeFormatter()
@@ -548,6 +582,7 @@ private fun ChatList(
     // plain scrolling, covered by the pull foreground until a release shows it (ArchiveReveal)
     // with no chat outside the archive the row stays in sight, or the screen would be blank
     val hiddenArchive = archive != null && archive.hidden && chats.isNotEmpty()
+    val blurred = pad != null && LocalBarBlur.current != BarBlur.OFF
     val rowPx = with(LocalDensity.current) { RowHeight.roundToPx() }
     val listState = rememberLazyListState(initialFirstVisibleItemScrollOffset = if (hiddenArchive) rowPx else 0)
     val reveal = remember(listState) { ArchiveReveal(listState) }
@@ -585,6 +620,7 @@ private fun ChatList(
     }
     val archiveLabel = stringResource(R.string.tatrak_archive)
     val contentBottom = when (dock) { null -> bottom + 88.dp; true -> 0.dp; false -> bottom }
+    val contentPadding = pad ?: PaddingValues(bottom = contentBottom)
     BoxWithConstraints(
         modifier
             .then(if (hiddenArchive) Modifier.archivePull(reveal) else Modifier)
@@ -597,11 +633,13 @@ private fun ChatList(
         LazyColumn(
             state = listState,
             modifier = Modifier.fillMaxSize(),
-            contentPadding = PaddingValues(bottom = contentBottom),
+            contentPadding = contentPadding,
         ) {
             if (archive != null) {
                 item(key = "archive", contentType = "archive") {
-                    Box(Modifier.animateItem()) {
+                    // blur under bars: the hidden row waits under the top bar, which would show it blurred; it shows once pulled
+                    val hide = if (hiddenArchive && blurred) Modifier.graphicsLayer { alpha = if (reveal.revealed || reveal.pullProgress > 0f) 1f else 0f } else Modifier
+                    Box(Modifier.animateItem().then(hide)) {
                         ArchiveRow(
                             archive.chats,
                             archive.hidden,
@@ -630,7 +668,8 @@ private fun ChatList(
             if (hiddenArchive) {
                 item(key = "gap", contentType = "gap") {
                     // in pixels: rows are measured in whole pixels, a dp sum comes up short at some densities
-                    val gap = constraints.maxHeight - rowPx * chats.size - with(LocalDensity.current) { contentBottom.roundToPx() }
+                    val gap = constraints.maxHeight - rowPx * chats.size -
+                        with(LocalDensity.current) { (contentPadding.calculateTopPadding() + contentPadding.calculateBottomPadding()).roundToPx() }
                     Spacer(Modifier.height(with(LocalDensity.current) { gap.coerceAtLeast(0).toDp() }))
                 }
             }
@@ -665,11 +704,12 @@ private fun SearchResults(
     selected: List<String>,
     onMessage: (String) -> Unit,
     modifier: Modifier,
+    pad: PaddingValues? = null,
 ) {
     if (chats.isEmpty() && messages.results.isEmpty()) {
         // nothing matched the name; say so only once the message search has answered too
         if (messages.searched && messages.terms == FtsUtils.parse(query.trim())) {
-            EmptyChatList(EmptyKind.NOTHING_FOUND, modifier)
+            EmptyChatList(EmptyKind.NOTHING_FOUND, if (pad == null) modifier else modifier.padding(pad))
         } else {
             Box(modifier)
         }
@@ -677,7 +717,7 @@ private fun SearchResults(
     }
     val formatter = rememberChatTimeFormatter()
     val bottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    LazyColumn(modifier = modifier, contentPadding = PaddingValues(bottom = bottom + 16.dp)) {
+    LazyColumn(modifier = modifier, contentPadding = pad ?: PaddingValues(bottom = bottom + 16.dp)) {
         if (chats.isNotEmpty() && messages.results.isNotEmpty()) {
             item(key = "chats-title", contentType = "title") {
                 SectionTitle(stringResource(R.string.tatrak_search_section_chats))
@@ -705,6 +745,25 @@ private fun SearchResults(
 }
 
 private const val SEARCH_DEBOUNCE_MS = 300L
+
+/** Floating bars: room under the last row for the FAB above the bottom bar (56 dp and the Scaffold's 16 dp spacing). */
+private val FabClearance = 72.dp
+
+@Composable
+private fun NewChatButton(onClick: () -> Unit, modifier: Modifier) {
+    FloatingActionButton(
+        onClick = onClick,
+        shape = CircleShape,
+        containerColor = fabFill(MaterialTheme.colorScheme.primary),
+        contentColor = Color.White,
+        modifier = modifier,
+    ) {
+        Icon(
+            painterResource(R.drawable.ic_edit_24dp),
+            contentDescription = stringResource(R.string.tatrak_new_chat),
+        )
+    }
+}
 
 @Composable
 private fun FolderTabs(chats: List<ChatListItem>, selectedIndex: Int, onSelect: (Int) -> Unit) {

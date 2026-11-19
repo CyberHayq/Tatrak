@@ -109,6 +109,8 @@ internal suspend fun PointerInputScope.selectionGestures(
     scope: CoroutineScope,
     selection: () -> List<String>,
     items: () -> List<ChatItem>,
+    /** Floating bars: the list runs under them, so the auto-scroll edges start at its content padding. */
+    padded: Boolean,
     onChange: (List<String>) -> Unit,
 ) {
     val edge = AutoScrollEdge.toPx()
@@ -139,7 +141,10 @@ internal suspend fun PointerInputScope.selectionGestures(
                     if (!change.pressed) break
                     y = change.position.y
                     dragTo(start, y)
-                    val wanted = if (y < edge) 1 else if (y > size.height - edge) -1 else 0
+                    // reversed list: the top padding comes after the content, the bottom one before it
+                    val top = if (padded) listState.layoutInfo.afterContentPadding else 0
+                    val bottom = if (padded) listState.layoutInfo.beforeContentPadding else 0
+                    val wanted = if (y < top + edge) 1 else if (y > size.height - bottom - edge) -1 else 0
                     if (wanted != direction) {
                         direction = wanted
                         scroller?.cancel()

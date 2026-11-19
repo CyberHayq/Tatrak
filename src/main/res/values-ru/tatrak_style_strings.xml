@@ -4,4 +4,20 @@
     <string name="tatrak_dock_chats">Чаты</string>
     <string name="tatrak_search_chats">Поиск по чатам</string>
     <string name="tatrak_topic_unread">Непрочитанных: %1$d</string>
+    <!-- the Glass styles (style cards in Appearance) -->
+    <string name="tatrak_style_glass">Стекло</string>
+    <string name="tatrak_style_glass_summary">Нейтральные серые, белые панели</string>
+    <string name="tatrak_style_warm">Тёплое стекло</string>
+    <string name="tatrak_style_warm_summary">Серые с тёплым оттенком</string>
+    <string name="tatrak_style_tinted">Цветное стекло</string>
+    <string name="tatrak_style_tinted_summary">Поверхности с оттенком акцента</string>
+    <!-- floating bars (Appearance switch; the chat list's bottom tab bar) -->
+    <string name="tatrak_floating_bars">Плавающие панели</string>
+    <string name="tatrak_floating_bars_summary">Панели парят над списком чатов, который плавно уходит под них</string>
+    <string name="tatrak_tab_profile">Профиль</string>
+    <string name="tatrak_bar_blur">Размытие под панелями</string>
+    <string name="tatrak_bar_blur_off">Выкл</string>
+    <string name="tatrak_bar_blur_frosted">Матовое</string>
+    <string name="tatrak_bar_blur_frosted_summary">Читается поверх любого чата</string>
+    <string name="tatrak_bar_blur_clear">Прозрачное, как в Telegram</string>
 </resources>

@@ -1,6 +1,7 @@
 package am.cyberhayq.chat.ui.chat
 
 import am.cyberhayq.chat.ui.theme.Accent
+import am.cyberhayq.chat.ui.theme.BarBlur
 import am.cyberhayq.chat.ui.theme.NightBackground
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
@@ -32,12 +33,14 @@ import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.getBoundsInRoot
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.assertCountEquals
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.text.TextRange
@@ -99,6 +102,22 @@ class ChatScreenshotTest {
         capture("chat_slate_amoled_dark", darkTheme = true, accent = Accent.SEA, style = TatrakStyle.SLATE_SEA, nightBackground = NightBackground.AMOLED) {
             privateChat(it)
         }
+
+    /** Glass, Warm Glass and Tinted Glass (violet): Telegram's bubbles and avatars over their own surfaces. */
+    @Test fun chatGlassLight() = capture("chat_glass_light", darkTheme = false, style = TatrakStyle.GLASS) { privateChat(it) }
+
+    @Test @Config(qualifiers = "+night")
+    fun chatGlassDark() = capture("chat_glass_dark", darkTheme = true, style = TatrakStyle.GLASS) { privateChat(it) }
+
+    @Test fun chatWarmLight() = capture("chat_warm_light", darkTheme = false, style = TatrakStyle.WARM) { privateChat(it) }
+
+    @Test @Config(qualifiers = "+night")
+    fun chatWarmDark() = capture("chat_warm_dark", darkTheme = true, style = TatrakStyle.WARM) { privateChat(it) }
+
+    @Test fun chatTintedLight() = capture("chat_tinted_light", darkTheme = false, accent = Accent.VIOLET, style = TatrakStyle.TINTED) { privateChat(it) }
+
+    @Test @Config(qualifiers = "+night")
+    fun chatTintedDark() = capture("chat_tinted_dark", darkTheme = true, accent = Accent.VIOLET, style = TatrakStyle.TINTED) { privateChat(it) }
 
     @Test fun chatSlateGoldLight() =
         capture("chat_slate_gold_light", darkTheme = false, accent = Accent.GOLD, style = TatrakStyle.SLATE_SEA) { privateChat(it) }
@@ -803,10 +822,14 @@ class ChatScreenshotTest {
         actions: ChatActions = FakeActions,
         mentions: MentionTracker? = null,
         swipe: SwipeMethod = SwipeMethod.TELEGRAM,
+        /** Off unless asked, also in the Glass styles (whose default is on): their plain chat screenshots stay as they were. */
+        floating: Boolean = false,
+        /** "Blur under bars" in effect; off unless asked, so the floating screenshots of step 4 stay as they were. */
+        blur: BarBlur = BarBlur.OFF,
         state: @Composable (Samples) -> ChatState,
     ) {
         compose.setContent {
-            TatrakTheme(darkTheme = darkTheme, style = style, accent = accent, nightBackground = nightBackground) {
+            TatrakTheme(darkTheme = darkTheme, style = style, accent = accent, nightBackground = nightBackground, floatingBars = floating, barBlur = blur) {
               CompositionLocalProvider(LocalSwipeMethod provides swipe) {
                 backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
                 val samples = Samples(currentTextPalette())
@@ -832,6 +855,180 @@ class ChatScreenshotTest {
         act()
         compose.waitForIdle()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    // ---- floating bars (step 4): header, banner and composer pills over the messages ----
+
+    @Test fun chatFloatingGlassLight() = capture("chat_floating_glass_light", darkTheme = false, style = TatrakStyle.GLASS, floating = true) { privateChat(it) }
+
+    @Test @Config(qualifiers = "+night")
+    fun chatFloatingGlassDark() = capture("chat_floating_glass_dark", darkTheme = true, style = TatrakStyle.GLASS, floating = true) { privateChat(it) }
+
+    /** Telegram's colours with the setting on: Slate's pill composer in the Telegram surface colours. */
+    @Test fun chatFloatingTelegramLight() = capture("chat_floating_telegram_light", darkTheme = false, floating = true) { privateChat(it) }
+
+    @Test fun chatFloatingSlateLight() =
+        capture("chat_floating_slate_light", darkTheme = false, accent = Accent.SEA, style = TatrakStyle.SLATE_SEA, floating = true) { privateChat(it) }
+
+    /** The banner is a pill of its own under the header's; its button still works. */
+    @Test fun chatFloatingBanner() {
+        var added = 0
+        val actions = object : ChatActions by FakeActions {
+            override fun addBack() { added++ }
+        }
+        capture("chat_floating_banner", darkTheme = false, style = TatrakStyle.GLASS, floating = true, actions = actions) {
+            privateChat(it).copy(banner = ChatBanner.ADD_BACK)
+        }
+        val header = compose.onNodeWithContentDescription("Back").getBoundsInRoot()
+        val banner = compose.onNodeWithText("Contact added you", substring = true).getBoundsInRoot()
+        assertTrue("$header $banner", banner.top > header.bottom)
+        compose.onNodeWithText("Add back").performClick()
+        assertEquals(1, added)
+    }
+
+    @Test fun chatFloatingReply() =
+        capture(
+            "chat_floating_reply",
+            darkTheme = false,
+            style = TatrakStyle.GLASS,
+            floating = true,
+            input = TextFieldValue("Sure, 10 works"),
+            reply = ReplyPreview("m4", "Ani", "See you tomorrow at 10?", 0xFFE17076.toInt()),
+        ) { privateChat(it) }
+
+    @Test fun chatFloatingSelection() {
+        capture("chat_floating_selection", darkTheme = false, style = TatrakStyle.GLASS, floating = true, act = {
+            compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() }
+        }) { privateChat(it) }
+        assertSelected(1)
+    }
+
+    @Test fun chatFloatingAttachPanel() {
+        capture("chat_floating_attach_panel", darkTheme = false, style = TatrakStyle.GLASS, floating = true, act = {
+            compose.onNodeWithContentDescription("Attach").performClick()
+        }) { privateChat(it) }
+        compose.onNodeWithText("Gallery").assertIsDisplayed()
+        // the panel takes the keyboard's place under the pill; the newest message still sits above the pill
+        assertTrue(compose.onNodeWithText("This one failed").getBoundsInRoot().bottom < compose.onNodeWithContentDescription("Emoji").getBoundsInRoot().top)
+    }
+
+    /** Blur under bars (API 31+): messages and wallpaper show blurred through the header and composer pills, frosted and clear. */
+    @Test @Config(sdk = [35])
+    fun chatFloatingFrostedLight() = blurred("chat_floating_frosted_light", BarBlur.FROSTED, dark = false)
+
+    @Test @Config(sdk = [35], qualifiers = "+night")
+    fun chatFloatingFrostedDark() = blurred("chat_floating_frosted_dark", BarBlur.FROSTED, dark = true)
+
+    @Test @Config(sdk = [35])
+    fun chatFloatingClearLight() = blurred("chat_floating_clear_light", BarBlur.CLEAR, dark = false)
+
+    @Test @Config(sdk = [35], qualifiers = "+night")
+    fun chatFloatingClearDark() = blurred("chat_floating_clear_dark", BarBlur.CLEAR, dark = true)
+
+    private fun blurred(name: String, mode: BarBlur, dark: Boolean) =
+        capture(name, darkTheme = dark, style = TatrakStyle.GLASS, floating = true, blur = mode, act = {
+            compose.onNode(hasScrollAction()).performScrollToIndex(3)
+        }) { longGroupChat(it) }
+
+    /** The attach panel lifts the composer pill: its blur follows it; a reply block and the banner blur too. */
+    @Test @Config(sdk = [35])
+    fun chatFloatingBlurAttachPanel() {
+        capture(
+            "chat_floating_clear_attach_panel",
+            darkTheme = false,
+            style = TatrakStyle.GLASS,
+            floating = true,
+            blur = BarBlur.CLEAR,
+            reply = ReplyPreview("m4", "Ani", "See you tomorrow at 10?", 0xFFE17076.toInt()),
+            act = { compose.onNodeWithContentDescription("Attach").performClick() },
+        ) { privateChat(it).copy(banner = ChatBanner.ADD_BACK) }
+        compose.onNodeWithText("Gallery").assertIsDisplayed()
+    }
+
+    private fun floatingChat(
+        input: () -> TextFieldValue = { TextFieldValue() },
+        reply: () -> ReplyPreview? = { null },
+        focus: () -> MessageFocus? = { null },
+        state: @Composable (Samples) -> ChatState = { s -> privateChat(s).let { st -> st.copy(items = st.items.filterNot { it is UnreadItem }) } },
+    ) {
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, floatingBars = true, barBlur = BarBlur.OFF) {
+                ChatScreen(
+                    state = state(Samples(currentTextPalette())),
+                    input = input(),
+                    onInputChange = {},
+                    reply = reply(),
+                    actions = FakeActions,
+                    voice = voice,
+                    recording = MutableStateFlow(VoiceRecording()),
+                    focus = focus(),
+                )
+            }
+        }
+        compose.waitForIdle()
+    }
+
+    /** The top of the composer's input pill (its emoji button spans the pill's height). */
+    private fun composerTop() = compose.onNodeWithContentDescription("Emoji").getBoundsInRoot().top
+
+    /** The header pill's bottom: the 64 dp bar centres its 48 dp back button. */
+    private fun headerBottom() = compose.onNodeWithContentDescription("Back").getBoundsInRoot().bottom + 8.dp
+
+    /** The newest message rests just above the composer pill, and moves up by what the composer grows: a reply block, more lines. */
+    @Test fun floatingListPadsForTheComposer() {
+        var reply by mutableStateOf<ReplyPreview?>(null)
+        var input by mutableStateOf(TextFieldValue())
+        floatingChat(input = { input }, reply = { reply })
+        fun newest() = compose.onNodeWithText("This one failed").getBoundsInRoot().bottom
+        val rest = composerTop() - newest()
+        assertTrue("gap $rest", rest > 0.dp && rest < 32.dp)
+        val plain = newest()
+        compose.runOnIdle { reply = ReplyPreview("m4", "Ani", "See you tomorrow at 10?", 0xFFE17076.toInt()) }
+        compose.waitForIdle()
+        // the 52 dp reply block and its 6 dp gap above the pill
+        val replied = newest()
+        assertEquals(58f, (plain - replied).value, 1f)
+        assertEquals(rest.value, (composerTop() - 58.dp - replied).value, 1f)
+        // the emoji button keeps to the bottom of the pill; the text field's top follows the pill's
+        fun fieldTop() = compose.onNode(hasSetTextAction()).getBoundsInRoot().top
+        val oneLine = fieldTop()
+        compose.runOnIdle { input = TextFieldValue("one\ntwo\nthree") }
+        compose.waitForIdle()
+        // two more lines: the message moves up as far as the pill grew
+        val grown = oneLine - fieldTop()
+        assertTrue("grew $grown", grown > 30.dp)
+        assertEquals(grown.value, (replied - newest()).value, 1f)
+    }
+
+    /** A search result is centred between the pills; the oldest one stops below the header, not under it. */
+    @Test fun floatingFocusLandsBelowTheHeader() {
+        var focus by mutableStateOf(MessageFocus("n12"))
+        floatingChat(focus = { focus }) { longGroupChat(it).copy(unreadCount = 0, mentions = emptyList()) }
+        val middle = compose.onNodeWithText("Reply number 12").getBoundsInRoot()
+        val shown = (headerBottom() + composerTop()) / 2
+        assertEquals(shown.value, ((middle.top + middle.bottom) / 2).value, 16f)
+        compose.runOnIdle { focus = MessageFocus("x1") }
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_floating_focus_oldest.png")
+        val oldest = compose.onNodeWithText("Narek, are you coming", substring = true).getBoundsInRoot()
+        assertTrue("${headerBottom()} $oldest", oldest.top > headerBottom())
+    }
+
+    /** "Scroll down" and "@" stay above the composer pill; messages hidden under the pill are not marked read. */
+    @Test fun floatingJumpButtonsSitAboveTheComposer() {
+        val read = mutableListOf<String>()
+        val actions = object : ChatActions by FakeActions {
+            override fun markRead(uuid: String) { read += uuid }
+        }
+        capture("chat_floating_scrolled", darkTheme = false, style = TatrakStyle.GLASS, floating = true, actions = actions, act = {
+            compose.onNode(hasScrollAction()).performScrollToIndex(10)
+        }) { longGroupChat(it) }
+        // item 10 (n14) rests on the composer padding's edge; n15 and n16 lie under the pill
+        assertEquals("n14", read.last())
+        for (button in listOf("Scroll to the newest message", "Next mention")) {
+            val bounds = compose.onNodeWithContentDescription(button).getBoundsInRoot()
+            assertTrue("$button $bounds", bounds.bottom < composerTop() && bounds.top > headerBottom())
+        }
     }
 
     // Slate and Sea phase 2: floating composer pill and soft bubbles (design_phase2.md items 2 and 5)

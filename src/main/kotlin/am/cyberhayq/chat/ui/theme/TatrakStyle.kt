@@ -12,12 +12,16 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.preference.PreferenceManager
 
 /**
- * The selectable visual style: Telegram (default) or "Slate and Sea" (cool slate surfaces, the Sea accent,
- * rounded-square avatars). A plain preference read by key, so the upstream `AppSettings` stays untouched.
+ * The selectable visual style: Telegram (default), "Slate and Sea" (cool slate surfaces, the Sea accent,
+ * rounded-square avatars), or Glass, Warm Glass and Tinted Glass (Telegram's look with their own surfaces; Tinted's follow the accent).
+ * A plain preference read by key, so the upstream `AppSettings` stays untouched.
  */
 enum class TatrakStyle(val key: String) {
     TELEGRAM("telegram"),
-    SLATE_SEA("slate_sea");
+    SLATE_SEA("slate_sea"),
+    GLASS("glass"),
+    WARM("warm"),
+    TINTED("tinted");
 
     companion object {
         const val KEY = "tatrak_style"

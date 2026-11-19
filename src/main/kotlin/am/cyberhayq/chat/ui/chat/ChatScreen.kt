@@ -8,6 +8,17 @@ import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.unit.toSize
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.LocalAvatarDotOffset
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.theme.BarBlur
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
+import am.cyberhayq.chat.ui.theme.backdropBlur
+import am.cyberhayq.chat.ui.theme.backdropSource
+import am.cyberhayq.chat.ui.theme.fadeUnderBars
+import am.cyberhayq.chat.ui.theme.rememberBarBackdrop
+import am.cyberhayq.chat.ui.chatlist.FloatingTopBar
+import androidx.compose.foundation.lazy.LazyListLayoutInfo
+import androidx.compose.material3.Scaffold
+import androidx.compose.ui.graphics.RectangleShape
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
 import am.cyberhayq.chat.ui.theme.rememberStringPreference
 import android.graphics.Bitmap
@@ -32,6 +43,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.add
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -44,6 +57,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.LazyListItemInfo
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
@@ -91,6 +105,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.AppSettings
@@ -353,12 +369,14 @@ fun ChatScreen(
             val global = rememberStringPreference(AppSettings.WALLPAPER)
             val wallpaper = state.wallpaper ?: global
             val dark = ChatScreenTheme.colors.isDark
-            ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
+            // blur under floating bars: the wallpaper is drawn with the messages instead, so the bars blur both
+            val backdrop = rememberBarBackdrop()
+            if (backdrop == null) ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
             val tint =
                 Wallpapers.preset(wallpaper)?.takeIf { it.id != Wallpapers.DEFAULT }
                     ?.let { (if (dark) it.night else it.day)[0] }
             CompositionLocalProvider(LocalWallpaperTint provides tint) {
-                Column(Modifier.fillMaxSize()) {
+                val header = @Composable {
                     if (selecting) {
                         val oldestFirst = selected.asReversed()
                         fun keys(can: (MessageActions) -> Boolean) = oldestFirst.filter { can(it.actions) }.map { it.key }.takeIf { it.isNotEmpty() }
@@ -377,18 +395,20 @@ fun ChatScreen(
                     } else {
                         ChatTopBar(state.header, state.composer.encryption, actions) { wallpaperOpen = true }
                     }
-                    Box(Modifier.weight(1f).fillMaxWidth()) {
-                        key(state.conversationUuid) {
-                            MessageList(
-                                state, actions, voice, focus, onFocused, seenMentions,
-                                selection = remember(selected) { selected.map { it.key } },
-                                onSelectionChange = { selection = it },
-                                onMenu = { item, bubble -> if (!selecting) menu.value = item.key to bounds(screen[0], bubble) },
-                            )
-                        }
-                        state.banner?.let { ChatBannerBar(it, actions, Modifier.align(Alignment.TopCenter)) }
-                        ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 56.dp else 12.dp))
+                }
+                val messages: @Composable (PaddingValues?) -> Unit = { bars ->
+                    key(state.conversationUuid) {
+                        MessageList(
+                            state, actions, voice, focus, onFocused, seenMentions,
+                            selection = remember(selected) { selected.map { it.key } },
+                            onSelectionChange = { selection = it },
+                            onMenu = { item, bubble -> if (!selecting) menu.value = item.key to bounds(screen[0], bubble) },
+                            bars = bars,
+                            blurred = backdrop != null,
+                        )
                     }
+                }
+                val composer: @Composable (Modifier) -> Unit = { composerModifier ->
                     Composer(
                         composer = state.composer,
                         input = input,
@@ -396,9 +416,49 @@ fun ChatScreen(
                         reply = reply,
                         actions = actions,
                         recording = recording,
+                        modifier = composerModifier,
                         previews = previews,
                         newest = state.items.firstOrNull()?.key,
+                        backdrop = backdrop,
                     )
+                }
+                if (LocalFloatingBars.current) {
+                    // the messages fill the screen under the pills; the Scaffold measures the bars before the body and hands it
+                    // their heights in the same pass (no frame late), which the list reads while laid out
+                    Scaffold(
+                        containerColor = Color.Transparent,
+                        contentWindowInsets = WindowInsets(0),
+                        // the margins take touches too: messages faded out under them are not tappable
+                        topBar = {
+                            Column(Modifier.pointerInput(Unit) {}) {
+                                FloatingTopBar(bottom = 0.dp, backdrop = backdrop, content = header)
+                                state.banner?.let { ChatBannerBar(it, actions, Modifier.padding(start = 8.dp, end = 8.dp, top = 6.dp), floating = true, backdrop) }
+                            }
+                        },
+                        bottomBar = { composer(Modifier.pointerInput(Unit) {}) },
+                    ) { bars ->
+                        Box(Modifier.fillMaxSize()) {
+                            if (backdrop == null) {
+                                messages(bars)
+                            } else {
+                                Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
+                                    ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
+                                    messages(bars)
+                                }
+                            }
+                            ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(bars).padding(top = 12.dp))
+                        }
+                    }
+                } else {
+                    Column(Modifier.fillMaxSize()) {
+                        header()
+                        Box(Modifier.weight(1f).fillMaxWidth()) {
+                            messages(null)
+                            state.banner?.let { ChatBannerBar(it, actions, Modifier.align(Alignment.TopCenter)) }
+                            ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 56.dp else 12.dp))
+                        }
+                        composer(Modifier)
+                    }
                 }
             }
             val open = menu.value
@@ -474,7 +534,7 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
                                 .size(14.dp)
                                 .offset(LocalAvatarDotOffset.current, LocalAvatarDotOffset.current)
                                 .semantics { contentDescription = onlineDescription }
-                                .border(2.dp, bar.topBar, CircleShape)
+                                .border(2.dp, bar.topBar.copy(alpha = 1f), CircleShape)
                                 .padding(2.dp)
                                 .background(bar.online, CircleShape)
                         )
@@ -637,7 +697,12 @@ private fun MessageList(
     selection: List<String>,
     onSelectionChange: (List<String>) -> Unit,
     onMenu: (MessageItem, LayoutCoordinates?) -> Unit,
+    /** Floating bars: their heights (the Scaffold's padding); the list runs under them, pads for them and fades into them. */
+    bars: PaddingValues? = null,
+    /** The bars blur the list under them: no fade at the bars, the messages stay visible beside and (blurred) under them. */
+    blurred: Boolean = false,
 ) {
+    val padded = bars != null
     val listState = rememberLazyListState()
     val scope = rememberCoroutineScope()
     val items by rememberUpdatedState(state.items)
@@ -645,7 +710,7 @@ private fun MessageList(
 
     // no read markers until the chat has scrolled to the unread divider
     var initialScrollDone by remember(state.generation) { mutableStateOf(false) }
-    InitialScroll(state, listState) {
+    InitialScroll(state, listState, padded) {
         initialScrollDone = true
         actions.listReady()
     }
@@ -667,7 +732,7 @@ private fun MessageList(
                 if (!initialScrollDone || listState.isScrollInProgress) {
                     null
                 } else {
-                    listState.layoutInfo.visibleItemsInfo.firstNotNullOfOrNull {
+                    listState.layoutInfo.shownItems(padded).firstNotNullOfOrNull {
                         (items.getOrNull(it.index) as? MessageItem)?.key
                     }
                 }
@@ -679,7 +744,7 @@ private fun MessageList(
 
     Box(Modifier.fillMaxSize()) {
         if (state.loaded && state.items.isEmpty()) {
-            EmptyChat(Modifier.align(Alignment.Center))
+            EmptyChat(Modifier.align(Alignment.Center).then(if (bars != null) Modifier.padding(bars) else Modifier))
         }
         // stable lambda: a new one would recompose every row through the composition local
         val currentItems by rememberUpdatedState(items)
@@ -705,7 +770,7 @@ private fun MessageList(
             currentOnFocused(target)
             // not in this effect: the next snapshot (avatars) would cancel it halfway
             scope.launch {
-                listState.centerOn(index)
+                listState.centerOn(index, padded)
                 flash.run(target.uuid)
             }
         }
@@ -715,7 +780,7 @@ private fun MessageList(
             if (pendingMentions.isEmpty()) return@LaunchedEffect
             val wanted = pendingMentions.toHashSet()
             snapshotFlow {
-                    if (!initialScrollDone) emptyList() else listState.layoutInfo.visibleItemsInfo.mapNotNull { it.key as? String }.filter { it in wanted }
+                    if (!initialScrollDone) emptyList() else listState.layoutInfo.shownItems(padded).mapNotNull { it.key as? String }.filter { it in wanted }
                 }
                 .filter { it.isNotEmpty() }
                 .collect(actions::mentionsSeen)
@@ -737,11 +802,23 @@ private fun MessageList(
             LazyColumn(
                 state = listState,
                 reverseLayout = true,
-                contentPadding = PaddingValues(top = if (state.banner != null) 52.dp else 8.dp, bottom = 8.dp),
+                contentPadding =
+                    if (bars != null) remember(bars) { BarsPadding(bars, 8.dp) }
+                    else PaddingValues(top = if (state.banner != null) 52.dp else 8.dp, bottom = 8.dp),
                 modifier =
-                    Modifier.fillMaxSize().pointerInput(listState) {
-                        selectionGestures(listState, drag, scope, { currentSelection }, { currentItems }) { currentOnSelectionChange(it) }
-                    },
+                    Modifier.fillMaxSize()
+                        .then(
+                            when {
+                                bars == null -> Modifier
+                                !blurred -> Modifier.fadeUnderBars(bars)
+                                // only above the header pill (status bar strip and FloatingTopBar's 4 dp), fading in under its
+                                // edge: the status bar icons stay over the plain wallpaper; the side margins stay unmasked
+                                else -> Modifier.fadeUnderBars(TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Top).add(WindowInsets(top = 4.dp)).asPaddingValues())
+                            }
+                        )
+                        .pointerInput(listState) {
+                            selectionGestures(listState, drag, scope, { currentSelection }, { currentItems }, padded) { currentOnSelectionChange(it) }
+                        },
             ) {
                 items(state.items, key = { it.key }, contentType = { it.contentType }) { item ->
                     when (item) {
@@ -768,10 +845,11 @@ private fun MessageList(
         FloatingDate(
             listState,
             { index -> items.getOrNull(index)?.day },
-            Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 50.dp else 6.dp),
+            if (bars != null) Modifier.align(Alignment.TopCenter).padding(bars).padding(top = 6.dp)
+            else Modifier.align(Alignment.TopCenter).padding(top = if (state.banner != null) 50.dp else 6.dp),
         )
         val showFab by remember { derivedStateOf { listState.firstVisibleItemIndex > 2 } }
-        Column(Modifier.align(Alignment.BottomEnd).padding(end = 12.dp, bottom = 12.dp)) {
+        Column(Modifier.align(Alignment.BottomEnd).then(if (bars != null) Modifier.padding(bars) else Modifier).padding(end = 12.dp, bottom = 12.dp)) {
             // Telegram's "@" above "scroll down": the oldest unread mention first
             AnimatedVisibility(visible = pendingMentions.isNotEmpty(), enter = scaleIn() + fadeIn(), exit = scaleOut() + fadeOut()) {
                 JumpButton(pendingMentions.size, stringResource(R.string.tatrak_chat_next_mention), onClick = {
@@ -780,7 +858,7 @@ private fun MessageList(
                     val index = state.items.indexOfFirst { it.key == target }
                     if (index >= 0) {
                         scope.launch {
-                            listState.centerOn(index)
+                            listState.centerOn(index, padded)
                             flash.run(target)
                         }
                     }
@@ -806,12 +884,35 @@ private fun MessageList(
 /**
  * Scrolls [index] to the middle of the viewport: search results and mention jumps. Measured from where the item landed:
  * near the oldest loaded message scrollToItem stops early, and a fixed half-viewport step pushed it off screen.
+ * [padded]: the middle of the part between the floating bars.
  */
-private suspend fun LazyListState.centerOn(index: Int) {
+private suspend fun LazyListState.centerOn(index: Int, padded: Boolean) {
     scrollToItem(index)
     val item = layoutInfo.visibleItemsInfo.firstOrNull { it.index == index } ?: return
-    val middle = ((layoutInfo.viewportSize.height - item.size) / 2f).coerceAtLeast(0f)
+    val middle = ((layoutInfo.shownHeight(padded) - item.size) / 2f).coerceAtLeast(0f)
     scrollBy(item.offset - middle)
+}
+
+/**
+ * The list's height a reader sees: with floating bars ([padded]) the list runs under them and its content padding is
+ * hidden, so only the part between the paddings counts. Item offsets start at the bottom padding's edge (reversed list).
+ */
+private fun LazyListLayoutInfo.shownHeight(padded: Boolean): Int =
+    if (padded) viewportSize.height - beforeContentPadding - afterContentPadding else viewportSize.height
+
+/** The laid out items a reader sees: with floating bars ([padded]) the items wholly under a bar (or the keyboard) are left out. */
+private fun LazyListLayoutInfo.shownItems(padded: Boolean): List<LazyListItemInfo> =
+    if (!padded) visibleItemsInfo else visibleItemsInfo.filter { it.offset + it.size > 0 && it.offset < shownHeight(true) }
+
+/** [bars] plus [gap] at the top and bottom, read when the list is laid out: the keyboard growing the composer only re-lays it out. */
+private class BarsPadding(private val bars: PaddingValues, private val gap: Dp) : PaddingValues {
+    override fun calculateLeftPadding(layoutDirection: LayoutDirection) = 0.dp
+
+    override fun calculateTopPadding() = bars.calculateTopPadding() + gap
+
+    override fun calculateRightPadding(layoutDirection: LayoutDirection) = 0.dp
+
+    override fun calculateBottomPadding() = bars.calculateBottomPadding() + gap
 }
 
 /** The short highlight of a message jumped to (search result, quoted message), as in Telegram. */
@@ -842,7 +943,7 @@ private class MessageFlash {
 
 /** Opens a newly bound chat at the "Unread messages" divider, otherwise at the bottom. */
 @Composable
-private fun InitialScroll(state: ChatState, listState: LazyListState, onDone: () -> Unit) {
+private fun InitialScroll(state: ChatState, listState: LazyListState, padded: Boolean, onDone: () -> Unit) {
     val done = remember(state.generation) { booleanArrayOf(false) }
     LaunchedEffect(state.generation, state.loaded) {
         if (!state.loaded || done[0]) return@LaunchedEffect
@@ -850,7 +951,7 @@ private fun InitialScroll(state: ChatState, listState: LazyListState, onDone: ()
         val divider = state.items.indexOfFirst { it is UnreadItem }
         if (divider >= 0) {
             listState.scrollToItem(divider)
-            val viewport = listState.layoutInfo.viewportSize.height
+            val viewport = listState.layoutInfo.shownHeight(padded)
             listState.scrollBy(-(viewport * 0.75f))
         }
         onDone()
@@ -1064,12 +1165,14 @@ private fun ChatNotice(notice: Int?, onShown: () -> Unit, modifier: Modifier = M
     }
 }
 
+/** [floating]: a pill of its own under the header's (Telegram's pinned bar), in the composer's pill colour; over [backdrop] blurred. */
 @Composable
-private fun ChatBannerBar(banner: ChatBanner, actions: ChatActions, modifier: Modifier = Modifier) {
+private fun ChatBannerBar(banner: ChatBanner, actions: ChatActions, modifier: Modifier = Modifier, floating: Boolean = false, backdrop: BarBackdrop? = null) {
     Surface(
-        color = MaterialTheme.colorScheme.surface,
+        color = if (floating) floatingPill(backdrop?.mode ?: BarBlur.OFF) else MaterialTheme.colorScheme.surface,
+        shape = if (floating) RoundedCornerShape(24.dp) else RectangleShape,
         shadowElevation = 2.dp,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth().backdropBlur(backdrop, RoundedCornerShape(24.dp)),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
