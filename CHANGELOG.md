@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.3.0
+
+### Interface
+- Floating bars, as in Telegram 13: in the chat list the top bar and a new bottom tab bar (Chats,
+  Contacts, Calls, Profile, search) float over the list; in the chat the header, the pinned bar and
+  the composer float over the messages. A setting of its own, with any style.
+- Blur under the floating bars on Android 12 and later: Frosted (checked for contrast) or Clear,
+  like Telegram.
+- Three new styles: Glass, Warm Glass and Tinted Glass (tinted with the accent).
+- The settings pages are drawn in the new interface.
+- Side menu stays open on a theme toggle; incoming and outgoing tabs in the call list.
+- Archive pull as in Telegram, with a hint on the first archived chat.
+
+### Chat
+- Select several messages, as in Telegram: copy, forward, delete.
+- A "Message info" sheet with send and receive times and the encryption.
+- The attach menu opens in place of the keyboard and can share a contact.
+- The chat slides in once its messages are laid out, and the list no longer jumps after a send.
+- Delivery status icons keep one slot, so the time does not shift.
+
+### Fixes
+- OMEMO reactions sent with an encrypted fallback (Cheogram) no longer show as messages.
+
 ## 0.2.0
 
 First public Tatrak release (0.1.0 was never published), based on Conversations 2.21.0. Changes compared to Conversations 2.21.0:

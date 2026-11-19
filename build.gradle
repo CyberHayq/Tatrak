@@ -138,8 +138,8 @@ android {
 
     defaultConfig {
         minSdk = 26
-        versionCode = 50001
-        versionName = '0.2.0'
+        versionCode = 50002
+        versionName = '0.3.0'
         applicationId = 'am.cyberhayq.chat'
         resValue('string', 'applicationId', applicationId)
         def appName = "Tatrak"
