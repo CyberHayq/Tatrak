@@ -64,6 +64,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -393,6 +394,7 @@ fun ChatScreen(
                         actions = actions,
                         recording = recording,
                         previews = previews,
+                        newest = state.items.firstOrNull()?.key,
                     )
                 }
             }
@@ -854,13 +856,19 @@ private fun InitialScroll(state: ChatState, listState: LazyListState, onDone: ()
 private fun FollowNewMessages(state: ChatState, listState: LazyListState) {
     val newest = state.items.firstOrNull() as? MessageItem
     val previous = remember(state.generation) { arrayOfNulls<String>(1) }
-    LaunchedEffect(newest?.key) {
-        val key = newest?.key ?: return@LaunchedEffect
+    val scope = rememberCoroutineScope()
+    // SideEffect: before this frame's measure, so the new item lands in the same frame as the composer change
+    SideEffect {
+        val key = newest?.key ?: return@SideEffect
         val before = previous[0]
         previous[0] = key
-        if (before == null || before == key) return@LaunchedEffect
-        if (newest.isOutgoing || listState.firstVisibleItemIndex <= 2) {
-            listState.animateScrollToItem(0)
+        if (before == null || before == key) return@SideEffect
+        if (listState.firstVisibleItemIndex == 0 && listState.firstVisibleItemScrollOffset == 0 && !listState.isScrollInProgress) {
+            // stay at the bottom instead of keeping the old first item by key: animateItem then slides the older
+            // messages up with the same spring as the composer's height, so a shrinking composer does not jerk the list
+            listState.requestScrollToItem(0)
+        } else if (newest.isOutgoing || listState.firstVisibleItemIndex <= 2) {
+            scope.launch { listState.animateScrollToItem(0) }
         }
     }
 }

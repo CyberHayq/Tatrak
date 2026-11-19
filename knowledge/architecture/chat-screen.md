@@ -159,6 +159,12 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   legacy merge rule and `Config.MESSAGE_MERGE_WINDOW`), time and ticks inside the bubble.
 - Images in boxes sized from the file parameters before the thumbnail loads.
 - Floating date, scroll-to-bottom button with unread count, open at first unread.
+- A new message while the list is at the very bottom is placed there in the same frame
+  (`requestScrollToItem(0)` from a `SideEffect` in `FollowNewMessages`), so `animateItem` slides the
+  older ones up; anchoring by key would put it below the screen and scroll after. The composer's
+  text field animates its height with the same default spring, and after Send it keeps the sent
+  text's height (`newest` key, 500 ms fallback for edits) until the message is in the list, so the
+  field shrinks in the same frame the list starts moving.
 
 ## Actions
 

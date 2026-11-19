@@ -19,6 +19,7 @@ import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animate
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.imeAnimationTarget
@@ -132,6 +133,7 @@ import am.cyberhayq.chat.ui.theme.rememberPreference
 import eu.siacs.conversations.AppSettings
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -177,6 +179,8 @@ fun Composer(
     recording: StateFlow<VoiceRecording>,
     modifier: Modifier = Modifier,
     previews: List<String> = emptyList(),
+    /** Key of the newest message in the list: a sent text keeps the field's height until it lands there. */
+    newest: String? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -238,7 +242,7 @@ fun Composer(
             actions,
         )
     if (LocalTatrakStyle.current == TatrakStyle.SLATE_SEA) {
-        SlateComposer(composer, input, onInputChange, reply, actions, recording, modifier, previews, panel, onPanel, panelShown, panelContent, insets, focus, mentions)
+        SlateComposer(composer, input, onInputChange, reply, actions, recording, modifier, previews, panel, onPanel, panelShown, panelContent, insets, focus, mentions, newest)
         return
     }
     Surface(color = colors.surface, shadowElevation = 3.dp, modifier = modifier.fillMaxWidth()) {
@@ -276,7 +280,7 @@ fun Composer(
                     )
                 else -> {
                     val rec by recording.collectAsState()
-                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions)
+                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions, newest)
                     if (panelShown) panelContent()
                     BlockSwipeBack(panel != KeyboardPanel.NONE || rec.active)
                 }
@@ -306,6 +310,7 @@ private fun SlateComposer(
     insets: WindowInsets,
     focus: FocusRequester,
     mentions: MentionSuggestions?,
+    newest: String?,
 ) {
     val colors = MaterialTheme.colorScheme
     // raised over the wallpaper (in the night style the plain surface equals it)
@@ -359,7 +364,7 @@ private fun SlateComposer(
                     )
                 else -> {
                     val rec by recording.collectAsState()
-                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions)
+                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions, newest)
                     BlockSwipeBack(panel != KeyboardPanel.NONE || rec.active)
                 }
             }
@@ -382,9 +387,23 @@ private fun InputRow(
     onPanel: (KeyboardPanel) -> Unit,
     focus: FocusRequester,
     mentions: MentionSuggestions?,
+    newest: String?,
 ) {
     val context = LocalContext.current
     val currentInput by rememberUpdatedState(input)
+    // the field keeps the sent text's height until the message is in the list: both then move in one frame
+    // (shrinking first dropped the list for a frame before the new bubble pushed it up)
+    val fieldPx = remember { intArrayOf(0) }
+    var heldPx by remember { mutableIntStateOf(0) }
+    var heldFor by remember { mutableStateOf<String?>(null) }
+    val held = if (heldPx > 0 && newest == heldFor) heldPx else 0
+    // an edit adds no message; keyed by the send too, so a second send at the same height gets its own 500 ms
+    LaunchedEffect(heldPx, heldFor) { if (heldPx > 0) { delay(500); heldPx = 0 } }
+    fun send() {
+        heldFor = newest
+        heldPx = fieldPx[0]
+        actions.send()
+    }
     val currentMentions by rememberUpdatedState(mentions)
     val styles =
         listOf(
@@ -487,6 +506,11 @@ private fun InputRow(
                     interactionSource = interactions,
                     modifier =
                         Modifier.fillMaxWidth()
+                            .onSizeChanged { fieldPx[0] = it.height }
+                            // the default spring of animateItem: on send the list slides up as the field shrinks
+                            // bottom-aligned: a pasted block grows upwards, the caret line stays visible
+                            .animateContentSize(alignment = Alignment.BottomStart)
+                            .heightIn(min = with(LocalDensity.current) { held.toDp() })
                             .padding(vertical = 14.dp)
                             .focusRequester(focus)
                             // the system selection toolbar, after Cut / Copy / Paste / Select all
@@ -508,7 +532,7 @@ private fun InputRow(
                                 val enter = event.key == Key.Enter || event.key == Key.NumPadEnter
                                 when {
                                     enter && !event.isShiftPressed && (event.isCtrlPressed || enterIsSend) -> {
-                                        actions.send()
+                                        send()
                                         true
                                     }
                                     event.key == Key.DirectionUp && event.isCtrlPressed -> actions.editLast()
@@ -556,7 +580,7 @@ private fun InputRow(
             modifier = Modifier.padding(bottom = 1.dp),
         ) { send ->
             if (send) {
-                IconButton(onClick = { if (locked) actions.stopRecording(send = true) else actions.send() }) {
+                IconButton(onClick = { if (locked) actions.stopRecording(send = true) else send() }) {
                     Icon(
                         painterResource(if (editing) R.drawable.ic_check_24dp else R.drawable.ic_send_24dp),
                         contentDescription = stringResource(R.string.tatrak_chat_send),
