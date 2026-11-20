@@ -35,6 +35,11 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
   share a commit with code only when the message says nothing they alone hold. Anything private
   (another project's defect, a finding, owner-machine details) goes in a commit of its own that
   touches only private pages.
+- Before every commit and every push to the public repository, bring `README.md` and the public
+  Markdown that goes with the change up to date: `CHANGELOG.md` and the public `knowledge/` pages
+  (`PUBLIC_KNOWLEDGE` in `tools/public-export/export.py`) that describe what changed (features,
+  screens, build steps, supported XEPs, roadmap). A commit whose change makes any of them wrong
+  updates them in the same commit; if none needs a change, say so to the owner before the commit.
 
 ## What may change
 
@@ -91,6 +96,26 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
   come back with `orca terminal send`. Without Orca, run it directly (for example
   `codex exec -s read-only "<brief>" > <file>` in the background) and read its output file.
 
+## Parallel work (owner, 2026-11-20)
+
+- The main session is the orchestrator: it plans, asks the owner the decisions, writes the briefs,
+  starts the agents, re-checks their changes, runs the reviews and resolves them, keeps
+  `knowledge/` and reports to the owner. It writes code itself only for small changes: a few
+  lines, a fix a review already spells out, docs and strings.
+- A large or independent task (a feature, a new screen family, anything with its own tests)
+  goes to an agent in its own worktree and branch (`orca worktree create --agent`), so its diff
+  stays apart and it can be committed on its own. Small tasks may run in the main working tree.
+- At most two or three agents at once: one Gradle build at a time on this machine, so every brief
+  says to wait for a running build before starting one, with a time limit:
+  `timeout 1800 sh -c 'while pgrep -f "[G]radleWrapperMain" >/dev/null; do sleep 20; done'`.
+- The briefs name the shared files a task may touch (`tatrak_strings.xml`, `ChatFragment.kt`,
+  `knowledge/log.md`, `risks.md`, `backlog.md`): agents only append to the knowledge pages, and
+  the main session merges the branches and resolves conflicts there.
+- Finished work is committed (when the owner asks) before new tasks start in the same tree, so
+  tasks do not mix in one working tree.
+- An agent's report names the main session's current Orca terminal handle (`$ORCA_TERMINAL_HANDLE`
+  of the main session, read at the time the brief is written; it changes when a session restarts).
+
 ## Models for coding
 
 | Work | Who | Effort |
@@ -99,9 +124,9 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
 | A feature or fix with a written plan | Claude Opus 5.5 subagent | high |
 | Mechanical work: strings and translations, screenshot tests, throwaway probes, emulator checks | Claude Sonnet 5.5 | medium |
 | Measurements on the `benchmark` build, a batch of fixes in its own worktree | Codex `gpt-6.2-sol` | high |
-| Very complex work: Tatrak's own storage and encryption code, migrations, races | Claude Opus 5.5 subagent writes, Codex `gpt-6-astra` reviews | high / high |
+| Very complex work: Tatrak's own storage and encryption code, migrations, races | Claude Opus 5.5 subagent writes, Codex `gpt-6.2-astra` reviews | high / high |
 | Small fixes to storage or encryption code from a review whose findings already give the fix | Claude Opus 5.5 (main session) | xhigh |
-| A bug whose root cause the main session did not find | Codex `gpt-6-astra` | high |
+| A bug whose root cause the main session did not find | Codex `gpt-6.2-astra` | high |
 
 - The table covers every kind of work in a task, not only writing code. When the work changes
   kind (writing, emulator checks, docs), look at the table again; before running mechanical work
@@ -143,7 +168,7 @@ evidence: `knowledge/ops/egm-review-routing.md`.
 | 9: implementation-readiness, codebase-details | opus, high | gpt-6.2-sol, high |
 
 - A document about Tatrak's own storage or encryption (database, attachments, backup/import)
-  gets Codex `gpt-6-astra` at high instead of `gpt-6.2-sol` (`-m` and
+  gets Codex `gpt-6.2-astra` at high instead of `gpt-6.2-sol` (`-m` and
   `model_reasoning_effort` in the command below).
 - These are starting efforts. Raise a lens to xhigh only after a later round or the owner finds
   something it missed, and say so in `knowledge/log.md`.
@@ -235,4 +260,8 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
   that machine's agent memory, never in git.
   Messages from the other side:
   `podman exec tatrak-prosody python3 /send.py friend tester "text"`.
-- Don't use `pkill -f` with a pattern that also matches its own command line.
+- Don't use `pkill -f` or `pgrep -f` with a pattern that also matches its own command line:
+  write the pattern as `[G]radleWrapperMain`, so the shell running it does not match itself (on
+  2026-11-20 a wait loop with the plain pattern waited for itself for 45 minutes).
+- Every shell command an agent runs has a time limit (owner, 2026-11-20): a `timeout` on waits,
+  loops and long scripts, and the tool's own timeout on Gradle runs; never an unbounded wait.
