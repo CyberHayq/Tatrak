@@ -21,7 +21,7 @@ Repo: https://github.com/CyberHayq/Tatrak.git
 Builds:
   - versionName: 0.2.0
     versionCode: 5000101
-    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
+    commit: 8199304e4d3c097393be317678149b492a106a63
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -36,7 +36,7 @@ Builds:
 
   - versionName: 0.2.0
     versionCode: 5000102
-    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
+    commit: 8199304e4d3c097393be317678149b492a106a63
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -51,7 +51,7 @@ Builds:
 
   - versionName: 0.2.0
     versionCode: 5000103
-    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
+    commit: 8199304e4d3c097393be317678149b492a106a63
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -66,7 +66,7 @@ Builds:
 
   - versionName: 0.2.0
     versionCode: 5000104
-    commit: 2a5833924f7650c012e4ddeca89b47c1acec97fd
+    commit: 8199304e4d3c097393be317678149b492a106a63
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -81,7 +81,7 @@ Builds:
 
   - versionName: 0.3.0
     versionCode: 5000201
-    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    commit: 90172b763fd1eae86603e3b292c3d2a290da539e
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -96,7 +96,7 @@ Builds:
 
   - versionName: 0.3.0
     versionCode: 5000202
-    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    commit: 90172b763fd1eae86603e3b292c3d2a290da539e
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -111,7 +111,7 @@ Builds:
 
   - versionName: 0.3.0
     versionCode: 5000203
-    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    commit: 90172b763fd1eae86603e3b292c3d2a290da539e
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless
@@ -126,7 +126,7 @@ Builds:
 
   - versionName: 0.3.0
     versionCode: 5000204
-    commit: 8aa4072f6b6a26cf72cb3af288ef7e194acf1f92
+    commit: 90172b763fd1eae86603e3b292c3d2a290da539e
     sudo:
       - apt-get update
       - apt-get install -y openjdk-25-jdk-headless

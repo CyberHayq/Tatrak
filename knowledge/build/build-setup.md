@@ -147,6 +147,11 @@ normal.
 
 # F-Droid build test
 
+F-Droid declined the inclusion request because the project has less than three months of
+development (owner, reported 2026-11-20); a new request is due once the history is three months
+old (first Tatrak commit 2026-10-30, so not before the end of January 2027, as F-Droid counts it).
+Until then nobody installs Tatrak from F-Droid, and the recipe stays a draft.
+
 `tools/fdroid/am.cyberhayq.chat.yml` is the draft of the fdroiddata recipe (per-ABI builds like
 fdroiddata's `eu.siacs.conversations.yml`: JDK 25 from Debian through `sudo`, flavour
 `conversations` + `free`, one `output` glob per ABI, `binary:` from the GitHub release,
