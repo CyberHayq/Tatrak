@@ -59,6 +59,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executors;
@@ -694,6 +695,23 @@ public class JingleManager extends AbstractManager {
         this.service.updateConversationUi();
     }
 
+    // Tatrak: the call a proposal (bare JID, session id) turned into, in any state; it stays in
+    // connections until JingleRtpConnection.finish() has stored its terminal state, so a caller
+    // that finds nothing here then finds that state
+    public JingleRtpConnection findPromotedRtpConnection(final Jid with, final String sessionId) {
+        if (sessionId == null) {
+            return null;
+        }
+        for (final AbstractJingleConnection connection : this.connections.values()) {
+            if (connection instanceof JingleRtpConnection rtpConnection
+                    && sessionId.equals(rtpConnection.getId().sessionId)
+                    && with.asBareJid().equals(rtpConnection.getId().with.asBareJid())) {
+                return rtpConnection;
+            }
+        }
+        return null;
+    }
+
     public boolean fireJingleRtpConnectionStateUpdates() {
         for (final AbstractJingleConnection connection : this.connections.values()) {
             if (connection instanceof JingleRtpConnection jingleRtpConnection) {
@@ -722,11 +740,11 @@ public class JingleManager extends AbstractManager {
         }
     }
 
-    private void retractSessionProposal(final RtpSessionProposal rtpSessionProposal) {
-        retractSessionProposal(rtpSessionProposal, true);
+    private boolean retractSessionProposal(final RtpSessionProposal rtpSessionProposal) {
+        return retractSessionProposal(rtpSessionProposal, true);
     }
 
-    private void retractSessionProposal(
+    private boolean retractSessionProposal(
             final RtpSessionProposal rtpSessionProposal, final boolean refresh) {
         final var account = getAccount();
         Log.d(
@@ -734,9 +752,13 @@ public class JingleManager extends AbstractManager {
                 account.getJid().asBareJid()
                         + ": retracting rtp session proposal with "
                         + rtpSessionProposal.with);
-        // Tatrak: under the lock, like every other access to the map
+        // Tatrak: under the lock, like every other access to the map; a proposal another path
+        // already removed (timeout, reject, proceed) was finished there, so nothing more is done
         synchronized (this.rtpSessionProposals) {
-            this.rtpSessionProposals.remove(rtpSessionProposal);
+            if (this.rtpSessionProposals.remove(rtpSessionProposal) == null) {
+                Log.d(Config.LOGTAG, "rtp session proposal was already removed. not retracting");
+                return false;
+            }
         }
         rtpSessionProposal.callIntegration.retracted();
         if (refresh) {
@@ -753,6 +775,7 @@ public class JingleManager extends AbstractManager {
                 System.currentTimeMillis());
         getManager(JingleMessageManager.class)
                 .retract(rtpSessionProposal.with, rtpSessionProposal.sessionId);
+        return true;
     }
 
     public JingleRtpConnection initializeRtpSession(final Jid with, final Set<Media> media) {
@@ -974,6 +997,7 @@ public class JingleManager extends AbstractManager {
             // queued before them (MessageAcknowledgedProcessor), so an acknowledged proposal or a
             // call placed after the bind is not sent again
             final List<RtpSessionProposal> searching = new ArrayList<>();
+            final Object session = this.connection.getStreamSession();
             synchronized (this.rtpSessionProposals) {
                 for (final var entry : this.rtpSessionProposals.entrySet()) {
                     if (entry.getValue() == DeviceDiscoveryState.SEARCHING) {
@@ -982,7 +1006,7 @@ public class JingleManager extends AbstractManager {
                 }
             }
             if (!searching.isEmpty()) {
-                PROPOSAL_EXECUTOR.execute(() -> resendSessionProposals(searching));
+                PROPOSAL_EXECUTOR.execute(() -> resendSessionProposals(searching, session));
             }
         }
     }
@@ -998,19 +1022,33 @@ public class JingleManager extends AbstractManager {
         return null;
     }
 
-    private void resendSessionProposals(final List<RtpSessionProposal> proposals) {
+    // Tatrak: resent only in the stream-management session current at notifyRebound, if it still
+    // is, and only if the proposal was not sent in it yet (a call placed after the bind, an earlier
+    // resend, or a send a resume replayed); the connection's monitor keeps the session from
+    // changing between this check and the write
+    private void resendSessionProposals(
+            final List<RtpSessionProposal> proposals, final Object reboundSession) {
         synchronized (this.rtpSessionProposals) {
-            for (final RtpSessionProposal proposal : proposals) {
-                if (this.rtpSessionProposals.get(proposal) == DeviceDiscoveryState.SEARCHING) {
-                    Log.d(
-                            Config.LOGTAG,
-                            getAccount().getJid().asBareJid()
-                                    + ": resending session proposal to "
-                                    + proposal.with);
-                    this.sendSessionProposal(proposal);
+            synchronized (this.connection) {
+                final Object session = this.connection.getStreamSession();
+                for (final RtpSessionProposal proposal : proposals) {
+                    if (this.rtpSessionProposals.get(proposal) == DeviceDiscoveryState.SEARCHING
+                            && isResendDue(reboundSession, session, proposal.sentIn)) {
+                        Log.d(
+                                Config.LOGTAG,
+                                getAccount().getJid().asBareJid()
+                                        + ": resending session proposal to "
+                                        + proposal.with);
+                        this.sendSessionProposal(proposal);
+                    }
                 }
             }
         }
+    }
+
+    static boolean isResendDue(
+            final Object reboundSession, final Object session, final Object sentIn) {
+        return session != null && session == reboundSession && sentIn != session;
     }
 
     public void updateProposedSessionDiscovered(
@@ -1129,15 +1167,42 @@ public class JingleManager extends AbstractManager {
     }
 
     public TerminatedRtpSession getTerminalSessionState(final Jid with, final String sessionId) {
-        return this.terminatedSessions.getIfPresent(new PersistableSessionId(with, sessionId));
+        final var exact =
+                this.terminatedSessions.getIfPresent(new PersistableSessionId(with, sessionId));
+        if (exact != null || sessionId == null || !with.isBareJid()) {
+            return exact;
+        }
+        // Tatrak: a proposal (bare JID) that proceed turned into a call ends under the peer's full
+        // JID (JingleRtpConnection.finish), with the same session id
+        return terminalStateOfSession(this.terminatedSessions.asMap(), with, sessionId);
+    }
+
+    static TerminatedRtpSession terminalStateOfSession(
+            final Map<PersistableSessionId, TerminatedRtpSession> terminated,
+            final Jid bareWith,
+            final String sessionId) {
+        for (final var entry : terminated.entrySet()) {
+            final PersistableSessionId id = entry.getKey();
+            if (sessionId.equals(id.sessionId()) && bareWith.equals(id.with().asBareJid())) {
+                return entry.getValue();
+            }
+        }
+        return null;
     }
 
     private void sendSessionProposal(final RtpSessionProposal proposal) {
-        this.getManager(JingleMessageManager.class)
-                .propose(proposal.with, proposal.sessionId, proposal.media);
+        // Tatrak: remembers the stream-management session it was sent in (a send while unbound is
+        // queued in it and replayed if it resumes; a fresh bind starts another session, which
+        // resends it); callers hold the rtpSessionProposals lock
+        synchronized (this.connection) {
+            proposal.sentIn = this.connection.getStreamSession();
+            this.getManager(JingleMessageManager.class)
+                    .propose(proposal.with, proposal.sessionId, proposal.media);
+        }
     }
 
-    private record PersistableSessionId(Jid with, String sessionId) {
+    // Tatrak: package-private for terminalStateOfSession's test
+    record PersistableSessionId(Jid with, String sessionId) {
 
         public static PersistableSessionId of(final AbstractJingleConnection.Id id) {
             return new PersistableSessionId(id.with, id.sessionId);
@@ -1170,6 +1235,9 @@ public class JingleManager extends AbstractManager {
         public final String sessionId;
         public final Set<Media> media;
         private final CallIntegration callIntegration;
+        // Tatrak: the stream-management session the proposal was last sent in, guarded by
+        // rtpSessionProposals
+        private Object sentIn;
 
         private RtpSessionProposal(
                 final Jid with,
@@ -1236,7 +1304,17 @@ public class JingleManager extends AbstractManager {
         @Override
         public void onCallIntegrationDisconnect() {
             Log.d(Config.LOGTAG, "a phone call has just been started. retracting proposal");
-            retractSessionProposal(this.proposal);
+            if (retractSessionProposal(this.proposal)) {
+                return;
+            }
+            // Tatrak: proceed may have turned the proposal into a call meanwhile; the hangup goes
+            // to that call, as Telecom would have sent it a moment later
+            for (final AbstractJingleConnection connection : connections.values()) {
+                if (connection instanceof JingleRtpConnection rtpConnection
+                        && rtpConnection.getId().sessionId.equals(this.proposal.sessionId)) {
+                    rtpConnection.onCallIntegrationDisconnect();
+                }
+            }
         }
 
         @Override

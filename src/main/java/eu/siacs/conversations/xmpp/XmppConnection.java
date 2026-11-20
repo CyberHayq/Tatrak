@@ -193,6 +193,8 @@ public class XmppConnection implements Runnable {
     private boolean inSmacksSession = false;
     private boolean quickStartInProgress = false;
     private boolean isBound = false;
+    // Tatrak: see getStreamSession()
+    private Object streamSession = null;
     private boolean offlineMessagesRetrieved = false;
     private im.conversations.android.xmpp.model.streams.Features streamFeatures;
     private im.conversations.android.xmpp.model.streams.Features boundStreamFeatures;
@@ -916,7 +918,11 @@ public class XmppConnection implements Runnable {
             }
             if (bound != null) {
                 clearIqCallbacks();
-                this.isBound = true;
+                // Tatrak: a fresh bind starts a new session, see getStreamSession()
+                synchronized (this) {
+                    this.isBound = true;
+                    this.streamSession = new Object();
+                }
                 processNopStreamFeatures();
                 this.boundStreamFeatures = this.streamFeatures;
                 final Enabled streamManagementEnabled = bound.getExtension(Enabled.class);
@@ -2107,7 +2113,11 @@ public class XmppConnection implements Runnable {
                             changeStateTerminal(Account.State.BIND_FAILURE);
                             return;
                         }
-                        isBound = true;
+                        // Tatrak: a fresh bind starts a new session, see getStreamSession()
+                        synchronized (XmppConnection.this) {
+                            isBound = true;
+                            streamSession = new Object();
+                        }
                         final Jid assignedJid = bind.getJid();
                         checkAssignedDomain(assignedJid);
                         if (account.setJid(assignedJid)) {
@@ -2816,6 +2826,18 @@ public class XmppConnection implements Runnable {
 
     public Features getFeatures() {
         return this.features;
+    }
+
+    /**
+     * Tatrak: the session a stanza sent now belongs to: new on every fresh bind, kept by a resume
+     * (whose replay resends the session's unacknowledged stanzas, also those queued while unbound);
+     * null before the first bind. JingleManager records the session a call proposal went to;
+     * holding this monitor across this call and the send keeps the session the same, since it
+     * changes only under it.
+     */
+    @Nullable
+    public synchronized Object getStreamSession() {
+        return streamSession;
     }
 
     public im.conversations.android.xmpp.model.streams.Features getStreamFeatures() {
