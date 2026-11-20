@@ -10,6 +10,9 @@
   history are drawn in the new interface.
 
 ### Chat
+- Every confirmation of a destructive action (delete, clear history, leave, block, disable an
+  account and others) says what is deleted where, who sees it and whether it can be undone; the
+  chat menu's Archive hides the chat in the archive with Undo.
 - Status rows as in the classic screen: do-not-disturb, the contact's night time, who has read up
   to a message in private groups, and a "Read by" list in the message info.
 - Every notice of the classic chat (disabled account, blocked contact, add back, group errors,
