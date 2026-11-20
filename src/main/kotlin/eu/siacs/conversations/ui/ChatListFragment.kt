@@ -8,6 +8,7 @@ import am.cyberhayq.chat.ui.chatlist.ChatListActions
 import am.cyberhayq.chat.ui.chatlist.ChatListScreen
 import am.cyberhayq.chat.ui.chatlist.ChatListViewModel
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import am.cyberhayq.chat.update.Updater
 import android.animation.Animator
 import android.content.Intent
 import android.graphics.Bitmap
@@ -148,6 +149,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     override fun onStart() {
         super.onStart()
         refresh()
+        Updater.checkIfDue(requireContext())
     }
 
     override fun refresh() {

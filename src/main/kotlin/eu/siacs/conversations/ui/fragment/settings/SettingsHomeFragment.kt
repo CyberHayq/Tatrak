@@ -131,6 +131,14 @@ class SettingsHomeFragment : Fragment(), OnBackendConnected {
             ),
             listOf(
                 SettingsRow(
+                    R.drawable.ic_new_releases_24dp,
+                    getString(R.string.tatrak_updates),
+                    getString(R.string.tatrak_update_current_version, BuildConfig.VERSION_NAME),
+                    Color(0xFF34A853),
+                ) {
+                    open(UpdatesSettingsFragment())
+                },
+                SettingsRow(
                     R.drawable.ic_help_24dp,
                     getString(R.string.title_activity_about_x, BuildConfig.APP_NAME),
                     null,

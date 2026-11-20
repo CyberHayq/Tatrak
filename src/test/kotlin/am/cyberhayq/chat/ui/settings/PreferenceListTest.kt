@@ -86,6 +86,7 @@ class PreferenceListTest {
                 "privacy" to R.xml.preferences_privacy,
                 "security" to R.xml.preferences_security,
                 "up" to R.xml.preferences_up,
+                "updates" to R.xml.tatrak_preferences_updates,
             )) {
             show(xml)
             capture(name)
@@ -97,6 +98,15 @@ class PreferenceListTest {
     fun notificationsDark() {
         show(R.xml.preferences_notifications, dark = true)
         capture("notifications_dark")
+    }
+
+    /** The updates page in the dark: the automatic check is on by default (until the F-Droid submission). */
+    @Test
+    @Config(qualifiers = "+night")
+    fun updatesDark() {
+        show(R.xml.tatrak_preferences_updates, dark = true)
+        compose.onNodeWithText(context.getString(R.string.tatrak_update_auto)).assertIsOn()
+        capture("updates_dark")
     }
 
     /** A tap on a switch writes it through the Preference and redraws its dependents; a disabled row ignores taps. */

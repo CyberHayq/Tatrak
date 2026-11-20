@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.chatlist
 
+import am.cyberhayq.chat.update.UpdateNotice
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.EaseOutQuint
@@ -402,6 +403,7 @@ fun ChatListScreen(
                         selectedIndex = pagerState.currentPage,
                         onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
                     )
+                    UpdateNotice()
                 }
             }
             Scaffold(

@@ -18,6 +18,11 @@
 ### Calls
 - Fixes in call setup after a reconnect and on the call screen.
 
+### Updates
+- The app checks the GitHub releases for a newer version once a day (on by default, never while
+  Tor is on, off in Settings → Updates), shows the release notes, downloads the APK for the
+  device and installs it only when it carries Tatrak's release signature.
+
 ## 0.3.0
 
 ### Interface

@@ -154,6 +154,11 @@
         <!-- Tatrak: local database migration/recovery, not an exported entry point. -->
         <activity android:name="am.cyberhayq.chat.storage.DatabaseStorageActivity"
             android:exported="false" />
+        <!-- Tatrak: update dialogs over the calling screen; singleTop takes the installer's status -->
+        <activity android:name="am.cyberhayq.chat.update.UpdateActivity"
+            android:exported="false"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.Tatrak.Viewer" />
         <activity
             android:name=".ui.UnifiedPushDistributor"
             android:enabled="false"

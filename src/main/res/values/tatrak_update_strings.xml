@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_updates">Updates</string>
+    <string name="tatrak_update_auto">Check for updates automatically</string>
+    <string name="tatrak_update_auto_summary">Once a day, from the app\'s GitHub releases. GitHub sees your IP address and the app version. Never while Tor is on.</string>
+    <string name="tatrak_update_check_now">Check now</string>
+    <string name="tatrak_update_current_version">Installed version %s</string>
+    <string name="tatrak_update_available">Version %s is available</string>
+    <string name="tatrak_update_action">Update</string>
+    <string name="tatrak_update_later">Later</string>
+    <string name="tatrak_update_close">Close</string>
+    <string name="tatrak_update_cancel">Cancel</string>
+    <string name="tatrak_update_checking">Checking for updates…</string>
+    <string name="tatrak_update_up_to_date">You have the latest version (%s).</string>
+    <string name="tatrak_update_downloading">Downloading version %s…</string>
+    <string name="tatrak_update_installing">Waiting for the system installer…</string>
+    <string name="tatrak_update_failed">Update failed</string>
+    <string name="tatrak_update_test_build">This copy is a test build, not signed with the release key: the update can be downloaded and checked, but it will not be installed.</string>
+    <string name="tatrak_update_allow_installs">Allow Tatrak to install apps, then tap Update again.</string>
+    <string name="tatrak_update_error_tor">Updates are not checked while Tor is on: the request to GitHub would not go through Tor.</string>
+    <string name="tatrak_update_error_network">Could not reach GitHub. Check the connection and try again.</string>
+    <string name="tatrak_update_error_release">The release on GitHub has no app file for this device.</string>
+    <string name="tatrak_update_error_size">The downloaded file has the wrong size; it was deleted.</string>
+    <string name="tatrak_update_error_package">The downloaded file is not Tatrak; it was deleted.</string>
+    <string name="tatrak_update_error_signature">The downloaded file is not signed with Tatrak\'s release key; it was deleted.</string>
+    <string name="tatrak_update_error_not_release_build">This copy is a test build, not signed with the release key, so it cannot install updates. The downloaded file was deleted.</string>
+    <string name="tatrak_update_error_version">The downloaded file is not newer than the installed app; it was deleted.</string>
+    <string name="tatrak_update_error_install">The system installer refused the update: %s</string>
+</resources>

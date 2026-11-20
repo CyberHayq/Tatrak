@@ -76,6 +76,7 @@ Details: [database encryption](knowledge/build/local-db-encryption.md) ·
 | Select several messages in a chat; chat preview on a long press of its avatar | 🧪 |
 | Encrypted audio and video calls, call list | 🧪 |
 | Backups, including import of monocles chat backups | 🧪 |
+| Updates from GitHub releases inside the app, release signature checked | 🧪 |
 
 Several accounts, group chats and push notifications through UnifiedPush come from Conversations.
 Available features depend on the server. Nothing is tested on a wide range of real phones yet.
