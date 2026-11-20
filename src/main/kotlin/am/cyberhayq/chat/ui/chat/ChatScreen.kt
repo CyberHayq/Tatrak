@@ -313,6 +313,54 @@ interface ChatActions {
     fun listReady() {}
 }
 
+/** Does nothing (no read markers either): the chat preview's actions and the tests' base. */
+internal open class NoChatActions : ChatActions {
+    override fun back() = Unit
+    override fun openDetails() = Unit
+    override fun openSearch() = Unit
+    override fun toggleMute() = Unit
+    override fun togglePin() = Unit
+    override fun openClassic() = Unit
+    override fun bannerAction(banner: ChatBanner) = Unit
+    override fun selectEncryption(itemId: Int) = Unit
+    override fun send() = Unit
+    override fun attachGallery() = Unit
+    override fun attachFile() = Unit
+    override fun attachLocation() = Unit
+    override fun attachContact() = Unit
+    override fun takePhoto() = Unit
+    override fun recordVideo() = Unit
+    override fun startRecording() = false
+    override fun stopRecording(send: Boolean) = Unit
+    override fun loadMore() = Unit
+    override fun markRead(uuid: String) = Unit
+    override fun reply(uuid: String) = Unit
+    override fun cancelReply() = Unit
+    override fun edit(uuid: String) = Unit
+    override fun cancelEdit() = Unit
+    override fun copy(uuid: String) = Unit
+    override fun retry(uuid: String) = Unit
+    override fun share(uuid: String) = Unit
+    override fun toggleReaction(uuid: String, emoji: String) = Unit
+    override fun addReaction(uuid: String, emoji: String) = Unit
+    override fun openMedia(uuid: String) = Unit
+    override fun download(uuid: String) = Unit
+    override fun saveFile(uuid: String) = Unit
+    override fun seekVoice(uuid: String, fraction: Float) = Unit
+    override fun cancelTransfer(uuid: String) = Unit
+    override fun delete(uuid: String) = Unit
+    override fun setWallpaper(spec: String?) = Unit
+    override fun pickWallpaperPhoto() = Unit
+    override fun sendSticker(file: File) = Unit
+    override fun importStickers() = Unit
+    override fun shareStickers() = Unit
+    override fun addSticker(uuid: String) = Unit
+    override fun openLocation(uuid: String) = Unit
+    override fun toggleVoice(uuid: String) = Unit
+    override fun openLink(url: String) = Unit
+    override suspend fun loadThumbnail(uuid: String, sizePx: Int): Bitmap? = null
+}
+
 /**
  * Scroll to and briefly highlight this message once it is in the list (a search result).
  * [id] tells two requests for the same message apart.
@@ -346,6 +394,10 @@ fun ChatScreen(
     onNoticeShown: () -> Unit = {},
     /** Mentions already shown or jumped to; dropped from the "@" button. */
     seenMentions: Set<String> = emptySet(),
+    /** Read-only, for [ChatPreview]: no composer, no banner, no header buttons, no message menu or selection. */
+    preview: Boolean = false,
+    /** The message list's scroll state, when the caller must see it ([ChatPreview]: a touch that stops a fling). */
+    listState: LazyListState? = null,
 ) {
     val menu = remember(state.conversationUuid) { mutableStateOf<Pair<String, Rect>?>(null) }
     val menuKey = remember(menu) { derivedStateOf { menu.value?.first } }
@@ -410,7 +462,7 @@ fun ChatScreen(
                                 },
                         )
                     } else {
-                        ChatTopBar(state.header, state.composer.encryption, actions) { wallpaperOpen = true }
+                        ChatTopBar(state.header, state.composer.encryption, actions, preview) { wallpaperOpen = true }
                     }
                 }
                 val messages: @Composable (PaddingValues?) -> Unit = { bars ->
@@ -418,15 +470,17 @@ fun ChatScreen(
                         MessageList(
                             state, actions, voice, focus, onFocused, seenMentions,
                             selection = remember(selected) { selected.map { it.key } },
-                            onSelectionChange = { selection = it },
-                            onMenu = { item, bubble -> if (!selecting) menu.value = item.key to bounds(screen[0], bubble) },
+                            onSelectionChange = { if (!preview) selection = it },
+                            onMenu = { item, bubble -> if (!selecting && !preview) menu.value = item.key to bounds(screen[0], bubble) },
                             bars = bars,
                             blurred = backdrop != null,
+                            preview = preview,
+                            external = listState,
                         )
                     }
                 }
                 val composer: @Composable (Modifier) -> Unit = { composerModifier ->
-                    Composer(
+                    if (!preview) Composer(
                         composer = state.composer,
                         input = input,
                         onInputChange = onInputChange,
@@ -467,7 +521,7 @@ fun ChatScreen(
                     Column(Modifier.fillMaxSize()) {
                         header()
                         // above the list, not over it: a banner that wraps to two lines pushes the messages down
-                        state.banner?.let { ChatBannerBar(it, state.blockMenu, actions) }
+                        state.banner?.takeIf { !preview }?.let { ChatBannerBar(it, state.blockMenu, actions) }
                         Box(Modifier.weight(1f).fillMaxWidth()) {
                             messages(null)
                             ChatNotice(notice, onNoticeShown, Modifier.align(Alignment.TopCenter).padding(top = 12.dp))
@@ -504,16 +558,17 @@ fun ChatScreen(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatActions, onWallpaper: () -> Unit) {
+private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatActions, preview: Boolean, onWallpaper: () -> Unit) {
     // same header as the chat list (Telegram's default day theme: white bar, dark text)
     val bar = TatrakTheme.chatColors
     val onBar = bar.onTopBar
-    StatusBarIcons(dark = bar.topBar.luminance() > 0.5f)
+    // the preview's dialog sits over the list, which owns the status bar; its dispose would reset it
+    if (!preview) StatusBarIcons(dark = bar.topBar.luminance() > 0.5f)
     var menuOpen by remember { mutableStateOf(false) }
     var encryptionOpen by remember { mutableStateOf(false) }
     TopAppBar(
         // landscape: keep the actions clear of a side navigation bar or cutout
-        windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
+        windowInsets = if (preview) WindowInsets(0) else WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         colors =
             TopAppBarDefaults.topAppBarColors(
                 containerColor = bar.topBar,
@@ -522,7 +577,7 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
                 actionIconContentColor = onBar,
             ),
         navigationIcon = {
-            IconButton(onClick = actions::back) {
+            if (!preview) IconButton(onClick = actions::back) {
                 Icon(
                     painterResource(R.drawable.ic_arrow_back_24dp),
                     contentDescription = stringResource(R.string.tatrak_chat_back),
@@ -532,7 +587,7 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.clickable(onClick = actions::openDetails),
+                modifier = if (preview) Modifier else Modifier.clickable(onClick = actions::openDetails),
             ) {
                 Box(Modifier.size(40.dp)) {
                     LetterAvatar(
@@ -577,6 +632,7 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
             }
         },
         actions = {
+            if (preview) return@TopAppBar
             if (header.canCall && header.canVideo && !header.ongoingCall) {
                 IconButton(onClick = { actions.call(true) }) {
                     Icon(painterResource(R.drawable.ic_videocam_24dp), contentDescription = stringResource(R.string.video_call))
@@ -716,9 +772,12 @@ private fun MessageList(
     bars: PaddingValues? = null,
     /** The bars blur the list under them: no fade at the bars, the messages stay visible beside and (blurred) under them. */
     blurred: Boolean = false,
+    /** [ChatPreview]: never marks anything read, whatever [actions] does, and has no selection. */
+    preview: Boolean = false,
+    external: LazyListState? = null,
 ) {
     val padded = bars != null
-    val listState = rememberLazyListState()
+    val listState = external ?: rememberLazyListState()
     val scope = rememberCoroutineScope()
     val items by rememberUpdatedState(state.items)
     val isGroup = state.header.isGroup
@@ -754,7 +813,7 @@ private fun MessageList(
             }
             .filterNotNull()
             .distinctUntilChanged()
-            .collect(actions::markRead)
+            .collect { if (!preview) actions.markRead(it) }
     }
 
     Box(Modifier.fillMaxSize()) {
@@ -804,7 +863,9 @@ private fun MessageList(
         val currentOnSelectionChange by rememberUpdatedState(onSelectionChange)
         // set by a row's long press, read by the list's pointer handler for the rest of that gesture
         val drag = remember { arrayOfNulls<SelectionDrag>(1) }
-        val onSelect: (MessageItem) -> Unit = remember {
+        val onSelect: (MessageItem) -> Unit = remember(preview) {
+            // preview: a long press arms no selection drag, which would take the gesture from the list
+            if (preview) return@remember { _ -> }
             { item ->
                 val next = toggled(currentSelection, item.key)
                 // from an unselected row the drag selects, even when the cap kept this row out
@@ -831,9 +892,12 @@ private fun MessageList(
                                 else -> Modifier.fadeUnderBars(TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Top).add(WindowInsets(top = 4.dp)).asPaddingValues())
                             }
                         )
-                        .pointerInput(listState) {
-                            selectionGestures(listState, drag, scope, { currentSelection }, { currentItems }, padded) { currentOnSelectionChange(it) }
-                        },
+                        .then(
+                            if (preview) Modifier
+                            else Modifier.pointerInput(listState) {
+                                selectionGestures(listState, drag, scope, { currentSelection }, { currentItems }, padded) { currentOnSelectionChange(it) }
+                            }
+                        ),
             ) {
                 items(state.items, key = { it.key }, contentType = { it.contentType }) { item ->
                     when (item) {

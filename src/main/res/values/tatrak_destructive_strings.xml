@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Confirmations of destructive actions: each says what happens, where, who sees it and whether it can be undone -->
+<resources>
+    <!-- delete a chat (chat list, profile): XmppConnectionService.archiveConversation -->
+    <string name="tatrak_delete_chat_with">Delete chat with %s?</string>
+    <string name="tatrak_delete_chat_explained">The chat disappears from your list on this device. Its messages stay on this device and come back if you open the chat again or %1$s writes. %1$s is not told, but a pending contact request from them is declined.</string>
+    <string name="tatrak_delete_chats_explained">They disappear from your list on this device. Their messages stay here and come back if you open the chats again. You leave the groups among them, and their members see that. Contacts are not told, but pending contact requests from them are declined.</string>
+    <string name="tatrak_leave_group_title">Leave %s?</string>
+    <string name="tatrak_leave_group_explained">You leave the group, and its members see that. It disappears from your list here and on your other devices. Its messages stay on this device and come back if you join again. If you are offline now, the group comes back when you reconnect.</string>
+    <!-- the "Leave" banner of a group you could not join (not found, timeout, banned, members-only) -->
+    <string name="tatrak_leave_unjoined_explained">You are not in the group now, so nobody is told. It disappears from your list here and on your other devices. Its messages stay on this device and come back if you join again.</string>
+    <!-- the "Leave" banner of a group that was destroyed -->
+    <string name="tatrak_leave_destroyed_explained">The group no longer exists on the server. It disappears from your list and its bookmark is removed on all your devices. Its messages stay on this device.</string>
+
+    <!-- clear chat history (chat menu, profile) -->
+    <string name="tatrak_clear_history_explained">All messages in this chat are deleted from this device, with their files unless other messages use them. This can\'t be undone. The other side, your other devices and the server archive keep their copies, and these messages are not downloaded here again.</string>
+    <string name="tatrak_clear_history_close_chat">Also delete the chat from my list</string>
+    <string name="tatrak_clear_history_leave_group">Also leave the group</string>
+
+    <!-- delete a file: message menu and media browser; FileBackend deletes it even if other messages use it -->
+    <plurals name="tatrak_delete_files_local">
+        <item quantity="one">The file is deleted from this device; its message stays and shows it as deleted.</item>
+        <item quantity="other">%d files are deleted from this device; their messages stay and show them as deleted.</item>
+    </plurals>
+    <plurals name="tatrak_delete_file_also">
+        <item quantity="one">It also disappears from %d other message that shows it, in this or another chat.</item>
+        <item quantity="other">It also disappears from %d other messages that show it, in this or other chats.</item>
+    </plurals>
+    <plurals name="tatrak_delete_files_also">
+        <item quantity="one">They also disappear from %d other message that shows them, in this or another chat.</item>
+        <item quantity="other">They also disappear from %d other messages that show them, in this or other chats.</item>
+    </plurals>
+    <string name="tatrak_delete_file_copies">Copies on the server and on other devices stay.</string>
+
+    <!-- contact requests -->
+    <string name="tatrak_reject_request_title">Reject the request from %s?</string>
+    <string name="tatrak_reject_request_explained">%1$s asked to see when you are online. Their app is told that you declined. The chat stays, and they can ask again.</string>
+
+    <!-- block and unblock (BlockContactDialog, also the "Unblock" banner) -->
+    <string name="tatrak_block_contact_explained">Block %1$s? They can no longer message or call you, and to them you appear offline. Your chat with them closes here and on your other devices; its messages stay on this device. %1$s is not told.</string>
+    <string name="tatrak_unblock_contact_explained">Unblock %1$s? They can message and call you again. A chat closed by the block comes back when one of you writes.</string>
+    <string name="tatrak_block_participant_explained">Block %1$s? Your server stops delivering their group messages and private messages to you, on all your devices, while they use this nickname. %1$s is not told.</string>
+    <string name="tatrak_unblock_participant_explained">Unblock %1$s? You get their group messages and private messages again.</string>
+    <string name="tatrak_block_domain_explained">Block everyone on %1$s? Nobody with an address on this server can message or call you, and to them you appear offline. Your chats with them close here and on your other devices; their messages stay on this device. Nobody is told.</string>
+    <string name="tatrak_unblock_domain_explained">Unblock %1$s? Everyone on this server can message and call you again. Closed chats come back when someone writes.</string>
+
+    <!-- contacts and bookmarks -->
+    <string name="tatrak_delete_contact_explained">Delete %1$s from your contacts? You stop seeing each other\'s online status, and their app learns that. The change reaches your other devices. The chat and its messages stay.</string>
+    <string name="tatrak_remove_bookmark_explained">Remove the bookmark for %1$s? It is removed on all your devices. Nobody else is told.</string>
+    <string name="tatrak_remove_bookmark_and_leave_explained">Remove the bookmark for %1$s and leave the group? The bookmark is removed on all your devices, and the members see you leave. Its messages stay on this device.</string>
+    <string name="tatrak_remove_and_leave">Remove and leave</string>
+
+    <!-- group administration -->
+    <string name="tatrak_remove_membership_title">Remove %s from members?</string>
+    <string name="tatrak_remove_membership_members_only">This group is members-only, so %1$s leaves it now and can come back only if invited again. Members see that. Their messages stay.</string>
+    <string name="tatrak_remove_membership_open">The group is open, so %1$s can still be in it and join, but no longer as a member. Members see the change. Their messages stay.</string>
+    <string name="tatrak_remove">Remove</string>
+    <string name="tatrak_ban_explained">They are removed from the group and banned: they can\'t join again until an admin lifts the ban. Members see it.</string>
+    <string name="tatrak_destroy_group_explained">The group is deleted on the server for everyone: all members are removed and nobody can join it any more. This can\'t be undone. Messages stay on each member\'s device.</string>
+    <string name="tatrak_destroy_channel_explained">The channel is deleted on the server for everyone: all participants are removed and nobody can join it any more. This can\'t be undone. Messages stay on each participant\'s device.</string>
+
+    <!-- accounts -->
+    <string name="tatrak_disable_account_title">Disable %s?</string>
+    <string name="tatrak_disable_account_explained">The account goes offline on this device until you turn it back on: no messages or calls arrive here, contacts see you offline, and you leave its groups. Nothing is deleted. Messages sent to you meanwhile arrive later if your server keeps them. Your other devices are not affected.</string>
+    <string name="tatrak_disable_all_explained">The accounts go offline on this device until you turn them back on: no messages or calls arrive here, contacts see you offline, and you leave their groups. Nothing is deleted. Messages sent to you meanwhile arrive later if your server keeps them. Your other devices are not affected.</string>
+    <string name="tatrak_disable">Disable</string>
+    <string name="tatrak_delete_account_explained">All chats, messages, files and encryption keys of this account are erased from this device. This can\'t be undone. Without the box below, the account stays on the server with its contacts, groups and message archive, and you can log in again. With it, the server deletes the account too.</string>
+    <string name="tatrak_delete_avatar_explained">Delete your avatar? It is removed from the server, so your contacts and your other devices stop getting it. Some apps may still show a saved copy.</string>
+
+    <!-- Settings, automatic message deletion: a new limit applies to every chat at once -->
+    <string name="tatrak_auto_delete_title">Delete old messages?</string>
+    <string name="tatrak_auto_delete_explained">Messages older than the limit \"%1$s\" are deleted from this device now, in every chat, with their files unless other messages use them; newer ones once they reach that age. This can\'t be undone. The server archive, the other side and your other devices keep their copies, and these messages are not downloaded here again.</string>
+</resources>

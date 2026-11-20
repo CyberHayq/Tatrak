@@ -12,6 +12,8 @@ public class ViewProfilePictureActivity extends ActionBarActivity {
 
     private ActivityViewProfilePictureBinding binding;
 
+    private ProfilePictureCompose compose;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -21,6 +23,9 @@ public class ViewProfilePictureActivity extends ActionBarActivity {
 
         setSupportActionBar(binding.toolbar);
         configureActionBar(getSupportActionBar());
+        // Tatrak: the Compose screen over the hidden classic layout; see ProfilePictureCompose
+        this.compose = new ProfilePictureCompose(this);
+        this.compose.attach(binding.getRoot());
     }
 
     @Override
@@ -41,8 +46,10 @@ public class ViewProfilePictureActivity extends ActionBarActivity {
         final var displayName = intent.getStringExtra(EXTRA_DISPLAY_NAME);
         final var file = FileBackend.getAvatarFile(this, avatar);
         // Tatrak: the avatar is encrypted at rest; one the store cannot open shows nothing
-        this.binding.imageView.setImageBitmap(
-                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(this).decodeBitmap(file, null));
+        final var bitmap =
+                am.cyberhayq.chat.storage.media.EncryptedMediaStore.get(this).decodeBitmap(file, null);
+        this.binding.imageView.setImageBitmap(bitmap);
         setTitle(displayName);
+        this.compose.show(displayName, bitmap);
     }
 }

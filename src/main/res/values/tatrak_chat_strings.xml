@@ -43,10 +43,10 @@
     <string name="tatrak_stickers">Stickers</string>
     <string name="tatrak_stickers_add">Add stickers</string>
     <string name="tatrak_stickers_empty">Add pictures from your gallery to send them as stickers.</string>
-    <string name="tatrak_sticker_delete">Delete this sticker from your set?</string>
+    <string name="tatrak_sticker_delete">Delete this sticker from your set? It is deleted from this device only; stickers you already sent stay in the chats.</string>
     <string name="tatrak_stickers_share">Share my stickers</string>
     <string name="tatrak_stickers_delete_pack">Delete pack</string>
-    <string name="tatrak_stickers_delete_pack_confirm">Delete this sticker pack?</string>
+    <string name="tatrak_stickers_delete_pack_confirm">Delete this sticker pack? It is deleted from this device only; stickers you already sent and pack links you shared keep working.</string>
     <string name="tatrak_sticker_add_mine">Add to my stickers</string>
     <string name="tatrak_sticker_added">Added to your stickers</string>
     <string name="tatrak_stickers_sharing">Uploading your stickers…</string>

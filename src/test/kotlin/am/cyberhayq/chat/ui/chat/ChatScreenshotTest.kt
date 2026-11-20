@@ -56,10 +56,15 @@ import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.input.TextFieldValue
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
+import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
+import androidx.compose.ui.test.isDialog
+import androidx.compose.ui.test.swipeDown
 import eu.siacs.conversations.R
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import kotlin.math.abs
 import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
@@ -299,6 +304,30 @@ class ChatScreenshotTest {
         capture("chat_menu", darkTheme = false, tap = "Yes, an hour ago") { privateChat(it) }
         compose.onNodeWithContentDescription("More reactions").assertExists()
         compose.onNodeWithContentDescription("Cancel selection").assertDoesNotExist()
+    }
+
+    /** The user's frequently used reactions form a second row under the six suggestions; a tap reacts with one. */
+    @Test
+    fun chatMenuFrequentReactions() = frequentReactions("chat_menu_frequent", darkTheme = false)
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun chatMenuFrequentReactionsDark() = frequentReactions("chat_menu_frequent_dark", darkTheme = true)
+
+    private fun frequentReactions(name: String, darkTheme: Boolean) {
+        val context = androidx.test.core.app.ApplicationProvider.getApplicationContext<Application>()
+        // 😮 is a suggestion already: it stays out of the second row (the sample chat shows 👍 and 🔥 chips, so neither is used here)
+        listOf("🎉", "🎉", "🙏", "😮", "😮", "😮", "🤝").forEach { FrequentReactions.record(context, it) }
+        val toggled = mutableListOf<String>()
+        val actions = object : ChatActions by FakeActions {
+            override fun toggleReaction(uuid: String, emoji: String) { toggled += emoji }
+        }
+        capture(name, darkTheme = darkTheme, actions = actions, tap = "Yes, an hour ago") { privateChat(it) }
+        compose.onAllNodesWithText("😮").assertCountEquals(1)
+        compose.onNodeWithText("🙏").assertExists()
+        compose.onNodeWithText("🤝").assertExists()
+        compose.onNodeWithText("🎉").performClick()
+        assertEquals(listOf("🎉"), toggled)
     }
 
     /** An encrypted message kept after an unverified request to delete it. */
@@ -965,6 +994,79 @@ class ChatScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }
 
+    // ---- chat preview: long press on a chat list avatar ----
+
+    @Test fun chatPreviewLight() = preview("chat_preview_light", darkTheme = false)
+
+    @Test @Config(qualifiers = "+night")
+    fun chatPreviewDark() = preview("chat_preview_dark", darkTheme = true)
+
+    private class ReadCounter : NoChatActions() {
+        var reads = 0
+
+        override fun markRead(uuid: String) {
+            reads++
+        }
+    }
+
+    /** No composer, no header buttons, nothing marked read, nothing opened by just looking. */
+    @OptIn(ExperimentalRoborazziApi::class)
+    private fun preview(name: String, darkTheme: Boolean) {
+        val actions = ReadCounter()
+        var opened = 0
+        compose.setContent {
+            TatrakTheme(darkTheme = darkTheme) {
+                ChatPreview(privateChat(Samples(currentTextPalette())), actions, onOpen = { opened++ }, onDismiss = {})
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithText("This one failed", useUnmergedTree = true).assertIsDisplayed()
+        compose.onNodeWithContentDescription("Back").assertDoesNotExist()
+        compose.onNodeWithContentDescription("More options").assertDoesNotExist()
+        compose.onNode(hasSetTextAction()).assertDoesNotExist()
+        captureScreenRoboImage("build/outputs/roborazzi/$name.png")
+        assertEquals(0, actions.reads)
+        assertEquals(0, opened)
+    }
+
+    /** A drag scrolls the chat and opens nothing; a tap, even on a bubble, opens it; neither marks anything read. */
+    @Test fun chatPreviewTapOpensDragScrolls() {
+        val actions = ReadCounter()
+        var opened = 0
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                ChatPreview(longGroupChat(Samples(currentTextPalette())), actions, onOpen = { opened++ }, onDismiss = {})
+            }
+        }
+        compose.waitForIdle()
+        fun top() = compose.onNodeWithText("Message number 17", useUnmergedTree = true).getBoundsInRoot().top
+        val before = top()
+        compose.onNode(isDialog()).performTouchInput { swipeDown(startY = centerY - 150f, endY = centerY + 150f) }
+        compose.waitForIdle()
+        assertTrue("${top()} > $before", top() > before)
+        assertEquals(0, opened)
+        // held on a message and let go in place: a long press, not a tap (it would open the chat and mark it read)
+        compose.onNodeWithText("Message number 17", useUnmergedTree = true).performTouchInput { longClick() }
+        compose.waitForIdle()
+        assertEquals(0, opened)
+        // a touch that stops a fling belongs to the list, it opens nothing
+        compose.mainClock.autoAdvance = false
+        compose.onNode(isDialog()).performTouchInput { swipeDown(startY = centerY - 200f, endY = centerY + 200f, durationMillis = 60) }
+        compose.mainClock.advanceTimeBy(48)
+        val flingTop = top()
+        compose.onNode(isDialog()).performTouchInput { click(center) }
+        compose.mainClock.advanceTimeBy(1_000)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertEquals(0, opened)
+        // the list moved little after the touch: it was the fling's touch (the guard is shown by removing it, which fails above)
+        assertTrue("fling stopped at $flingTop, now ${top()}", abs((top() - flingTop).value) < 150f)
+        compose.onNode(isDialog()).performTouchInput { click(center) }
+        compose.waitForIdle()
+        assertEquals(1, opened)
+        assertEquals(0, actions.reads)
+    }
+
     // ---- floating bars (step 4): header, banner and composer pills over the messages ----
 
     @Test fun chatFloatingGlassLight() = capture("chat_floating_glass_light", darkTheme = false, style = TatrakStyle.GLASS, floating = true) { privateChat(it) }
@@ -1421,51 +1523,7 @@ class ChatScreenshotTest {
             )
     }
 
-    internal object FakeActions : ChatActions {
-        override fun back() = Unit
-        override fun openDetails() = Unit
-        override fun openSearch() = Unit
-        override fun toggleMute() = Unit
-        override fun togglePin() = Unit
-        override fun openClassic() = Unit
-        override fun bannerAction(banner: ChatBanner) = Unit
-        override fun selectEncryption(itemId: Int) = Unit
-        override fun send() = Unit
-        override fun attachGallery() = Unit
-        override fun attachFile() = Unit
-        override fun attachLocation() = Unit
-        override fun attachContact() = Unit
-        override fun takePhoto() = Unit
-        override fun recordVideo() = Unit
-        override fun startRecording() = false
-        override fun stopRecording(send: Boolean) = Unit
-        override fun loadMore() = Unit
-        override fun markRead(uuid: String) = Unit
-        override fun reply(uuid: String) = Unit
-        override fun cancelReply() = Unit
-        override fun edit(uuid: String) = Unit
-        override fun cancelEdit() = Unit
-        override fun copy(uuid: String) = Unit
-        override fun retry(uuid: String) = Unit
-        override fun share(uuid: String) = Unit
-        override fun toggleReaction(uuid: String, emoji: String) = Unit
-        override fun addReaction(uuid: String, emoji: String) = Unit
-        override fun openMedia(uuid: String) = Unit
-        override fun download(uuid: String) = Unit
-        override fun saveFile(uuid: String) = Unit
-        override fun seekVoice(uuid: String, fraction: Float) = Unit
-        override fun cancelTransfer(uuid: String) = Unit
-        override fun delete(uuid: String) = Unit
-        override fun setWallpaper(spec: String?) = Unit
-        override fun pickWallpaperPhoto() = Unit
-        override fun sendSticker(file: java.io.File) = Unit
-        override fun importStickers() = Unit
-        override fun shareStickers() = Unit
-        override fun addSticker(uuid: String) = Unit
-        override fun openLocation(uuid: String) = Unit
-        override fun toggleVoice(uuid: String) = Unit
-        override fun openLink(url: String) = Unit
-
+    internal object FakeActions : NoChatActions() {
         override suspend fun loadThumbnail(uuid: String, sizePx: Int): Bitmap =
             gradient(sizePx, if (uuid == "i1") 0xFF4A90C2.toInt() else 0xFFC27A4A.toInt())
 

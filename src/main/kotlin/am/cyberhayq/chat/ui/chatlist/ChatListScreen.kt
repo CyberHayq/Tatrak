@@ -11,6 +11,8 @@ import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.ui.unit.IntOffset
 import am.cyberhayq.chat.ui.common.SectionTitle
+import am.cyberhayq.chat.ui.common.deleteChatText
+import am.cyberhayq.chat.ui.common.deleteChatTitle
 import am.cyberhayq.chat.ui.search.SearchResultRow
 import am.cyberhayq.chat.ui.search.SearchState
 import am.cyberhayq.chat.ui.theme.TatrakStyle
@@ -176,6 +178,9 @@ interface ChatListActions {
 
     /** A found message: opens its chat scrolled to it. */
     fun openMessage(key: String) {}
+
+    /** Long press on a chat's avatar: Telegram's preview, which leaves the chat unread. */
+    fun previewChat(uuid: String) {}
 }
 
 /** Built-in folders shown as tabs, like Telegram's default filters. */
@@ -205,6 +210,9 @@ fun ChatListScreen(
     initialQuery: String? = null,
     /** An enabled account's server can create invites (AccountPickerDialog.EasyInvite). */
     canInvite: Boolean = false,
+    /** A chat archived from its own menu: archived here like the selection's archive, with Undo. */
+    archiveRequest: String? = null,
+    onArchiveRequestDone: () -> Unit = {},
 ) {
     val drawer = rememberDrawerController()
     val scope = rememberCoroutineScope()
@@ -272,6 +280,12 @@ fun ChatListScreen(
         }
     }
 
+    LaunchedEffect(archiveRequest) {
+        archiveRequest ?: return@LaunchedEffect
+        archive(listOf(archiveRequest), true)
+        onArchiveRequestDone()
+    }
+
     // derived: reading the drag progress here would recompose the whole screen on every frame
     val drawerOpen by remember(drawer) { derivedStateOf { drawer.isOpen } }
     BackHandler(enabled = drawerOpen) { drawer.close() }
@@ -296,6 +310,7 @@ fun ChatListScreen(
         RowCallbacks(
             onClick = { uuid -> if (currentSelectionMode) toggle(uuid) else currentActions.openChat(uuid) },
             onLongClick = { uuid -> toggle(uuid) },
+            onAvatarLongClick = { uuid -> currentActions.previewChat(uuid) },
         )
     }
     val openArchive = remember { { showArchive = true } }
@@ -520,18 +535,27 @@ fun ChatListScreen(
         )
     }
     deleteDialog?.let { uuids ->
+        val one = uuids.singleOrNull()?.let(byUuid::get)
         AlertDialog(
             onDismissRequest = { deleteDialog = null },
             title = {
                 Text(
-                    if (uuids.size == 1) {
-                        stringResource(R.string.tatrak_delete_chat_title)
+                    if (one != null) {
+                        deleteChatTitle(context, one.title, one.isGroup)
                     } else {
                         stringResource(R.string.tatrak_delete_chats_title, uuids.size)
                     }
                 )
             },
-            text = { Text(stringResource(R.string.tatrak_delete_chat_text)) },
+            text = {
+                Text(
+                    if (one != null) {
+                        deleteChatText(context, one.title, one.isGroup)
+                    } else {
+                        stringResource(R.string.tatrak_delete_chats_explained)
+                    }
+                )
+            },
             confirmButton = {
                 TextButton(
                     onClick = {
@@ -540,7 +564,10 @@ fun ChatListScreen(
                         clearSelection()
                     }
                 ) {
-                    Text(stringResource(R.string.tatrak_delete), color = MaterialTheme.colorScheme.error)
+                    Text(
+                        stringResource(if (one?.isGroup == true) R.string.leave else R.string.tatrak_delete),
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             },
             dismissButton = {
@@ -554,6 +581,7 @@ fun ChatListScreen(
 private class RowCallbacks(
     val onClick: (String) -> Unit,
     val onLongClick: (String) -> Unit,
+    val onAvatarLongClick: (String) -> Unit,
 )
 
 // a data class with the remembered opener, so an unchanged archive lets ChatList skip
@@ -674,6 +702,8 @@ private fun ChatList(
                     onClick = { callbacks.onClick(chat.uuid) },
                     onLongClick = { callbacks.onLongClick(chat.uuid) },
                     modifier = Modifier.animateItem(),
+                    // while selecting, the avatar is part of the row: its long press toggles, no preview action
+                    onAvatarLongClick = if (selected.isEmpty()) { { callbacks.onAvatarLongClick(chat.uuid) } } else null,
                 )
             }
             // Telegram's end gap: a list shorter than the screen must still scroll the hidden row out of view
@@ -742,6 +772,7 @@ private fun SearchResults(
                 selected = chat.uuid in selected,
                 onClick = { callbacks.onClick(chat.uuid) },
                 onLongClick = { callbacks.onLongClick(chat.uuid) },
+                onAvatarLongClick = if (selected.isEmpty()) { { callbacks.onAvatarLongClick(chat.uuid) } } else null,
             )
         }
         if (messages.results.isNotEmpty()) {

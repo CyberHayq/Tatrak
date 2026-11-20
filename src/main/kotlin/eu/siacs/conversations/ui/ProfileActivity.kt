@@ -2,6 +2,10 @@ package eu.siacs.conversations.ui
 
 import am.cyberhayq.chat.ui.chatlist.styledAddress
 import am.cyberhayq.chat.ui.chat.ChatSnapshot
+import am.cyberhayq.chat.ui.common.confirmAction
+import am.cyberhayq.chat.ui.common.confirmClearHistory
+import am.cyberhayq.chat.ui.common.deleteChatText
+import am.cyberhayq.chat.ui.common.deleteChatTitle
 import am.cyberhayq.chat.ui.profile.MEDIA_THUMBNAIL_DP
 import am.cyberhayq.chat.ui.profile.ProfileActions
 import am.cyberhayq.chat.ui.profile.ProfileMedia
@@ -19,7 +23,6 @@ import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import de.gultsch.common.MiniUri
 import eu.siacs.conversations.AppSettings
 import eu.siacs.conversations.R
@@ -301,32 +304,23 @@ class ProfileActivity :
         BlockContactDialog.show(this, conversation ?: return)
     }
 
+    /** The chat's flow and text; a closed chat closes the profile like [deleteChat]. */
     override fun clearHistory() {
         val c = conversation ?: return
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.clear_conversation_history)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.confirm) { _, _ ->
-                xmppConnectionService?.clearConversationHistory(c)
-                refreshUi()
-            }
-            .show()
+        confirmClearHistory(this, c, { xmppConnectionService }) { closed -> if (closed) finish() else refreshUi() }
     }
 
     /** Like deleting from the chat list; the chat screen closes itself when it sees it gone. */
     override fun deleteChat() {
         val c = conversation ?: return
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.tatrak_delete_chat_title)
-            .setMessage(R.string.tatrak_delete_chat_text)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.tatrak_delete) { _, _ ->
-                val service = xmppConnectionService ?: return@setPositiveButton
-                c.tatrakArchivedAt = null
-                service.archiveConversation(c)
-                finish()
-            }
-            .show()
+        val name = c.name.toString()
+        val group = c.mode == Conversation.MODE_MULTI
+        confirmAction(this, deleteChatTitle(this, name, group), deleteChatText(this, name, group), if (group) R.string.leave else R.string.tatrak_delete) {
+            val service = xmppConnectionService ?: return@confirmAction
+            c.tatrakArchivedAt = null
+            service.archiveConversation(c)
+            finish()
+        }
     }
 
     companion object {

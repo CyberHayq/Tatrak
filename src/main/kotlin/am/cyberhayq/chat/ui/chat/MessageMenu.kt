@@ -282,47 +282,52 @@ private const val AppearMillis = 250
 @Composable
 private fun ReactionStrip(item: MessageItem, actions: ChatActions, onMore: (String) -> Unit, onDismiss: () -> Unit, modifier: Modifier) {
     val mine = remember(item.reactions) { item.reactions.filter { it.mine }.map { it.emoji }.toSet() }
+    val frequent = FrequentReactions.remember()
+    @Composable
+    fun Cell(emoji: String) {
+        val selected = emoji in mine
+        val enabled = if (selected) item.actions.canRemoveReaction else item.actions.canReact
+        Box(
+            Modifier.size(40.dp)
+                .clip(CircleShape)
+                .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent)
+                .clickable(enabled = enabled) {
+                    onDismiss()
+                    actions.toggleReaction(item.key, emoji)
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text(emoji, fontSize = 24.sp)
+        }
+    }
     Surface(
         shape = RoundedCornerShape(24.dp),
         color = MaterialTheme.colorScheme.surface,
         shadowElevation = 6.dp,
         modifier = modifier.padding(horizontal = TailWidth),
     ) {
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(2.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
-        ) {
-            for (emoji in Reaction.SUGGESTIONS) {
-                val selected = emoji in mine
-                val enabled = if (selected) item.actions.canRemoveReaction else item.actions.canReact
-                Box(
-                    Modifier.size(40.dp)
-                        .clip(CircleShape)
-                        .background(if (selected) MaterialTheme.colorScheme.primary.copy(alpha = 0.18f) else Color.Transparent)
-                        .clickable(enabled = enabled) {
+        Column(Modifier.padding(horizontal = 6.dp, vertical = 4.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp), verticalAlignment = Alignment.CenterVertically) {
+                for (emoji in Reaction.SUGGESTIONS) Cell(emoji)
+                if (item.actions.canReact) {
+                    Box(
+                        Modifier.size(40.dp).clip(CircleShape).clickable {
                             onDismiss()
-                            actions.toggleReaction(item.key, emoji)
+                            onMore(item.key)
                         },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(emoji, fontSize = 24.sp)
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            painterResource(R.drawable.ic_add_24dp),
+                            contentDescription = stringResource(R.string.tatrak_chat_more_reactions),
+                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
             }
-            if (item.actions.canReact) {
-                Box(
-                    Modifier.size(40.dp).clip(CircleShape).clickable {
-                        onDismiss()
-                        onMore(item.key)
-                    },
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(
-                        painterResource(R.drawable.ic_add_24dp),
-                        contentDescription = stringResource(R.string.tatrak_chat_more_reactions),
-                        tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+            // Telegram's "frequently used": FrequentReactions, counted in ChatFragment
+            if (frequent.isNotEmpty()) {
+                Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) { for (emoji in frequent) Cell(emoji) }
             }
         }
     }

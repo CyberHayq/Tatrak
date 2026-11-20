@@ -340,7 +340,7 @@ public class ContactDetailsActivity extends OmemoActivity
                     .setMessage(
                             JidDialog.style(
                                     this,
-                                    R.string.remove_contact_text,
+                                    R.string.tatrak_delete_contact_explained, // Tatrak: says what it does
                                     contact.getAddress().toString()))
                     .setPositiveButton(getString(R.string.delete), removeFromRoster)
                     .create()

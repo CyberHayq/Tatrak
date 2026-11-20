@@ -3,6 +3,7 @@ package eu.siacs.conversations.ui.fragment.settings;
 import android.content.DialogInterface;
 import android.os.Bundle;
 import android.widget.Toast;
+import am.cyberhayq.chat.ui.common.Confirm;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
@@ -10,6 +11,7 @@ import androidx.preference.ListPreference;
 import androidx.preference.Preference;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.common.base.Strings;
+import com.google.common.primitives.Ints;
 import eu.siacs.conversations.AppSettings;
 import eu.siacs.conversations.R;
 import eu.siacs.conversations.crypto.OmemoSetting;
@@ -40,6 +42,23 @@ public class SecuritySettingsFragment extends XmppPreferenceFragment {
                 automaticMessageDeletion,
                 R.array.automatic_message_deletion_values,
                 value -> timeframeValueToName(requireContext(), value));
+        // Tatrak: a limit deletes old messages in every chat at once; ask before it is saved
+        automaticMessageDeletion.setOnPreferenceChangeListener(
+                (preference, value) -> {
+                    final Integer seconds = Ints.tryParse(String.valueOf(value));
+                    if (seconds == null || seconds <= 0) {
+                        return true;
+                    }
+                    Confirm.confirmAction(
+                            requireContext(),
+                            getString(R.string.tatrak_auto_delete_title),
+                            getString(
+                                    R.string.tatrak_auto_delete_explained,
+                                    timeframeValueToName(requireContext(), seconds)),
+                            R.string.tatrak_delete,
+                            () -> automaticMessageDeletion.setValue(String.valueOf(value)));
+                    return false;
+                });
         if (QuickConversationsService.isQuicksy()) {
             serverConnection.setVisible(false);
         }

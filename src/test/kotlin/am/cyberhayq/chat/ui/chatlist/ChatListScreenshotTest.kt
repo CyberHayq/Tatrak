@@ -39,11 +39,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.performCustomAccessibilityActionWithLabel
 import androidx.compose.ui.test.swipeDown
 import androidx.compose.ui.test.swipeLeft
 import androidx.compose.ui.test.swipeRight
 import androidx.compose.ui.test.swipeUp
 import com.github.takahirom.roborazzi.captureRoboImage
+import com.github.takahirom.roborazzi.captureScreenRoboImage
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -655,6 +657,33 @@ class ChatListScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_blur_api30.png")
     }
 
+    /** Telegram: a long press on the avatar previews the chat, elsewhere on the row it selects; while selecting the avatar toggles too. */
+    @Test
+    @OptIn(androidx.compose.ui.test.ExperimentalTestApi::class)
+    fun avatarLongPressPreviewsTheChat() {
+        val previewed = mutableListOf<String>()
+        val actions = object : ChatListActions by NoListActions { override fun previewChat(uuid: String) { previewed += uuid } }
+        compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), actions) } }
+        val ani = compose.onNodeWithText("Ani")
+        fun longPressAvatar() = ani.performTouchInput { longClick(androidx.compose.ui.geometry.Offset(37.dp.toPx(), centerY)) }
+        longPressAvatar()
+        compose.waitForIdle()
+        assertEquals(listOf("chat-3"), previewed)
+        compose.onNodeWithContentDescription("Archive").assertDoesNotExist()
+        ani.performTouchInput { longClick(center) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Archive").assertExists()
+        // while selecting there is no "Preview chat" action: it would toggle the row under that name
+        assertTrue((ani.fetchSemanticsNode().config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { null } ?: emptyList()).none { it.label == "Preview chat" })
+        longPressAvatar()
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Archive").assertDoesNotExist()
+        assertEquals(listOf("chat-3"), previewed)
+        // TalkBack: the avatar is no node of its own, the row carries the action
+        ani.performCustomAccessibilityActionWithLabel("Preview chat")
+        assertEquals(listOf("chat-3", "chat-3"), previewed)
+    }
+
     /** Each tab is a 48 dp button with its label; Chats is selected; the shortcuts call the existing actions. */
     @Test
     fun floatingBottomBarCallsTheExistingActions() {
@@ -743,6 +772,68 @@ class ChatListScreenshotTest {
             TatrakTheme(darkTheme = darkTheme, style = style, accent = accent, barBlur = BarBlur.OFF) { ChatListScreen(sampleState(), NoListActions) }
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    /** "Archive chat" in a chat's menu: the list archives it like its own archive button and offers Undo. */
+    @Test
+    fun archiveFromChatMenuOffersUndo() {
+        val calls = mutableListOf<Pair<List<String>, Boolean>>()
+        var done = 0
+        val actions =
+            object : ChatListActions by NoListActions {
+                override fun setArchived(uuids: List<String>, archived: Boolean) {
+                    calls += uuids to archived
+                }
+            }
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                ChatListScreen(sampleState(), actions, archiveRequest = "chat-3", onArchiveRequestDone = { done++ })
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(listOf(listOf("chat-3") to true), calls)
+        assertEquals(1, done)
+        compose.onNodeWithText("Chat archived", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Undo").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("chat-3") to false, calls.last())
+    }
+
+    /** "Delete chat" names the chat and says what happens; a group's leaves it; Cancel deletes nothing. */
+    @Test
+    fun deleteDialogSaysWhatHappens() {
+        val deleted = mutableListOf<List<String>>()
+        val actions =
+            object : ChatListActions by NoListActions {
+                override fun delete(uuids: List<String>) {
+                    deleted += uuids
+                }
+            }
+        compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), actions) } }
+        fun ask() {
+            compose.onNodeWithContentDescription("More").performClick()
+            compose.onNodeWithText("Delete chat").performClick()
+            compose.waitForIdle()
+        }
+        compose.onNodeWithText("Ani").performTouchInput { longClick(center) }
+        ask()
+        compose.onNodeWithText("Delete chat with Ani?").assertIsDisplayed()
+        compose.onNodeWithText("Ani is not told", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("Cancel").performClick()
+        compose.waitForIdle()
+        assertEquals(emptyList<List<String>>(), deleted)
+        ask()
+        compose.onNodeWithText("Delete").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf(listOf("chat-3")), deleted)
+        compose.onNodeWithText("Dev team").performTouchInput { longClick(center) }
+        ask()
+        compose.onNodeWithText("Leave Dev team?").assertIsDisplayed()
+        compose.onNodeWithText("its members see that", substring = true).assertIsDisplayed()
+        captureScreenRoboImage("build/outputs/roborazzi/chat_list_leave_group_dialog.png")
+        compose.onNodeWithText("Leave").performClick()
+        compose.waitForIdle()
+        assertEquals(listOf("chat-4"), deleted.last())
     }
 
     private fun sampleState(): ChatListState {

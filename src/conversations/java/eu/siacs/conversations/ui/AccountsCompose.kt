@@ -8,6 +8,7 @@ import am.cyberhayq.chat.ui.accounts.AccountsActions
 import am.cyberhayq.chat.ui.accounts.AccountsScreen
 import am.cyberhayq.chat.ui.accounts.AccountsState
 import am.cyberhayq.chat.ui.common.AVATAR_SIZE
+import am.cyberhayq.chat.ui.common.confirmAction
 import android.view.View
 import androidx.compose.runtime.getValue
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -116,11 +117,28 @@ internal class AccountsCompose(private val activity: ManageAccountActivity) : Ac
     }
 
     override fun setEnabled(key: String, enabled: Boolean) {
-        activity.onClickTglAccountState(accounts[key] ?: return, enabled)
+        val account = accounts[key] ?: return
+        if (enabled) activity.onClickTglAccountState(account, true)
+        else confirmDisable(account) { activity.onClickTglAccountState(account, false) }
+    }
+
+    /** Disabling logs the account out and leaves its groups; the switch and the menu ask first. */
+    private fun confirmDisable(account: Account, disable: Runnable) {
+        confirmAction(
+            activity,
+            activity.getString(R.string.tatrak_disable_account_title, account.jid.asBareJid().toString()),
+            activity.getString(R.string.tatrak_disable_account_explained),
+            R.string.tatrak_disable,
+            disable,
+        )
     }
 
     override fun menu(key: String, item: AccountMenu) {
         val account = accounts[key] ?: return
+        if (item == AccountMenu.DISABLE) {
+            confirmDisable(account) { activity.accountAction(account, R.id.mgmt_account_disable) }
+            return
+        }
         activity.accountAction(
             account,
             when (item) {
@@ -138,14 +156,24 @@ internal class AccountsCompose(private val activity: ManageAccountActivity) : Ac
             activity.openSettings()
             return
         }
+        if (action == AccountsAction.DISABLE_ALL) {
+            confirmAction(
+                activity,
+                activity.getString(R.string.disable_all_accounts),
+                activity.getString(R.string.tatrak_disable_all_explained),
+                R.string.tatrak_disable,
+            ) {
+                activity.menuAction(R.id.action_disable_all)
+            }
+            return
+        }
         activity.menuAction(
             when (action) {
                 AccountsAction.ADD -> R.id.action_add_account
                 AccountsAction.ADD_WITH_CERTIFICATE -> R.id.action_add_account_with_cert
                 AccountsAction.IMPORT_BACKUP -> R.id.action_import_backup
                 AccountsAction.ENABLE_ALL -> R.id.action_enable_all
-                AccountsAction.DISABLE_ALL -> R.id.action_disable_all
-                AccountsAction.SETTINGS -> error("handled above")
+                AccountsAction.SETTINGS, AccountsAction.DISABLE_ALL -> error("handled above")
             }
         )
     }

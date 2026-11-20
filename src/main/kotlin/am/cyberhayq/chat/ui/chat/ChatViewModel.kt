@@ -25,6 +25,8 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** Read by the snapshot thread; replaced on the main thread. */
     @Volatile private var binding: Binding? = null
     @Volatile private var palette: TextPalette? = null
+    /** The chat-list preview's model: snapshots ask nothing of the contact ([SnapshotParams.preview]). */
+    @Volatile var preview = false
     private var lastService: XmppConnectionService? = null
     @Volatile private var generation = 0
     /** Makes "still the current chat?" and the publish one step against [bind]'s switch. */
@@ -55,6 +57,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     generation = binding.generation,
                     showLastSeen = binding.showLastSeen,
                     mentions = binding.mentions,
+                    preview = preview,
                 )
             val fast =
                 ChatSnapshot.build(application, service, binding.conversation, params(true), textCache)
@@ -99,10 +102,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
         binding?.mentions?.markSeen(uuids)
     }
 
-    /** Shows [conversation]; the "Unread messages" divider stays where it was when it opened. */
-    fun bind(conversation: Conversation, service: XmppConnectionService) {
+    /**
+     * Shows [conversation]; the "Unread messages" divider stays where it was when it opened.
+     * [fresh] starts over even for the same chat (each chat preview opens anew).
+     */
+    fun bind(conversation: Conversation, service: XmppConnectionService, fresh: Boolean = false) {
         val current = binding
-        if (current == null || current.conversation !== conversation) {
+        if (fresh || current == null || current.conversation !== conversation) {
             val unreadAnchor = conversation.firstUnreadMessage?.uuid
             val showLastSeen = AppSettings(getApplication()).isBroadcastLastActivity
             synchronized(switchLock) {

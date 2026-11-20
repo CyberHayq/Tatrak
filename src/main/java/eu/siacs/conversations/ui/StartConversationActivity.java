@@ -560,9 +560,12 @@ public class StartConversationActivity extends XmppActivity
         final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         builder.setNegativeButton(R.string.cancel, null);
         builder.setTitle(R.string.action_delete_contact);
+        // Tatrak: says what the roster removal does
         builder.setMessage(
                 JidDialog.style(
-                        this, R.string.remove_contact_text, contact.getAddress().toString()));
+                        this,
+                        R.string.tatrak_delete_contact_explained,
+                        contact.getAddress().toString()));
         builder.setPositiveButton(
                 R.string.delete,
                 (dialog, which) -> {
@@ -580,19 +583,22 @@ public class StartConversationActivity extends XmppActivity
         final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         builder.setNegativeButton(R.string.cancel, null);
         builder.setTitle(R.string.delete_bookmark);
+        // Tatrak: "archive" here means leaving the group; the texts say so
         if (hasConversation) {
             builder.setMessage(
                     JidDialog.style(
                             this,
-                            R.string.remove_bookmark_and_close,
+                            R.string.tatrak_remove_bookmark_and_leave_explained,
                             bookmark.getAddress().toString()));
         } else {
             builder.setMessage(
                     JidDialog.style(
-                            this, R.string.remove_bookmark, bookmark.getAddress().toString()));
+                            this,
+                            R.string.tatrak_remove_bookmark_explained,
+                            bookmark.getAddress().toString()));
         }
         builder.setPositiveButton(
-                hasConversation ? R.string.delete_and_close : R.string.delete,
+                hasConversation ? R.string.tatrak_remove_and_leave : R.string.delete,
                 (dialog, which) -> {
                     final Account account = bookmark.getAccount();
                     xmppConnectionService.deleteBookmark(account, bookmark);

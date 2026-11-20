@@ -59,13 +59,20 @@ public final class BlockContactDialog {
                             ? R.string.action_unblock_participant
                             : R.string.action_block_participant);
             value = blockable.getAddress().toString();
-            res = isBlocked ? R.string.unblock_contact_text : R.string.block_contact_text;
+            // Tatrak: texts that say what blocking does (below too)
+            res =
+                    isBlocked
+                            ? R.string.tatrak_unblock_participant_explained
+                            : R.string.tatrak_block_participant_explained;
         } else if (blockable.getAddress().getLocal() == null
                 || manager.isBlocked(blockable.getAddress().getDomain())) {
             builder.setTitle(
                     isBlocked ? R.string.action_unblock_domain : R.string.action_block_domain);
             value = blockable.getAddress().getDomain().toString();
-            res = isBlocked ? R.string.unblock_domain_text : R.string.block_domain_text;
+            res =
+                    isBlocked
+                            ? R.string.tatrak_unblock_domain_explained
+                            : R.string.tatrak_block_domain_explained;
         } else {
             if (isBlocked) {
                 builder.setTitle(R.string.action_unblock_contact);
@@ -80,7 +87,10 @@ public final class BlockContactDialog {
                 builder.setTitle(resBlockAction);
             }
             value = blockable.getAddress().asBareJid().toString();
-            res = isBlocked ? R.string.unblock_contact_text : R.string.block_contact_text;
+            res =
+                    isBlocked
+                            ? R.string.tatrak_unblock_contact_explained
+                            : R.string.tatrak_block_contact_explained;
         }
         binding.text.setText(JidDialog.style(xmppActivity, res, value));
         builder.setPositiveButton(

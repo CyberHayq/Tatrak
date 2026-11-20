@@ -1,5 +1,23 @@
 # Changelog
 
+## Unreleased
+
+### Interface
+- Long press on a chat's avatar in the chat list shows the chat without marking it read; a tap
+  opens it, a tap outside closes it (as in Telegram).
+- Frequently used reactions as a second row in the message menu.
+- The block list, the profile picture, changing your or a group's picture and a message's edit
+  history are drawn in the new interface.
+
+### Chat
+- Status rows as in the classic screen: do-not-disturb, the contact's night time, who has read up
+  to a message in private groups, and a "Read by" list in the message info.
+- Every notice of the classic chat (disabled account, blocked contact, add back, group errors,
+  OpenPGP, message from a stranger) as a bar with its action.
+
+### Calls
+- Fixes in call setup after a reconnect and on the call screen.
+
 ## 0.3.0
 
 ### Interface

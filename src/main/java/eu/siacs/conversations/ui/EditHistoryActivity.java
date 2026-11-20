@@ -30,6 +30,7 @@ public class EditHistoryActivity extends XmppActivity
     private final List<Message> messages = new ArrayList<>();
     private String conversationUuid;
     private String messageUuid;
+    private EditHistoryCompose compose;
 
     @Override
     public void onCreate(final Bundle bundle) {
@@ -60,6 +61,9 @@ public class EditHistoryActivity extends XmppActivity
         this.messageListAdapter = new MessageAdapter(this, this.messages, false);
         this.messageListAdapter.setOnContactPictureClicked(this);
         this.binding.searchResults.setAdapter(messageListAdapter);
+        // Tatrak: the Compose list over the hidden classic layout; see EditHistoryCompose
+        this.compose = new EditHistoryCompose(this);
+        this.compose.attach(binding.getRoot());
     }
 
     @Override
@@ -100,6 +104,7 @@ public class EditHistoryActivity extends XmppActivity
     }
 
     private void setMessages(final List<Message> messages) {
+        compose.publish(messages); // Tatrak: the versions also go to the Compose screen
         this.messages.clear();
         this.messages.addAll(messages);
         DateSeparator.addAll(this.messages);

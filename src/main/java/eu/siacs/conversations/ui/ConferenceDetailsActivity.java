@@ -529,8 +529,11 @@ public class ConferenceDetailsActivity extends XmppActivity
         final boolean groupChat = mConversation != null && mConversation.isPrivateAndNonAnonymous();
         final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
         builder.setTitle(groupChat ? R.string.destroy_room : R.string.destroy_channel);
+        // Tatrak: says who loses what
         builder.setMessage(
-                groupChat ? R.string.destroy_room_dialog : R.string.destroy_channel_dialog);
+                groupChat
+                        ? R.string.tatrak_destroy_group_explained
+                        : R.string.tatrak_destroy_channel_explained);
         builder.setPositiveButton(
                 R.string.ok,
                 (dialog, which) -> {

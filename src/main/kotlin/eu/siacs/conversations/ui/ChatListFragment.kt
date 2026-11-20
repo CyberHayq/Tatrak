@@ -1,15 +1,21 @@
 package eu.siacs.conversations.ui
 
+import am.cyberhayq.chat.ui.chat.ChatPreview
+import am.cyberhayq.chat.ui.chat.ChatViewModel
+import am.cyberhayq.chat.ui.chat.NoChatActions
+import am.cyberhayq.chat.ui.chat.currentTextPalette
 import am.cyberhayq.chat.ui.chatlist.ChatListActions
 import am.cyberhayq.chat.ui.chatlist.ChatListScreen
 import am.cyberhayq.chat.ui.chatlist.ChatListViewModel
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.animation.Animator
 import android.content.Intent
+import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -53,6 +59,30 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     private var canInvite by mutableStateOf(false)
     /** Typed before the service was bound. */
     private var pendingSearch: List<String>? = null
+    /** A chat archived from its own menu ([ChatFragment.archive]); the list archives it and offers Undo. */
+    private var archiveFromChat by mutableStateOf<String?>(null)
+
+    /** The chat shown by [ChatPreview]; its model only reads, it never marks anything read. */
+    private val previewModel by lazy { ViewModelProvider(this)["preview", ChatViewModel::class.java].also { it.preview = true } }
+    private var previewing by mutableStateOf<Conversation?>(null)
+    private val previewActions =
+        object : NoChatActions() {
+            override suspend fun loadThumbnail(uuid: String, sizePx: Int): Bitmap? {
+                val service = xmppConnectionService ?: return null
+                val c = previewModel.conversation ?: return null
+                return loadMessageThumbnail(service, c, uuid, sizePx)
+            }
+
+            override fun cachedThumbnail(uuid: String): Bitmap? = xmppConnectionService?.bitmapCache?.get(uuid)
+        }
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // delivered once this list is started again, after the chat has gone back to it
+        parentFragmentManager.setFragmentResultListener(ARCHIVE_FROM_CHAT, this) { _, result ->
+            archiveFromChat = result.getString(ARCHIVE_FROM_CHAT)
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -67,7 +97,31 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                 TatrakTheme {
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     val messages by messageResults.state.collectAsStateWithLifecycle()
-                    ChatListScreen(state, this@ChatListFragment, messages = messages, canInvite = canInvite)
+                    ChatListScreen(
+                        state,
+                        this@ChatListFragment,
+                        messages = messages,
+                        canInvite = canInvite,
+                        archiveRequest = archiveFromChat,
+                        onArchiveRequestDone = { archiveFromChat = null },
+                    )
+                    previewing?.let { c ->
+                        val palette = currentTextPalette()
+                        LaunchedEffect(palette) { previewModel.setPalette(palette) }
+                        val preview by previewModel.state.collectAsStateWithLifecycle()
+                        // an empty state or the previously previewed chat never shows
+                        if (preview.conversationUuid == c.uuid) {
+                            ChatPreview(
+                                preview,
+                                previewActions,
+                                onOpen = {
+                                    previewing = null
+                                    openChat(c.uuid)
+                                },
+                                onDismiss = { previewing = null },
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -85,6 +139,12 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     }
 
     // the activity only refreshes visible fragments; coming back from the chat the snapshot is stale
+    // a chat opened another way (notification, share) replaces the list: its card must not come back with the view
+    override fun onDestroyView() {
+        previewing = null
+        super.onDestroyView()
+    }
+
     override fun onStart() {
         super.onStart()
         refresh()
@@ -96,6 +156,8 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         canInvite = AccountPickerDialog.EasyInvite(requireXmppActivity()).hasAnyAccounts()
         unarchiveOnNewMessage(service)
         viewModel.invalidate(service)
+        // a chat closed meanwhile (e.g. a bookmark changed on another client) closes its preview, as ChatFragment.refresh does
+        previewing?.let { if (service.isConversationStillOpen(it)) previewModel.invalidate(service) else previewing = null }
     }
 
     /**
@@ -114,6 +176,13 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                 service.updateConversation(c)
             }
         }
+    }
+
+    override fun previewChat(uuid: String) {
+        val service = xmppConnectionService ?: return
+        val c = service.findConversationByUuid(uuid) ?: return
+        previewModel.bind(c, service, fresh = true)
+        previewing = c
     }
 
     override fun openChat(uuid: String) {
@@ -219,6 +288,10 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
             service.archiveConversation(it)
             (activity as? OnConversationArchived)?.onConversationArchived(it)
         }
+    }
+
+    companion object {
+        const val ARCHIVE_FROM_CHAT = "tatrak_archive_from_chat"
     }
 
     private fun conversations(uuids: List<String>): List<Conversation> {

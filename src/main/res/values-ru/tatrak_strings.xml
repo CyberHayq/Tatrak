@@ -18,6 +18,8 @@
     <string name="tatrak_archived_one">Чат перемещён в архив</string>
     <string name="tatrak_archived_many">Чатов перемещено в архив: %d</string>
     <string name="tatrak_unarchived">Чат возвращён из архива</string>
+    <string name="tatrak_chat_open">Открыть чат</string>
+    <string name="tatrak_chat_preview">Просмотр чата</string>
     <string name="tatrak_undo">Отменить</string>
     <string name="tatrak_close_selection">Отменить выбор</string>
     <string name="tatrak_pin">Закрепить</string>
@@ -28,8 +30,6 @@
     <string name="tatrak_more">Ещё</string>
     <string name="tatrak_delete_chat">Удалить чат</string>
     <string name="tatrak_delete_chats_title">Удалить чаты (%d)?</string>
-    <string name="tatrak_delete_chat_title">Удалить чат?</string>
-    <string name="tatrak_delete_chat_text">Чат исчезнет из списка. Из групп вы выйдете.</string>
     <string name="tatrak_delete">Удалить</string>
     <string name="tatrak_archive_empty">Архив пуст</string>
     <string name="tatrak_archive_empty_hint">Удерживайте чат и нажмите кнопку архива, чтобы перенести его сюда</string>
@@ -77,4 +77,8 @@
     <string name="tatrak_style_dynamic_note">Пока включены динамические цвета, цвета берутся из системы; форма аватаров применяется</string>
     <string name="tatrak_attachments_saved_partly">Сохранено медиафайлов: %1$d из %2$d</string>
     <string name="tatrak_attachment_saved_as">Сохранено как %1$s</string>
+    <!-- Block list (Compose) with no blocked addresses -->
+    <string name="tatrak_blocklist_empty">Нет заблокированных адресов</string>
+    <!-- TalkBack name of the long press on the avatar to publish: the default picture comes back -->
+    <string name="tatrak_avatar_back_to_default">Вернуть изображение по умолчанию</string>
 </resources>

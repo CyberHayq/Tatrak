@@ -296,6 +296,12 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   `AddReactionActivity.addReaction`'s rule (an emoji already ours re-sends the same set) and
   `sendReactions`. The room's reaction allow-list is not applied to the picker; a disallowed pick
   is refused by `sendReactions` with its toast.
+- Frequently used reactions (2026-11-20, owner): a second row under the menu's six suggestions
+  shows up to seven emojis the user reacts with most, without the first row's, hidden while there
+  are none (`FrequentReactions.kt`). `ChatFragment.toggleReaction` (only when adding) and
+  `addReaction` count the emoji in the VS16 form `toggleReaction` sends; the counts live in the
+  plain-text preference `tatrak_frequent_reactions`, 32 kept, most used first and the most recent
+  first among equals, never decaying.
 
 ## Profile (stage 6d)
 

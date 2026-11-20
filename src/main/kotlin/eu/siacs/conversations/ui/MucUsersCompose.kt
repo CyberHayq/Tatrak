@@ -1,6 +1,7 @@
 package eu.siacs.conversations.ui
 
 import am.cyberhayq.chat.ui.common.MenuEntry
+import am.cyberhayq.chat.ui.common.confirmAction
 import am.cyberhayq.chat.ui.participants.Participant
 import am.cyberhayq.chat.ui.participants.ParticipantsActions
 import am.cyberhayq.chat.ui.participants.ParticipantsScreen
@@ -116,9 +117,25 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
         MucDetailsContextMenuHelper.configureMucDetailsContextMenu(activity, menu, user)
         return visible(menu).map { item ->
             MenuEntry(item.title.toString(), enabled = item.isEnabled) {
-                MucDetailsContextMenuHelper.onContextItemSelected(item, user, activity)
+                val select = Runnable { MucDetailsContextMenuHelper.onContextItemSelected(item, user, activity) }
+                if (item.itemId == R.id.remove_membership) confirmRemoveMembership(user, select) else select.run()
             }
         }
+    }
+
+    /** "Remove membership" changes the affiliation at once; a members-only room also drops the user. */
+    private fun confirmRemoveMembership(user: MucOptions.User, remove: Runnable) {
+        val name = user.displayName
+        val text =
+            if (user.mucOptions.membersOnly()) R.string.tatrak_remove_membership_members_only
+            else R.string.tatrak_remove_membership_open
+        confirmAction(
+            activity,
+            activity.getString(R.string.tatrak_remove_membership_title, name),
+            activity.getString(text, name),
+            R.string.tatrak_remove,
+            remove,
+        )
     }
 
     private fun visible(menu: Menu): List<android.view.MenuItem> =

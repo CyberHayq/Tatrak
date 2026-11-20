@@ -8,10 +8,11 @@
         android:orientation="vertical"
         android:padding="?dialogPreferredPadding">
 
+        <!-- Tatrak: says it is a ban -->
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="@string/muc_user_ban_explainer"
+            android:text="@string/tatrak_ban_explained"
             android:textAppearance="?textAppearanceBodyLarge" />
 
         <TextView

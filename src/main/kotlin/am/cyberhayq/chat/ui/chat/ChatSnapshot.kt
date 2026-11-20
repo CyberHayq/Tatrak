@@ -420,6 +420,8 @@ data class SnapshotParams(
     val showLastSeen: Boolean,
     /** The bound chat's pending mentions. */
     val mentions: MentionTracker,
+    /** The chat-list preview: nothing is asked of the contact or their server (entity time, last activity). */
+    val preview: Boolean = false,
 )
 
 /** Formatted bodies keyed by message uuid, body and colors; formatting is the costly part. */
@@ -477,8 +479,8 @@ object ChatSnapshot {
             conversationUuid = conversation.uuid,
             generation = params.generation,
             header =
-                header(context, service, conversation, params.avatarSize, params.avatarsCachedOnly, params.showLastSeen),
-            items = withStatusRows(context, conversation, builder.items(messages)),
+                header(context, service, conversation, params.avatarSize, params.avatarsCachedOnly, params.showLastSeen, query = !params.preview),
+            items = withStatusRows(context, conversation, builder.items(messages), query = !params.preview),
             unreadCount = conversation.unreadCount(),
             banner = banner,
             blockMenu = if (banner == ChatBanner.STRANGER || banner == ChatBanner.ADD_BACK || banner == ChatBanner.ALLOW_SUBSCRIPTION) blockMenu(conversation) else null,
@@ -496,6 +498,8 @@ object ChatSnapshot {
         avatarSize: Int,
         cachedOnly: Boolean,
         showLastSeen: Boolean,
+        /** False: no XEP-0012 query for an offline contact's last activity. */
+        query: Boolean = true,
     ): ChatHeader {
         val isGroup = conversation.mode == Conversational.MODE_MULTI
         var active = false
@@ -518,7 +522,7 @@ object ChatSnapshot {
             } else if (showLastSeen) {
                 val contact = conversation.contact
                 var interaction = contact.lastUserInteraction
-                if (interaction is LastUserInteraction.None) {
+                if (interaction is LastUserInteraction.None && query) {
                     // offline: ask the contact's server (XEP-0012), cached; nothing if it can't tell
                     contact.account.xmppConnection
                         ?.getManager(LastActivityManager::class.java)
@@ -604,8 +608,8 @@ object ChatSnapshot {
     }
 
     /** ConversationFragment.updateStatusMessages: "Load more messages" above the oldest item, the contact's status row below the newest. */
-    private fun withStatusRows(context: Context, conversation: Conversation, items: List<ChatItem>): List<ChatItem> {
-        val status = contactStatus(context, conversation, items.firstOrNull()?.day.orEmpty())
+    private fun withStatusRows(context: Context, conversation: Conversation, items: List<ChatItem>, query: Boolean): List<ChatItem> {
+        val status = contactStatus(context, conversation, items.firstOrNull()?.day.orEmpty(), query)
         val loadMore = showLoadMore(conversation)
         if (status == null && !loadMore) return items
         val all = ArrayList<ChatItem>(items.size + 2)
@@ -629,18 +633,19 @@ object ChatSnapshot {
     }
 
     /** The one-to-one part of ConversationFragment.updateStatusMessages without the typing rows (the header shows typing). */
-    private fun contactStatus(context: Context, conversation: Conversation, day: String): ServiceItem? {
+    private fun contactStatus(context: Context, conversation: Conversation, day: String, query: Boolean): ServiceItem? {
         if (conversation.mode != Conversational.MODE_SINGLE) return null
         val connection = conversation.account.xmppConnection ?: return null
         val state = connection.getManager(ChatStateManager::class.java).getIncoming(conversation.address)
-        val time = connection.getManager(EntityTimeManager::class.java).getZonedDateTime(conversation.address)
+        // getZonedDateTime asks the contact's devices (XEP-0202) when nothing is cached
+        val time = if (query) connection.getManager(EntityTimeManager::class.java).getZonedDateTime(conversation.address) else null
         if (state == Composing::class.java || state == Paused::class.java) return null
         return contactStatusRow(
             context,
             conversation.name,
             conversation.contact.shownStatus == Presence.Availability.DND,
             // as the classic getOrNull: only an answer that is already there
-            if (time.isDone) runCatching { time.get() }.getOrNull() else null,
+            if (time != null && time.isDone) runCatching { time.get() }.getOrNull() else null,
             EntityTimeManager.noRecentMessages(conversation),
             day,
         )

@@ -98,7 +98,8 @@ data class MenuEntry(
 @Composable
 fun TatrakTopBar(
     title: String,
-    onBack: () -> Unit,
+    /** Null hides the back arrow (the classic screen's up navigation turned off). */
+    onBack: (() -> Unit)?,
     search: TopBarSearch? = null,
     menu: List<MenuEntry> = emptyList(),
     @DrawableRes navigationIcon: Int = R.drawable.ic_arrow_back_24dp,
@@ -118,8 +119,10 @@ fun TatrakTopBar(
                 actionIconContentColor = onBar,
             ),
         navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(painterResource(navigationIcon), stringResource(R.string.tatrak_chat_back))
+            if (onBack != null) {
+                IconButton(onClick = onBack) {
+                    Icon(painterResource(navigationIcon), stringResource(R.string.tatrak_chat_back))
+                }
             }
         },
         title = {
@@ -209,6 +212,7 @@ fun EmptyText(text: String, modifier: Modifier = Modifier) {
  * Avatar, name and one subtitle line, with an optional [trailing] slot and a long-press menu.
  * [subtitleAccent] paints the subtitle in the primary colour (online, connected). [menuOnLongPress]
  * builds the menu at the long press instead of [menu], for menus too costly to work out per row.
+ * [onLongClick] runs an action at the long press instead of a menu; [longClickLabel] names it for TalkBack.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -224,6 +228,8 @@ fun AvatarRow(
     trailing: (@Composable () -> Unit)? = null,
     topEnd: String? = null,
     menuOnLongPress: (() -> List<MenuEntry>)? = null,
+    onLongClick: (() -> Unit)? = null,
+    longClickLabel: String? = null,
 ) {
     var menuOpen by remember { mutableStateOf(false) }
     var built by remember { mutableStateOf(emptyList<MenuEntry>()) }
@@ -255,8 +261,10 @@ fun AvatarRow(
                     .combinedClickable(
                         role = Role.Button,
                         onClick = onClick,
+                        onLongClickLabel = longClickLabel,
                         onLongClick =
                             when {
+                                onLongClick != null -> onLongClick
                                 menuOnLongPress != null -> ({
                                     built = menuOnLongPress()
                                     if (built.isNotEmpty()) openMenu()

@@ -1,7 +1,6 @@
 package eu.siacs.conversations.ui;
 
 import android.os.Bundle;
-import android.text.Editable;
 import android.widget.Toast;
 import androidx.fragment.app.Fragment;
 import androidx.fragment.app.FragmentTransaction;
@@ -21,6 +20,8 @@ public class BlocklistActivity extends AbstractSearchableListItemActivity
 
     private Account account = null;
 
+    private BlocklistCompose compose;
+
     @Override
     public void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -34,6 +35,9 @@ public class BlocklistActivity extends AbstractSearchableListItemActivity
                         });
         this.binding.fab.show();
         this.binding.fab.setOnClickListener((v) -> showEnterJidDialog());
+        // Tatrak: the Compose list over the hidden classic layout; see BlocklistCompose
+        this.compose = new BlocklistCompose(this);
+        this.compose.attach(binding.getRoot());
     }
 
     @Override
@@ -44,7 +48,8 @@ public class BlocklistActivity extends AbstractSearchableListItemActivity
                 break;
             }
         }
-        filterContacts();
+        // Tatrak: the search field is the Compose top bar's
+        filterContacts(compose.getNeedle());
         Fragment fragment = getSupportFragmentManager().findFragmentByTag(FRAGMENT_TAG_DIALOG);
         if (fragment instanceof OnBackendConnected) {
             ((OnBackendConnected) fragment).onBackendConnected();
@@ -69,6 +74,8 @@ public class BlocklistActivity extends AbstractSearchableListItemActivity
                 }
             }
             Collections.sort(getListItems());
+            // Tatrak: the list also goes to the Compose screen
+            compose.publish(getListItems());
         }
         getListItemAdapter().notifyDataSetChanged();
     }
@@ -107,12 +114,8 @@ public class BlocklistActivity extends AbstractSearchableListItemActivity
     }
 
     protected void refreshUiReal() {
-        final Editable editable = getSearchEditText().getText();
-        if (editable != null) {
-            filterContacts(editable.toString());
-        } else {
-            filterContacts();
-        }
+        // Tatrak: the search field is the Compose top bar's
+        filterContacts(compose.getNeedle());
     }
 
     @Override

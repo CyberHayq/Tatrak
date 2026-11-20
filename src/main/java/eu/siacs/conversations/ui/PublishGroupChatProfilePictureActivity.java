@@ -53,6 +53,7 @@ public class PublishGroupChatProfilePictureActivity extends XmppActivity
     private ActivityPublishProfilePictureBinding binding;
     private Conversation conversation;
     private Uri uri;
+    private PublishAvatarCompose compose;
 
     final ActivityResultLauncher<CropImageContractOptions> cropImage =
             registerForActivityResult(
@@ -89,6 +90,7 @@ public class PublishGroupChatProfilePictureActivity extends XmppActivity
         }
         this.binding.accountImage.setImageBitmap(bitmap);
         this.binding.publishButton.setEnabled(uri != null);
+        compose.refresh(); // Tatrak: the Compose screen reads the views again
     }
 
     @Override
@@ -111,11 +113,15 @@ public class PublishGroupChatProfilePictureActivity extends XmppActivity
         }
         this.binding.publishButton.setEnabled(uri != null);
         this.binding.publishButton.setOnClickListener(this::publish);
+        // Tatrak: the Compose screen over the hidden classic layout; see PublishAvatarCompose
+        this.compose = new PublishAvatarCompose(this, binding);
+        this.compose.attach();
     }
 
     private void publish(final View view) {
         binding.publishButton.setText(R.string.publishing);
         binding.publishButton.setEnabled(false);
+        compose.refresh(); // Tatrak: the Compose screen reads the views again
         xmppConnectionService.publishMucAvatar(conversation, uri, this);
     }
 
@@ -165,6 +171,7 @@ public class PublishGroupChatProfilePictureActivity extends XmppActivity
                     Toast.makeText(this, res, Toast.LENGTH_SHORT).show();
                     this.binding.publishButton.setText(R.string.publish);
                     this.binding.publishButton.setEnabled(true);
+                    compose.refresh(); // Tatrak: the Compose screen reads the views again
                 });
     }
 }

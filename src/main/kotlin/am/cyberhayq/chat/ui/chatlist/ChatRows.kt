@@ -10,7 +10,9 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -50,6 +52,10 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
@@ -78,6 +84,8 @@ fun ChatRow(
     onClick: () -> Unit,
     onLongClick: () -> Unit,
     modifier: Modifier = Modifier,
+    /** Telegram: a long press on the avatar previews the chat, anywhere else it selects the row. */
+    onAvatarLongClick: (() -> Unit)? = null,
 ) {
     ReportComposition(chat.uuid)
     val colors = MaterialTheme.colorScheme
@@ -87,6 +95,7 @@ fun ChatRow(
         onClick = onClick,
         onLongClick = onLongClick,
         modifier = modifier,
+        onAvatarLongClick = onAvatarLongClick,
         avatar = {
             ChatAvatar(chat.avatar, chat.isOnline && !selected && !chat.isSavedMessages, AvatarSize, selected, chat.isSavedMessages)
         },
@@ -235,22 +244,35 @@ private fun RowFrame(
     onClick: () -> Unit,
     onLongClick: (() -> Unit)?,
     modifier: Modifier,
+    onAvatarLongClick: (() -> Unit)? = null,
     avatar: @Composable () -> Unit,
     content: @Composable () -> Unit,
 ) {
     val colors = MaterialTheme.colorScheme
+    // shared with the avatar's own gesture, so the row ripples wherever the finger is
+    val interaction = remember { MutableInteractionSource() }
+    val previewLabel = stringResource(R.string.tatrak_chat_preview)
     Box(
         modifier
             .fillMaxWidth()
             .height(RowHeight)
             .background(if (selected) colors.surfaceVariant else colors.surface)
-            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .combinedClickable(interaction, LocalIndication.current, onClick = onClick, onLongClick = onLongClick)
+            .then(
+                if (onAvatarLongClick == null) Modifier
+                else Modifier.semantics { customActions = listOf(CustomAccessibilityAction(previewLabel) { onAvatarLongClick(); true }) }
+            )
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier = Modifier.fillMaxSize().padding(horizontal = RowHorizontalPadding),
         ) {
-            avatar()
+            if (onAvatarLongClick == null) {
+                avatar()
+            } else {
+                // TalkBack reaches the preview through the row's custom action, not a node of its own
+                Box(Modifier.clearAndSetSemantics {}.combinedClickable(interaction, null, onClick = onClick, onLongClick = onAvatarLongClick)) { avatar() }
+            }
             Spacer(Modifier.width(AvatarTextGap))
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.Center) { content() }
         }

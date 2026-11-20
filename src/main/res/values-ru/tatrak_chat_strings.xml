@@ -45,10 +45,10 @@
     <string name="tatrak_stickers">Стикеры</string>
     <string name="tatrak_stickers_add">Добавить стикеры</string>
     <string name="tatrak_stickers_empty">Добавьте картинки из галереи, чтобы отправлять их как стикеры.</string>
-    <string name="tatrak_sticker_delete">Удалить этот стикер из набора?</string>
+    <string name="tatrak_sticker_delete">Удалить этот стикер из набора? Он удалится только с этого устройства; уже отправленные стикеры останутся в чатах.</string>
     <string name="tatrak_stickers_share">Поделиться моими стикерами</string>
     <string name="tatrak_stickers_delete_pack">Удалить набор</string>
-    <string name="tatrak_stickers_delete_pack_confirm">Удалить этот набор стикеров?</string>
+    <string name="tatrak_stickers_delete_pack_confirm">Удалить этот набор стикеров? Он удалится только с этого устройства; отправленные стикеры и ссылки на набор, которыми вы поделились, продолжат работать.</string>
     <string name="tatrak_sticker_add_mine">В мои стикеры</string>
     <string name="tatrak_sticker_added">Добавлено в ваши стикеры</string>
     <string name="tatrak_stickers_sharing">Загружаю ваши стикеры…</string>

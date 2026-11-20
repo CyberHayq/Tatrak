@@ -388,16 +388,9 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
         if (files.isEmpty()) {
             return;
         }
-        final var builder = new MaterialAlertDialogBuilder(this);
-        builder.setTitle(
-                getResources()
-                        .getQuantityString(
-                                R.plurals.delete_files_dialog, files.size(), files.size()));
-        builder.setMessage(
-                getResources().getQuantityString(R.plurals.delete_files_dialog_msg, files.size()));
-        builder.setNegativeButton(R.string.cancel, null);
-        builder.setPositiveButton(R.string.confirm, (dialog, which) -> deleteMediaFiles(files));
-        builder.create().show();
+        // Tatrak: says that the files also go from the other messages that show them
+        am.cyberhayq.chat.ui.common.Confirm.confirmDeleteFiles(
+                this, files, () -> deleteMediaFiles(files));
     }
 
     private void selectAllAttachments() {

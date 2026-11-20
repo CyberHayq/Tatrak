@@ -5,11 +5,12 @@
     android:orientation="vertical"
     android:padding="?dialogPreferredPadding">
 
+    <!-- Tatrak: a text that says what is erased where -->
     <TextView
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="@string/mgmt_account_delete_confirm_text"
+        android:text="@string/tatrak_delete_account_explained"
         android:textAppearance="?textAppearanceBodyMedium" />
 
     <CheckBox

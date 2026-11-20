@@ -4,10 +4,14 @@ import am.cyberhayq.chat.storage.media.TemporaryMedia
 import am.cyberhayq.chat.ui.media.mediaDecodeDispatcher
 import am.cyberhayq.chat.ui.storage.MediaPrompts
 import am.cyberhayq.chat.ui.chat.ChatSnapshot
+import am.cyberhayq.chat.ui.common.confirmAction
+import am.cyberhayq.chat.ui.common.confirmClearHistory
+import am.cyberhayq.chat.ui.common.deleteFilesText
 import am.cyberhayq.chat.ui.chat.ChatActions
 import am.cyberhayq.chat.ui.chat.ChatBanner
 import am.cyberhayq.chat.ui.chat.ChatScreen
 import am.cyberhayq.chat.ui.chat.ChatViewModel
+import am.cyberhayq.chat.ui.chat.FrequentReactions
 import am.cyberhayq.chat.ui.chat.LocalSwipeBack
 import am.cyberhayq.chat.ui.media.SaveResult
 import am.cyberhayq.chat.ui.chat.LocalSwipeMethod
@@ -52,7 +56,6 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
-import android.widget.CheckBox
 import android.widget.Toast
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -64,6 +67,7 @@ import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.platform.ViewCompositionStrategy
 import androidx.compose.ui.text.input.TextFieldValue
 import androidx.core.content.ContextCompat
+import androidx.core.os.bundleOf
 import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
@@ -1279,37 +1283,31 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         Futures.addCallback(
             future,
             object : FutureCallback<List<String>> {
-                override fun onSuccess(result: List<String>) = confirmDeleteFile(message, result.size > 1)
+                override fun onSuccess(result: List<String>) = confirmDeleteFile(message, result.count { it != message.uuid })
 
                 override fun onFailure(t: Throwable) {
                     Log.e(Config.LOGTAG, "could not retrieve messages count", t)
-                    confirmDeleteFile(message, false)
+                    confirmDeleteFile(message, 0)
                 }
             },
             ContextCompat.getMainExecutor(requireContext()),
         )
     }
 
-    private fun confirmDeleteFile(message: Message, shared: Boolean) {
+    /** [others]: messages besides this one that show the file; deleteFile removes it from them too. */
+    private fun confirmDeleteFile(message: Message, others: Int) {
         // the query may finish after the chat was left
         val host = activity?.takeIf { isAdded && !it.isFinishing } ?: return
-        val content = LayoutInflater.from(host).inflate(R.layout.dialog_delete_file, null, false)
-        content.findViewById<View>(R.id.shared).visibility = if (shared) View.VISIBLE else View.GONE
-        MaterialAlertDialogBuilder(host)
-            .setNegativeButton(R.string.cancel, null)
-            .setTitle(R.string.delete_file_dialog)
-            .setView(content)
-            .setPositiveButton(R.string.confirm) { _, _ ->
-                val service = xmppConnectionService ?: return@setPositiveButton
-                if (service.fileBackend.deleteFile(message)) {
-                    message.isDeleted = true
-                    service.evictPreview(message.uuid)
-                    service.updateMessage(message, false)
-                    (activity as? ConversationsActivity)?.onConversationsListItemUpdated()
-                    refresh()
-                }
+        confirmAction(host, getString(R.string.delete_file_dialog), deleteFilesText(host, 1, others), R.string.tatrak_delete) {
+            val service = xmppConnectionService ?: return@confirmAction
+            if (service.fileBackend.deleteFile(message)) {
+                message.isDeleted = true
+                service.evictPreview(message.uuid)
+                service.updateMessage(message, false)
+                (activity as? ConversationsActivity)?.onConversationsListItemUpdated()
+                refresh()
             }
-            .show()
+        }
     }
 
     override fun call(video: Boolean) {
@@ -1345,34 +1343,27 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         }
     }
 
-    /** ConversationFragment action_archive. */
+    /**
+     * The chat list's archive (local, with Undo), not ConversationFragment's action_archive, which
+     * closes the chat and leaves a group: the list archives it and offers Undo; back to it, as Telegram.
+     */
     override fun archive() {
         val c = conversation ?: return
-        xmppConnectionService?.archiveConversation(c)
-        refresh()
+        parentFragmentManager.setFragmentResult(ChatListFragment.ARCHIVE_FROM_CHAT, bundleOf(ChatListFragment.ARCHIVE_FROM_CHAT to c.uuid))
+        (activity as? ConversationsActivity)?.onConversationArchived(c)
     }
 
     /** ConversationFragment.clearHistoryDialog, including "end the conversation too". */
     override fun clearHistory() {
         val c = conversation ?: return
-        val content = layoutInflater.inflate(R.layout.dialog_clear_history, null)
-        val end = content.findViewById<CheckBox>(R.id.end_conversation_checkbox)
-        MaterialAlertDialogBuilder(requireActivity())
-            .setTitle(R.string.clear_conversation_history)
-            .setView(content)
-            .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.confirm) { _, _ ->
-                val service = xmppConnectionService ?: return@setPositiveButton
-                service.clearConversationHistory(c)
-                if (end.isChecked) {
-                    service.archiveConversation(c)
-                    (activity as? ConversationsActivity)?.onConversationArchived(c)
-                } else {
-                    (activity as? ConversationsActivity)?.onConversationsListItemUpdated()
-                    refresh()
-                }
+        confirmClearHistory(requireActivity(), c, { xmppConnectionService }) { closed ->
+            if (closed) {
+                (activity as? ConversationsActivity)?.onConversationArchived(c)
+            } else {
+                (activity as? ConversationsActivity)?.onConversationsListItemUpdated()
+                refresh()
             }
-            .show()
+        }
     }
 
     override fun toggleBlock() {
@@ -1496,7 +1487,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val message = message(uuid) ?: return
         val normalized = Emoticons.normalizeToVS16(emoji)
         val ours = LinkedHashSet(message.aggregatedReactions.ourReactions)
-        if (!ours.remove(normalized)) ours.add(normalized)
+        if (!ours.remove(normalized)) {
+            ours.add(normalized)
+            FrequentReactions.record(requireContext(), normalized)
+        }
         requireXmppActivity().sendReactions(message, ours)
     }
 
@@ -1508,6 +1502,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             return
         }
         val ours = message.aggregatedReactions.ourReactions
+        if (!ours.contains(emoji)) FrequentReactions.record(requireContext(), emoji)
         requireXmppActivity().sendReactions(message, if (ours.contains(emoji)) ours else ours + emoji)
     }
 
@@ -1900,19 +1895,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     override suspend fun loadThumbnail(uuid: String, sizePx: Int): Bitmap? {
         val service = xmppConnectionService ?: return null
         val c = conversation ?: return null
-        // the shared bounded pool: a fling must not queue dozens of decodes ahead of the visible ones
-        return withContext(mediaDecodeDispatcher) {
-            currentCoroutineContext().ensureActive()
-            val message = c.findMessageWithUuid(uuid) ?: return@withContext null
-            try {
-                service.fileBackend.getThumbnail(message, sizePx, false)
-            } catch (e: IOException) {
-                null
-            } catch (e: RuntimeException) {
-                Log.d(Config.LOGTAG, "unable to load thumbnail", e)
-                null
-            }
-        }
+        return loadMessageThumbnail(service, c, uuid, sizePx)
     }
 
     override fun cachedThumbnail(uuid: String): Bitmap? = xmppConnectionService?.bitmapCache?.get(uuid)
@@ -2103,9 +2086,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                 account.setOption(Account.OPTION_DISABLED, false)
                 service.updateAccount(account)
             }
-            // mUnblockClickListener
-            ChatBanner.BLOCKED ->
-                if (c.isDomainBlocked) BlockContactDialog.show(activity, c) else service.sendUnblockRequest(c)
+            // mUnblockClickListener; asks first like the domain case, whose dialog calls the same sendUnblockRequest
+            ChatBanner.BLOCKED -> BlockContactDialog.show(activity, c)
             ChatBanner.ADD_BACK -> SubscriptionRequests.addBack(activity, c.contact)
             ChatBanner.ALLOW_SUBSCRIPTION -> {
                 SubscriptionRequests.allow(c.contact)
@@ -2126,7 +2108,18 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             ChatBanner.SERVER_TIMEOUT_LEAVE,
             ChatBanner.BANNED,
             ChatBanner.MEMBERS_ONLY,
-            ChatBanner.DESTROYED -> service.archiveConversation(c)
+            ChatBanner.DESTROYED ->
+                confirmAction(
+                    activity,
+                    getString(R.string.tatrak_leave_group_title, c.name),
+                    getString(
+                        if (banner == ChatBanner.DESTROYED) R.string.tatrak_leave_destroyed_explained
+                        else R.string.tatrak_leave_unjoined_explained
+                    ),
+                    R.string.leave,
+                ) {
+                    xmppConnectionService?.archiveConversation(c)
+                }
             // enterPassword
             ChatBanner.PASSWORD_REQUIRED ->
                 activity.quickPasswordEdit(c.mucOptions.password ?: "") { value ->
@@ -2169,8 +2162,16 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     /** The reject item of ConversationFragment.showBlockSubmenu. */
     override fun rejectSubscription() {
         val c = conversation ?: return
-        xmppConnectionService?.stopPresenceUpdatesTo(c.contact) ?: return
-        refresh()
+        val name = c.contact.displayName
+        confirmAction(
+            requireActivity(),
+            getString(R.string.tatrak_reject_request_title, name),
+            getString(R.string.tatrak_reject_request_explained, name),
+            R.string.reject_request,
+        ) {
+            xmppConnectionService?.stopPresenceUpdatesTo(c.contact) ?: return@confirmAction
+            refresh()
+        }
     }
 
     /** The block_domain / block_contact items of ConversationFragment.showBlockSubmenu. */

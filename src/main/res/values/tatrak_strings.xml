@@ -18,6 +18,8 @@
     <string name="tatrak_archived_one">Chat archived</string>
     <string name="tatrak_archived_many">%d chats archived</string>
     <string name="tatrak_unarchived">Chat moved back from archive</string>
+    <string name="tatrak_chat_open">Open chat</string>
+    <string name="tatrak_chat_preview">Preview chat</string>
     <string name="tatrak_undo">Undo</string>
     <string name="tatrak_close_selection">Cancel selection</string>
     <string name="tatrak_pin">Pin</string>
@@ -28,8 +30,6 @@
     <string name="tatrak_more">More</string>
     <string name="tatrak_delete_chat">Delete chat</string>
     <string name="tatrak_delete_chats_title">Delete %d chats?</string>
-    <string name="tatrak_delete_chat_title">Delete chat?</string>
-    <string name="tatrak_delete_chat_text">The chat disappears from the list. You will leave group chats.</string>
     <string name="tatrak_delete">Delete</string>
     <string name="tatrak_archive_empty">Archive is empty</string>
     <string name="tatrak_archive_empty_hint">Long-press a chat and tap the archive button to move it here</string>
@@ -80,4 +80,8 @@
     <!-- "Save" of several media files when some could not be saved -->
     <string name="tatrak_attachments_saved_partly">Saved %1$d of %2$d media files</string>
     <string name="tatrak_attachment_saved_as">Saved as %1$s</string>
+    <!-- Block list (Compose) with no blocked addresses -->
+    <string name="tatrak_blocklist_empty">No blocked addresses</string>
+    <!-- TalkBack name of the long press on the avatar to publish: the default picture comes back -->
+    <string name="tatrak_avatar_back_to_default">Bring back the default picture</string>
 </resources>

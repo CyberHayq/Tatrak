@@ -1,7 +1,7 @@
 ---
 type: UI Screen
 title: Chat list
-description: Compose chat list hosted by ChatListFragment that replaces ConversationsOverviewFragment in ConversationsActivity, with Telegram-style archive, folder tabs, multi-select and swipe actions.
+description: Compose chat list hosted by ChatListFragment that replaces ConversationsOverviewFragment in ConversationsActivity, with Telegram-style archive, folder tabs, multi-select, swipe actions and the chat preview on avatar long press.
 resource: ../../src/main/kotlin/eu/siacs/conversations/ui/ChatListFragment.kt
 tags: [ui, compose, chat-list, telegram-ux]
 status: draft
@@ -25,6 +25,9 @@ sources:
   - id: rows
     resource: ../../src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatRows.kt
     title: ChatRows.kt
+  - id: preview
+    resource: ../../src/main/kotlin/am/cyberhayq/chat/ui/chat/ChatPreview.kt
+    title: ChatPreview.kt
   - id: plan
     resource: ~/.claude/plans/ticklish-weaving-boole.md
     title: Approved implementation plan (local file, outside the repository)
@@ -111,6 +114,27 @@ while it is being swiped.
   message shows its length ("audio, 0:12", the preview text is upstream's). The self-chat ("Saved
   messages") has a bookmark on the accent colour; the chat header, search and share picker still
   draw it with the letter avatar. monocles shows a static file-type icon instead of a thumbnail.
+- **Chat preview (2026-11-20, public issue #2).** As Telegram's `DialogsActivity.onItemLongClick`
+  (`showChatPreview` only when `isPointInsideAvatar`): a long press on a row's avatar opens the
+  chat in a card (92 % × 75 %, a Compose `Dialog` over the dimmed list); a long press elsewhere on
+  the row still selects it. While chats are selected the avatar has no gesture of its own (its long
+  press toggles the row) and the row no preview action. Otherwise the avatar has a
+  nested `combinedClickable` sharing the row's `MutableInteractionSource` (the row still ripples)
+  and `clearAndSetSemantics {}`; TalkBack gets a "Preview chat" custom action on the row.[^rows]
+  `ChatListFragment.previewChat` binds a second `ChatViewModel` (key `"preview"`) and shows
+  `ChatScreen(preview = true)`: no composer, no header buttons, no message menu or selection,
+  classic layout (`LocalFloatingBars provides false`). Its actions are `NoChatActions` with only
+  the thumbnails wired (`loadMessageThumbnail`, shared with `ChatFragment`), and `MessageList`
+  skips `markRead` in preview mode, so the preview sends no read marker and leaves the unread
+  badge; `setOpenConversation` / `messagesLoaded` are never called. Its snapshots
+  (`SnapshotParams.preview`) ask nothing of the contact: no XEP-0202 entity time, no XEP-0012 last
+  activity. A tap on the card opens the chat as a row tap does, which marks it read as usual: seen
+  at `PointerEventPass.Initial`, it is a single finger lifted within the touch slop before the
+  long-press timeout and not cancelled, and is consumed so no bubble or button acts on it; a drag
+  is left to the list and a long press does nothing. TalkBack's card action is "Open chat". An
+  outside tap or Back closes the card, and so does the chat being closed meanwhile.
+  Not done: Telegram's menu under the preview (mark read, mute, pin, delete) and the blur behind
+  it.[^preview]
 - **Colours** follow Telegram's default day theme (white header, `#229AF0` unread badges,
   `#46AA36` checks); night values are approximate.
 
@@ -118,7 +142,11 @@ while it is being swiped.
 
 `ChatListScreenshotTest` (Robolectric, `sdk = [35]`, `w411dp-h891dp-xxhdpi`,
 `@ConscryptMode(OFF)`) records `chat_list_light.png`, `chat_list_dark.png` and
-`chat_list_empty.png`, `chat_list_selection.png` and `chat_list_archive.png` into `build/outputs/roborazzi/`.[^test] See
+`chat_list_empty.png`, `chat_list_selection.png` and `chat_list_archive.png` into `build/outputs/roborazzi/`.[^test]
+`avatarLongPressPreviewsTheChat` covers the avatar / row long press split and the custom action;
+`ChatScreenshotTest` records `chat_preview_light.png` / `chat_preview_dark.png` (whole screen with
+the dialog) and checks that a drag scrolls without opening, a tap opens, and `markRead` is never
+called. See
 [build setup](../build/build-setup.md).
 
 [^state]: ChatListState.kt
@@ -128,3 +156,4 @@ while it is being swiped.
 [^conversation]: Conversation entity
 [^rows]: ChatRows.kt
 [^test]: ChatListScreenshotTest.kt
+[^preview]: ChatPreview.kt

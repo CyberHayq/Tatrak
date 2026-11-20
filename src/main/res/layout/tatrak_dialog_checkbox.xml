@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- A confirmation's option under its message (setMessage + setView); off by default (owner, 2026-11-20) -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingHorizontal="?dialogPreferredPadding"
+    android:paddingTop="8dp">
+
+    <CheckBox
+        android:id="@+id/tatrak_checkbox"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:checked="false" />
+
+</FrameLayout>

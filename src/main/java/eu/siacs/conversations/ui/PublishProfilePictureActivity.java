@@ -54,6 +54,7 @@ public class PublishProfilePictureActivity extends XmppActivity
                 }
             };
     private boolean mInitialAccountSetup;
+    private PublishAvatarCompose compose;
 
     final ActivityResultLauncher<CropImageContractOptions> cropImage =
             registerForActivityResult(
@@ -143,6 +144,9 @@ public class PublishProfilePictureActivity extends XmppActivity
                 this.accessModel = NodeConfiguration.AccessModel.valueOf(accessModel);
             }
         }
+        // Tatrak: the Compose screen over the hidden classic layout; see PublishAvatarCompose
+        this.compose = new PublishAvatarCompose(this, binding);
+        this.compose.attach();
     }
 
     @Override
@@ -166,7 +170,7 @@ public class PublishProfilePictureActivity extends XmppActivity
     private void deleteAvatar(final Account account) {
         new MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.delete_avatar)
-                .setMessage(R.string.delete_avatar_message)
+                .setMessage(R.string.tatrak_delete_avatar_explained) // Tatrak: says who stops seeing it
                 .setNegativeButton(R.string.cancel, null)
                 .setPositiveButton(
                         R.string.confirm,
@@ -257,6 +261,7 @@ public class PublishProfilePictureActivity extends XmppActivity
                                 result == NodeConfiguration.AccessModel.PRESENCE);
                         binding.contactOnly.jumpDrawablesToCurrentState();
                         binding.contactOnly.setVisibility(View.VISIBLE);
+                        compose.refresh(); // Tatrak: the Compose screen reads the views again
                     }
 
                     @Override
@@ -264,6 +269,7 @@ public class PublishProfilePictureActivity extends XmppActivity
                         Log.d(Config.LOGTAG, "could not fetch access model", t);
                         binding.contactOnly.setChecked(false);
                         binding.contactOnly.setVisibility(View.VISIBLE);
+                        compose.refresh(); // Tatrak: the Compose screen reads the views again
                     }
                 },
                 ContextCompat.getMainExecutor(getApplication()));
@@ -299,6 +305,8 @@ public class PublishProfilePictureActivity extends XmppActivity
     @Override
     public void onStart() {
         super.onStart();
+        // Tatrak: the Compose screen reads the views (cancel or skip, up arrow) once this is done
+        compose.refresh();
         final Intent intent = getIntent();
         if (intent == null) {
             return;
@@ -374,6 +382,8 @@ public class PublishProfilePictureActivity extends XmppActivity
         this.binding.publishButton.setText(publishing ? R.string.publishing : res);
         this.binding.publishButton.setEnabled(status);
         this.binding.contactOnly.setEnabled(status);
+        // Tatrak: the Compose screen reads the views once the caller's changes are done
+        compose.refresh();
     }
 
     public void refreshUiReal() {
