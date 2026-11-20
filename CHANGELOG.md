@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0-beta.1 (pre-release)
 
 ### Interface
 - Long press on a chat's avatar in the chat list shows the chat without marking it read; a tap
