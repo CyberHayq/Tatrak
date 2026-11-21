@@ -684,29 +684,32 @@ class ChatListScreenshotTest {
         assertEquals(listOf("chat-3", "chat-3"), previewed)
     }
 
-    /** Each tab is a 48 dp button with its label; Chats is selected; the shortcuts call the existing actions. */
+    /** Each tab is a 48 dp button with its label; Chats is selected; the other tabs go to [MainTabs], the FAB starts a chat. */
     @Test
-    fun floatingBottomBarCallsTheExistingActions() {
+    fun floatingBottomBarSwitchesTabs() {
         val calls = mutableListOf<String>()
         val actions =
             object : ChatListActions by NoListActions {
-                override fun openContacts() { calls += "contacts" }
-                override fun openCalls() { calls += "calls" }
-                override fun openSettings() { calls += "settings" }
                 override fun newChat() { calls += "new" }
             }
-        compose.setContent { TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.OFF) { ChatListScreen(sampleState(), actions) } }
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.OFF) {
+                ChatListScreen(sampleState(), actions, onTab = { calls += it.name })
+            }
+        }
         compose.onNodeWithText("Chats").assertIsSelected()
         for (label in listOf("Chats", "Contacts", "Calls", "Profile")) {
             val b = compose.onNodeWithText(label).assert(SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Button)).getUnclippedBoundsInRoot()
             assertTrue(label, b.bottom - b.top >= 48.dp && b.right - b.left >= 48.dp)
         }
         compose.onNodeWithText("Profile").assertIsNotSelected()
+        // Chats itself only scrolls the list to the top
+        compose.onNodeWithText("Chats").performClick()
         compose.onNodeWithText("Contacts").performClick()
         compose.onNodeWithText("Calls").performClick()
         compose.onNodeWithText("Profile").performClick()
         compose.onNodeWithContentDescription("New chat").performClick()
-        assertEquals(listOf("contacts", "calls", "settings", "new"), calls)
+        assertEquals(listOf("CONTACTS", "CALLS", "PROFILE", "new"), calls)
         // the plain top bar keeps the menu; search moved to the bottom bar
         compose.onAllNodesWithContentDescription("Search").assertCountEquals(1)
         compose.onNodeWithContentDescription("Search").performClick()

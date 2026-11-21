@@ -16,6 +16,14 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -103,7 +111,7 @@ data class MenuEntry(
 
 /**
  * The top bar in the chat colours. With [search] set, the title becomes a focused search field;
- * [menu] goes into a three-dot overflow after [actions].
+ * [menu] goes into a three-dot overflow after [actions]. No [onBack]: no back button (a main tab).
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -154,7 +162,8 @@ fun TatrakTopBar(
  * A screen with [topBar] (and [tabs] under it) over [content]. With floating bars on, they float in the chat list's pills
  * ([FloatingTopBar]) and the content runs under them, fading into them (blurred under them with "Blur under bars"); [content]
  * gets their height to pad its list's top with. [floatingTop] draws the floating top slot itself instead (its own pills over
- * the backdrop). Off: bar, tabs and content in a column as before, [content] gets 0 dp.
+ * the backdrop). Off: bar, tabs and content in a column as before, [content] gets 0 dp. A [bottomBar] (the chat list's
+ * dock on a main tab) sits under the content, or floats over it like the top bar; [LocalBottomBar] tells the content.
  */
 @Composable
 fun TatrakScaffold(
@@ -162,13 +171,22 @@ fun TatrakScaffold(
     modifier: Modifier = Modifier,
     tabs: (@Composable () -> Unit)? = null,
     floatingTop: (@Composable (BarBackdrop?) -> Unit)? = null,
+    bottomBar: (@Composable (BarBackdrop?) -> Unit)? = null,
     content: @Composable ColumnScope.(top: Dp) -> Unit,
 ) {
     if (!LocalFloatingBars.current) {
         Column(modifier) {
             topBar()
             tabs?.invoke()
-            content(0.dp)
+            if (bottomBar == null) {
+                content(0.dp)
+            } else {
+                // the bar below takes the navigation bar
+                Column(Modifier.weight(1f).consumeWindowInsets(WindowInsets.navigationBars)) {
+                    CompositionLocalProvider(LocalBottomBar provides 0.dp) { content(0.dp) }
+                }
+                bottomBar(null)
+            }
         }
         return
     }
@@ -178,9 +196,38 @@ fun TatrakScaffold(
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0),
         topBar = { if (floatingTop != null) floatingTop(backdrop) else FloatingTopBar(backdrop, tabs, topBar) },
+        bottomBar = { bottomBar?.invoke(backdrop) },
     ) { bars ->
         Column(Modifier.fillMaxSize().fadeUnderBars(bars).backdropSource(backdrop)) {
-            content(bars.calculateTopPadding())
+            CompositionLocalProvider(LocalBottomBar provides if (bottomBar == null) null else bars.calculateBottomPadding()) {
+                content(bars.calculateTopPadding())
+            }
+        }
+    }
+}
+
+/**
+ * Inside a [TatrakScaffold] with a bottom bar: how far the content's list pads its end for it (the navigation bar
+ * included); null without one, when the list pads for the navigation bar itself.
+ */
+val LocalBottomBar = staticCompositionLocalOf<Dp?> { null }
+
+/** A list's padding in a [TatrakScaffold]: [top] for its floating top bar, and its bottom bar if any (see [listBottom]). */
+@Composable
+fun listPadding(top: Dp): PaddingValues = PaddingValues(top = top, bottom = LocalBottomBar.current ?: 0.dp)
+
+/** The navigation bar padding a list in a [TatrakScaffold] takes, unless a bottom bar takes it ([listPadding]). */
+@Composable
+fun Modifier.listBottom(): Modifier = if (LocalBottomBar.current == null) navigationBarsPadding() else this
+
+/** Scrolls [list] to its top each time [signal] changes (a tap on the current main tab), not when first composed. */
+@Composable
+fun ScrollToTopOn(signal: Int, list: LazyListState) {
+    var seen by remember { mutableIntStateOf(signal) }
+    LaunchedEffect(signal) {
+        if (signal != seen) {
+            seen = signal
+            list.animateScrollToItem(0)
         }
     }
 }

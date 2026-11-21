@@ -46,7 +46,12 @@ public class SettingsActivity extends XmppActivity {
                 .equals(categories)) {
             preferenceFragment = new NotificationsSettingsFragment();
         } else {
-            preferenceFragment = null;
+            // Tatrak: a page opened from the chat list's Profile tab (null: unknown, the home)
+            preferenceFragment =
+                    intent == null
+                            ? null
+                            : SettingsHomeFragment.page(
+                                    intent.getIntExtra(SettingsHomeFragment.EXTRA_PAGE, 0));
         }
 
         final var fragmentManager = getSupportFragmentManager();

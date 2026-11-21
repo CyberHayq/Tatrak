@@ -10,9 +10,6 @@ import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
-import android.text.Html;
-import android.text.method.LinkMovementMethod;
 import android.util.Log;
 import android.util.Pair;
 import android.view.ContextMenu;
@@ -36,7 +33,6 @@ import androidx.activity.OnBackPressedCallback;
 import androidx.annotation.MenuRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
-import androidx.annotation.StringRes;
 import androidx.appcompat.app.ActionBar;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.widget.PopupMenu;
@@ -52,7 +48,6 @@ import androidx.viewpager.widget.ViewPager;
 import com.google.android.material.color.MaterialColors;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.textfield.TextInputLayout;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterables;
 import com.google.common.util.concurrent.FutureCallback;
 import com.google.common.util.concurrent.Futures;
@@ -87,7 +82,6 @@ import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import im.conversations.android.model.Bookmark;
 import im.conversations.android.model.DynamicTag;
 import im.conversations.android.model.ImmutableBookmark;
-import im.conversations.android.xmpp.model.stanza.Presence;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -103,12 +97,8 @@ public class StartConversationActivity extends XmppActivity
                 SwipeRefreshLayout.OnRefreshListener,
                 CreatePublicChannelDialog.CreatePublicChannelDialogListener {
 
-    private static final String PREF_KEY_CONTACT_INTEGRATION_CONSENT =
-            "contact_list_integration_consent";
-
     public static final String EXTRA_INVITE_URI = "eu.siacs.conversations.invite_uri";
 
-    private final int REQUEST_SYNC_CONTACTS = 0x28cf;
     private final int REQUEST_CREATE_CONFERENCE = 0x39da;
     private final PendingItem<Intent> pendingViewIntent = new PendingItem<>();
     private final PendingItem<String> mInitialSearchValue = new PendingItem<>();
@@ -301,9 +291,8 @@ public class StartConversationActivity extends XmppActivity
 
         final SharedPreferences preferences = getPreferences();
 
-        this.mHideOfflineContacts =
-                QuickConversationsService.isConversations()
-                        && preferences.getBoolean("hide_offline", false);
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        this.mHideOfflineContacts = ContactFlows.isHidingOfflineContacts(preferences);
 
         final boolean startSearching =
                 preferences.getBoolean(
@@ -398,7 +387,8 @@ public class StartConversationActivity extends XmppActivity
 
     void setHideOfflineContacts(final boolean hide) {
         mHideOfflineContacts = hide;
-        getPreferences().edit().putBoolean("hide_offline", hide).apply();
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        ContactFlows.setHideOfflineContacts(getPreferences(), hide);
         filter(searchNeedle());
     }
 
@@ -557,22 +547,8 @@ public class StartConversationActivity extends XmppActivity
     protected void deleteContact() {
         final int position = contact_context_id;
         final Contact contact = (Contact) contacts.get(position);
-        final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
-        builder.setNegativeButton(R.string.cancel, null);
-        builder.setTitle(R.string.action_delete_contact);
-        // Tatrak: says what the roster removal does
-        builder.setMessage(
-                JidDialog.style(
-                        this,
-                        R.string.tatrak_delete_contact_explained,
-                        contact.getAddress().toString()));
-        builder.setPositiveButton(
-                R.string.delete,
-                (dialog, which) -> {
-                    xmppConnectionService.deleteContactOnServer(contact);
-                    filter(searchNeedle());
-                });
-        builder.create().show();
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        ContactFlows.deleteContact(this, contact, () -> filter(searchNeedle()));
     }
 
     protected void deleteConference() {
@@ -610,61 +586,9 @@ public class StartConversationActivity extends XmppActivity
         builder.create().show();
     }
 
-    @SuppressLint("InflateParams")
     protected void showCreateContactDialog(final String prefilledJid, final Invite invite) {
-        FragmentTransaction ft = getSupportFragmentManager().beginTransaction();
-        Fragment prev = getSupportFragmentManager().findFragmentByTag(FRAGMENT_TAG_DIALOG);
-        if (prev != null) {
-            ft.remove(prev);
-        }
-        ft.addToBackStack(null);
-        EnterJidDialog dialog =
-                EnterJidDialog.newInstance(
-                        mActivatedAccounts,
-                        getString(R.string.add_contact),
-                        getString(R.string.add),
-                        prefilledJid,
-                        invite == null ? null : invite.account,
-                        invite == null || !invite.uri.hasOmemoFingerprints(),
-                        true);
-
-        dialog.setOnEnterJidDialogPositiveListener(
-                (accountJid, contactJid) -> {
-                    if (!xmppConnectionServiceBound) {
-                        return false;
-                    }
-
-                    final Account account = xmppConnectionService.findAccountByJid(accountJid);
-                    if (account == null) {
-                        return true;
-                    }
-
-                    final Contact contact = account.getRoster().getContact(contactJid);
-                    if (invite != null && invite.uri.getName() != null) {
-                        contact.setServerName(invite.uri.getName());
-                    }
-                    if (contact.isSelf()) {
-                        switchToConversation(contact);
-                        return true;
-                    } else if (contact.showInRoster()) {
-                        throw new EnterJidDialog.JidError(
-                                getString(R.string.contact_already_exists));
-                    } else {
-                        final String preAuth =
-                                invite == null
-                                        ? null
-                                        : invite.uri.getParameter(MiniUri.Xmpp.PARAMETER_PRE_AUTH);
-                        xmppConnectionService.createContact(contact, preAuth);
-                        if (invite != null && invite.uri.hasOmemoFingerprints()) {
-                            xmppConnectionService.verifyFingerprints(
-                                    contact, invite.uri.getOmemoFingerprints());
-                        }
-                        switchToConversationDoNotAppend(
-                                contact, invite == null ? null : invite.uri.getBody());
-                        return true;
-                    }
-                });
-        dialog.show(ft, FRAGMENT_TAG_DIALOG);
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        ContactFlows.showCreateContactDialog(this, mActivatedAccounts, prefilledJid, invite);
     }
 
     @SuppressLint("InflateParams")
@@ -727,17 +651,13 @@ public class StartConversationActivity extends XmppActivity
     }
 
     protected void switchToConversation(Contact contact) {
-        Conversation conversation =
-                xmppConnectionService.findOrCreateConversation(
-                        contact.getAccount(), contact.getAddress(), false, true);
-        switchToConversation(conversation);
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        ContactFlows.switchToConversation(this, contact);
     }
 
     protected void switchToConversationDoNotAppend(Contact contact, String body) {
-        Conversation conversation =
-                xmppConnectionService.findOrCreateConversation(
-                        contact.getAccount(), contact.getAddress(), false, true);
-        switchToConversationDoNotAppend(conversation, body);
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        ContactFlows.switchToConversationDoNotAppend(this, contact, body);
     }
 
     @Override
@@ -867,119 +787,17 @@ public class StartConversationActivity extends XmppActivity
     }
 
     private boolean askForContactsPermissions() {
-        if (!QuickConversationsService.isContactListIntegration(this)) {
-            return false;
-        }
-        if (checkSelfPermission(Manifest.permission.READ_CONTACTS)
-                == PackageManager.PERMISSION_GRANTED) {
-            return false;
-        }
-        if (mRequestedContactsPermission.compareAndSet(false, true)) {
-            final ImmutableList.Builder<String> permissionBuilder = new ImmutableList.Builder<>();
-            permissionBuilder.add(Manifest.permission.READ_CONTACTS);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                permissionBuilder.add(Manifest.permission.POST_NOTIFICATIONS);
-            }
-            final String[] permission = permissionBuilder.build().toArray(new String[0]);
-            final String consent =
-                    PreferenceManager.getDefaultSharedPreferences(getApplicationContext())
-                            .getString(PREF_KEY_CONTACT_INTEGRATION_CONSENT, null);
-            final boolean requiresConsent =
-                    (QuickConversationsService.isQuicksy()
-                                    || QuickConversationsService.isPlayStoreFlavor())
-                            && !"agreed".equals(consent);
-            if (requiresConsent && "declined".equals(consent)) {
-                Log.d(
-                        Config.LOGTAG,
-                        "not asking for contacts permission because consent has been declined");
-                return false;
-            }
-            if (requiresConsent
-                    || shouldShowRequestPermissionRationale(Manifest.permission.READ_CONTACTS)) {
-                final MaterialAlertDialogBuilder builder = new MaterialAlertDialogBuilder(this);
-                final AtomicBoolean requestPermission = new AtomicBoolean(false);
-                if (QuickConversationsService.isQuicksy()) {
-                    builder.setTitle(R.string.quicksy_wants_your_consent);
-                    builder.setMessage(
-                            Html.fromHtml(getString(R.string.sync_with_contacts_quicksy_static)));
-                } else {
-                    builder.setTitle(R.string.sync_with_contacts);
-                    builder.setMessage(
-                            getString(
-                                    R.string.sync_with_contacts_long,
-                                    getString(R.string.app_name)));
-                }
-                @StringRes int confirmButtonText;
-                if (requiresConsent) {
-                    confirmButtonText = R.string.agree_and_continue;
-                } else {
-                    confirmButtonText = R.string.next;
-                }
-                builder.setPositiveButton(
-                        confirmButtonText,
-                        (dialog, which) -> {
-                            if (requiresConsent) {
-                                PreferenceManager.getDefaultSharedPreferences(
-                                                getApplicationContext())
-                                        .edit()
-                                        .putString(PREF_KEY_CONTACT_INTEGRATION_CONSENT, "agreed")
-                                        .apply();
-                            }
-                            if (requestPermission.compareAndSet(false, true)) {
-                                requestPermissions(permission, REQUEST_SYNC_CONTACTS);
-                            }
-                        });
-                if (requiresConsent) {
-                    builder.setNegativeButton(
-                            R.string.decline,
-                            (dialog, which) ->
-                                    PreferenceManager.getDefaultSharedPreferences(
-                                                    getApplicationContext())
-                                            .edit()
-                                            .putString(
-                                                    PREF_KEY_CONTACT_INTEGRATION_CONSENT,
-                                                    "declined")
-                                            .apply());
-                } else {
-                    builder.setOnDismissListener(
-                            dialog -> {
-                                if (requestPermission.compareAndSet(false, true)) {
-                                    requestPermissions(permission, REQUEST_SYNC_CONTACTS);
-                                }
-                            });
-                }
-                builder.setCancelable(requiresConsent);
-                final AlertDialog dialog = builder.create();
-                dialog.setCanceledOnTouchOutside(requiresConsent);
-                dialog.setOnShowListener(
-                        dialogInterface -> {
-                            final TextView tv = dialog.findViewById(android.R.id.message);
-                            if (tv != null) {
-                                tv.setMovementMethod(LinkMovementMethod.getInstance());
-                            }
-                        });
-                dialog.show();
-            } else {
-                requestPermissions(permission, REQUEST_SYNC_CONTACTS);
-            }
-        }
-        return true;
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        return ContactFlows.askForContactsPermissions(this, mRequestedContactsPermission);
     }
 
     @Override
     public void onRequestPermissionsResult(
             int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        if (grantResults.length > 0)
-            if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                if (requestCode == REQUEST_SYNC_CONTACTS && xmppConnectionServiceBound) {
-                    if (QuickConversationsService.isQuicksy()) {
-                        setRefreshing(true);
-                    }
-                    xmppConnectionService.loadPhoneContacts();
-                    xmppConnectionService.startContactObserver();
-                }
-            }
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        ContactFlows.onRequestPermissionsResult(
+                this, requestCode, grantResults, () -> setRefreshing(true));
     }
 
     private void configureHomeButton() {
@@ -1149,22 +967,9 @@ public class StartConversationActivity extends XmppActivity
     }
 
     protected void filterContacts(final String needle) {
-        this.contacts.clear();
-        final List<Account> accounts = xmppConnectionService.getAccounts();
-        final var showOffline = !this.mHideOfflineContacts;
-        for (final Account account : accounts) {
-            if (account.isEnabled()) {
-                for (Contact contact : account.getRoster().getContacts()) {
-                    Presence.Availability s = contact.getShownStatus();
-                    if (contact.showInContactList()
-                            && contact.match(needle)
-                            && (showOffline || s.compareTo(Presence.Availability.OFFLINE) < 0)) {
-                        this.contacts.add(contact);
-                    }
-                }
-            }
-        }
-        Collections.sort(this.contacts);
+        // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
+        ContactFlows.filterContacts(
+                xmppConnectionService, this.contacts, this.mHideOfflineContacts, needle);
         mContactsAdapter.notifyDataSetChanged();
     }
 

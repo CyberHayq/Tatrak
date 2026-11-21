@@ -15,46 +15,70 @@ import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
-import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Message
 import eu.siacs.conversations.entities.RtpSessionStatus
 import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.utils.TimeFrameUtils
+import kotlinx.coroutines.CoroutineScope
 import kotlin.math.roundToInt
 
 /**
- * Tatrak: the call list, opened from the chat list's side menu. Calls are the `TYPE_RTP_SESSION`
- * messages of all chats, read with one indexed query (monocles' call list ran one query per chat
- * and parsed whole messages, which took seconds). The last list is kept in memory, so reopening
- * shows it at once while a fresh one is read.
+ * Tatrak: the call list, opened from the chat list's side menu (the docks show it as a tab of the
+ * chat list instead, from the same [CallList]).
  */
-class CallsActivity : XmppActivity(), CallsActions, XmppConnectionService.OnConversationUpdate {
+class CallsActivity : XmppActivity(), XmppConnectionService.OnConversationUpdate {
 
-    private val calls = RtpCallStarter(this)
-
-    private val source by lazy {
-        SnapshotSource(lifecycleScope, cache ?: CallsState()) { service, publish -> build(service, publish) }
-    }
+    private val list = CallList(this, RtpCallStarter(this), lifecycleScope, ::finish)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         WindowCompat.setDecorFitsSystemWindows(window, false)
         setContent {
             TatrakTheme {
-                val state by source.state.collectAsStateWithLifecycle()
-                CallsScreen(state, this)
+                val state by list.state.collectAsStateWithLifecycle()
+                CallsScreen(state, list)
             }
         }
     }
 
-    override fun onBackendConnected() = source.invalidate(xmppConnectionService)
+    override fun onBackendConnected() = list.invalidate()
 
-    override fun refreshUiReal() {
-        source.invalidate(xmppConnectionService ?: return)
-    }
+    override fun refreshUiReal() = list.invalidate()
 
     /** A new call is a new message in some chat. */
     override fun onConversationUpdate() = refreshUi()
+}
+
+/**
+ * The call list's data and actions, for [CallsActivity] and the chat list's Calls tab. Calls are
+ * the `TYPE_RTP_SESSION` messages of all chats, read with one indexed query (monocles' call list
+ * ran one query per chat and parsed whole messages, which took seconds). The last list is kept in
+ * memory, so reopening shows it at once while a fresh one is read.
+ */
+internal class CallList(
+    private val activity: XmppActivity,
+    private val calls: RtpCallStarter,
+    scope: CoroutineScope,
+    private val onBack: () -> Unit,
+) : CallsActions {
+
+    private val source = SnapshotSource(scope, cache ?: CallsState()) { service, publish -> build(service, publish) }
+
+    val state = source.state
+
+    fun invalidate() {
+        source.invalidate(activity.xmppConnectionService ?: return)
+    }
+
+    override fun back() = onBack()
+
+    override fun openChat(chat: String) {
+        activity.switchToConversation(activity.xmppConnectionService?.findConversationByUuid(chat) ?: return)
+    }
+
+    override fun call(chat: String, video: Boolean) {
+        calls.call(activity.xmppConnectionService?.findConversationByUuid(chat) ?: return, video)
+    }
 
     private fun build(service: XmppConnectionService, publish: (CallsState) -> Unit) {
         val chats = ArrayList(service.conversations).associateBy { it.uuid }
@@ -72,14 +96,14 @@ class CallsActivity : XmppActivity(), CallsActions, XmppConnectionService.OnConv
                     received = r.received,
                     missed = r.missed,
                     count = g.count,
-                    duration = if (r.duration > 0) TimeFrameUtils.resolve(this, r.duration) else null,
+                    duration = if (r.duration > 0) TimeFrameUtils.resolve(activity, r.duration) else null,
                     icon = RtpSessionStatus.getDrawable(r.received, r.successful),
                     avatar = previous[r.chat],
                 )
             }
         publish(CallsState(entries, loaded = true).also { cache = it })
         // avatars after the list: the service caches them, so usually this is quick too
-        val size = (AVATAR_SIZE * resources.displayMetrics.density).roundToInt()
+        val size = (AVATAR_SIZE * activity.resources.displayMetrics.density).roundToInt()
         val avatars = entries.map { it.chat }.distinct().associateWith { service.avatarService.get(chats.getValue(it), size, false) }
         val withAvatars = CallsState(entries.map { it.copy(avatar = avatars[it.chat]) }, loaded = true)
         if (withAvatars != source.state.value) publish(withAvatars.also { cache = it })
@@ -114,18 +138,6 @@ class CallsActivity : XmppActivity(), CallsActions, XmppConnectionService.OnConv
                 }
             }
         return records
-    }
-
-    // --- actions ------------------------------------------------------------------------------
-
-    override fun back() = finish()
-
-    override fun openChat(chat: String) {
-        switchToConversation(xmppConnectionService?.findConversationByUuid(chat) ?: return)
-    }
-
-    override fun call(chat: String, video: Boolean) {
-        calls.call(xmppConnectionService?.findConversationByUuid(chat) ?: return, video)
     }
 
     companion object {

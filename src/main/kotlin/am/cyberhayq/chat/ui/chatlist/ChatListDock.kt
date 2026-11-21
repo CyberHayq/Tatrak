@@ -31,6 +31,8 @@ import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.only
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.layout.RowScope
@@ -76,15 +78,16 @@ internal fun dockVisible(searching: Boolean, showArchive: Boolean, selectionMode
     !searching && !showArchive && !selectionMode
 
 /**
- * Slate and Sea bottom bar: a floating search pill and compose button above a row of shortcuts (not a navigation graph:
- * Chats scrolls to the top, the others open their screens). The dock itself extends under the navigation bar.
+ * Slate and Sea bottom bar: the main tabs ([MainTabs]: a tap on the current one scrolls it to the top), and on Chats
+ * ([onSearch] set) a floating search pill and compose button above them. The dock itself extends under the navigation bar.
  */
 @Composable
 internal fun ChatListBottomBar(
     visible: Boolean,
-    actions: ChatListActions,
-    onSearch: () -> Unit,
-    onChats: () -> Unit,
+    selected: MainTab,
+    onTab: (MainTab) -> Unit,
+    onSearch: (() -> Unit)? = null,
+    onNewChat: () -> Unit = {},
 ) {
     AnimatedVisibility(
         visible = visible,
@@ -94,7 +97,8 @@ internal fun ChatListBottomBar(
         val bar = TatrakTheme.chatColors.topBar
         val sides = WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.Horizontal)
         Column {
-            Row(
+            // Chats' own: it slides with the page while the tabs switch, the bar under it stays
+            if (onSearch != null) Row(
                 horizontalArrangement = Arrangement.spacedBy(10.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth().windowInsetsPadding(sides).padding(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 10.dp),
@@ -122,7 +126,7 @@ internal fun ChatListBottomBar(
                     }
                 }
                 Surface(
-                    onClick = actions::newChat,
+                    onClick = onNewChat,
                     shape = CircleShape,
                     color = MaterialTheme.colorScheme.primary,
                     contentColor = MaterialTheme.colorScheme.onPrimary,
@@ -137,14 +141,12 @@ internal fun ChatListBottomBar(
             Row(
                 modifier =
                     Modifier.fillMaxWidth()
+                        .pageDock()
                         .background(bar)
                         .windowInsetsPadding(sides.union(WindowInsets.navigationBars.only(WindowInsetsSides.Bottom)))
                         .padding(horizontal = 4.dp, vertical = 6.dp)
             ) {
-                DockItem(R.drawable.ic_chat_24dp, stringResource(R.string.tatrak_dock_chats), selected = true, onClick = onChats)
-                DockItem(R.drawable.ic_call_24dp, stringResource(R.string.tatrak_calls), selected = false, onClick = actions::openCalls)
-                DockItem(R.drawable.ic_contacts_24dp, stringResource(R.string.contacts), selected = false, onClick = actions::openContacts)
-                DockItem(R.drawable.ic_settings_24dp, stringResource(R.string.action_settings), selected = false, onClick = actions::openSettings)
+                mainTabOrder(floating = false).forEach { TabItem(it, selected, onTab, floating = false, avatar = null) }
             }
         }
     }
@@ -280,16 +282,17 @@ private fun HeaderPiece(pills: HeaderPills, content: @Composable () -> Unit) {
 }
 
 /**
- * Floating bars' bottom bar, as in Telegram 13: a pill with Chats / Contacts / Calls / Profile and a round search button;
- * shortcuts to the existing screens, not a navigation graph. Profile shows the drawer's account and opens the settings.
+ * Floating bars' bottom bar, as in Telegram 13: a pill with the main tabs Chats / Contacts / Calls / Profile ([MainTabs]:
+ * a tap on the current one scrolls it to the top) and, on Chats ([onSearch] set), a round search button; other tabs keep
+ * its room, so the pill does not move. Profile shows the drawer's account.
  */
 @Composable
 internal fun FloatingBottomBar(
     visible: Boolean,
+    selected: MainTab,
     account: AccountHeader?,
-    actions: ChatListActions,
-    onSearch: () -> Unit,
-    onChats: () -> Unit,
+    onTab: (MainTab) -> Unit,
+    onSearch: (() -> Unit)?,
     backdrop: BarBackdrop? = null,
 ) {
     AnimatedVisibility(
@@ -310,13 +313,12 @@ internal fun FloatingBottomBar(
                     .padding(start = 16.dp, end = 16.dp, bottom = 8.dp)
                     .height(IntrinsicSize.Min),
         ) {
-            Row(Modifier.weight(1f).shadow(3.dp, CircleShape).backdropBlur(backdrop, CircleShape).background(bar).padding(4.dp)) {
-                DockItem(R.drawable.ic_chat_24dp, stringResource(R.string.tatrak_dock_chats), selected = true, onClick = onChats, capsule = true)
-                DockItem(R.drawable.ic_contacts_24dp, stringResource(R.string.contacts), selected = false, onClick = actions::openContacts, capsule = true)
-                DockItem(R.drawable.ic_call_24dp, stringResource(R.string.tatrak_calls), selected = false, onClick = actions::openCalls, capsule = true)
-                DockItem(R.drawable.ic_person_24dp, stringResource(R.string.tatrak_tab_profile), selected = false, onClick = actions::openSettings, avatar = account?.avatar, capsule = true)
+            Row(Modifier.weight(1f).pageDock().shadow(3.dp, CircleShape).backdropBlur(backdrop, CircleShape).background(bar).padding(4.dp)) {
+                mainTabOrder(floating = true).forEach { TabItem(it, selected, onTab, floating = true, avatar = account?.avatar) }
             }
-            Surface(
+            // Chats' own, as Telegram's search: it slides with the page while the tabs switch
+            if (onSearch == null) Spacer(Modifier.fillMaxHeight().aspectRatio(1f, matchHeightConstraintsFirst = true))
+            else Surface(
                 onClick = onSearch,
                 shape = CircleShape,
                 color = bar,
@@ -328,6 +330,29 @@ internal fun FloatingBottomBar(
             }
         }
     }
+}
+
+/**
+ * The dock of a main tab other than Chats (whose dock also carries the search and the compose button): the floating
+ * bar or Slate and Sea's, as the chat list shows it.
+ */
+@Composable
+internal fun TabDock(selected: MainTab, account: AccountHeader?, onTab: (MainTab) -> Unit, backdrop: BarBackdrop?) {
+    if (LocalFloatingBars.current) FloatingBottomBar(true, selected, account, onTab, onSearch = null, backdrop = backdrop)
+    else ChatListBottomBar(true, selected, onTab)
+}
+
+@Composable
+private fun RowScope.TabItem(tab: MainTab, selected: MainTab, onTab: (MainTab) -> Unit, floating: Boolean, avatar: Bitmap?) {
+    val (icon, label) =
+        when (tab) {
+            MainTab.CHATS -> R.drawable.ic_chat_24dp to R.string.tatrak_dock_chats
+            MainTab.CONTACTS -> R.drawable.ic_contacts_24dp to R.string.contacts
+            MainTab.CALLS -> R.drawable.ic_call_24dp to R.string.tatrak_calls
+            // the floating bar's Profile shows the account; Slate's classic bar keeps Settings
+            MainTab.PROFILE -> if (floating) R.drawable.ic_person_24dp to R.string.tatrak_tab_profile else R.drawable.ic_settings_24dp to R.string.action_settings
+        }
+    DockItem(icon, stringResource(label), selected = tab == selected, onClick = { onTab(tab) }, avatar = if (tab == MainTab.PROFILE) avatar else null, capsule = floating)
 }
 
 @Composable

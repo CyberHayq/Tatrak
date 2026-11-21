@@ -28,6 +28,18 @@ sources:
   - id: preview
     resource: ../../src/main/kotlin/am/cyberhayq/chat/ui/chat/ChatPreview.kt
     title: ChatPreview.kt
+  - id: tabs
+    resource: ../../src/main/kotlin/am/cyberhayq/chat/ui/chatlist/MainTabs.kt
+    title: MainTabs.kt
+  - id: flows
+    resource: ../../src/main/java/eu/siacs/conversations/ui/ContactFlows.java
+    title: ContactFlows.java (StartConversationActivity's contact flows, moved)
+  - id: tabstest
+    resource: ../../src/test/kotlin/am/cyberhayq/chat/ui/chatlist/MainTabsTest.kt
+    title: MainTabsTest.kt
+  - id: telegram
+    resource: https://github.com/DrKLO/Telegram/blob/21f7d109da6ab3506c9e9577f98c6a38771ab335/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
+    title: Telegram MainTabsActivity (commit 21f7d10)
   - id: plan
     resource: ~/.claude/plans/ticklish-weaving-boole.md
     title: Approved implementation plan (local file, outside the repository)
@@ -42,6 +54,9 @@ sources:
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatListState.kt` | `ChatListItem`, `AccountHeader`, `ChatListState`, `OutgoingStatus`, `ChatListSnapshot.build` |
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatListScreen.kt` | `ChatListScreen` scaffold: top bars (normal / search / archive / selection), folder tabs + pager, drawer, mute and delete dialogs, snackbar |
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatRows.kt` | `SwipeableChatRow`, `ChatRow`, `ArchiveRow`, avatars with online/selected marks, unread badges |
+| `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/MainTabs.kt` | `MainTab`, `MainTabs`: Chats, Contacts, Calls and Profile as tabs of the list pane (see "Main tabs") |
+| `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatListDock.kt` | The docks (floating bar, Slate and Sea bar), `TabDock`, the floating top bar pieces |
+| `src/main/java/eu/siacs/conversations/ui/ContactFlows.java` | `StartConversationActivity`'s contact flows, shared with the Contacts tab |
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatSuggestions.kt` | First non-archived chat for the tablet second pane |
 | `src/main/kotlin/am/cyberhayq/chat/ui/theme/SystemBars.kt` | `StatusBarIcons`: dark/light status bar icons per screen; the last screen out restores the classic screens' value (`Activities.setStatusAndNavigationBarColors`: dark icons in light mode), a late dispose does not overwrite a newer screen's choice |
 | `src/main/kotlin/am/cyberhayq/chat/ui/chatlist/ChatTime.kt` | Row timestamp formatting |
@@ -138,6 +153,55 @@ while it is being swiped.
 - **Colours** follow Telegram's default day theme (white header, `#229AF0` unread badges,
   `#46AA36` checks); night values are approximate.
 
+# Main tabs (2026-11-21, not yet verified on a device)
+
+Chats, Contacts, Calls and Profile are one level, as in Telegram's `MainTabsActivity`:[^telegram]
+tabs of the list pane of `ConversationsActivity` (also in two panes, where the chat stays in the
+second pane). Only the dock styles have tabs (floating bars in any style: Chats, Contacts,
+Calls, Profile; Slate and Sea's classic bar: Chats, Calls, Contacts, Settings); Telegram's style
+without floating bars has no dock and stays on Chats.[^tabs]
+
+- **Switch.** A tap on another tab slides the old and the new page side by side a full width,
+  the new one from the side its tab lies on, 320 ms `EaseOutQuint` (Telegram's
+  `ViewPagerActivity.getManualScrollDuration`). Tap only: no swipe between tabs (it would
+  compete with the folder pager, row swipes and the system back edge). During the switch the
+  pages' own tab bars hide and `MainTabs` draws one dock over both, in place, blurring both
+  pages (`backdropSource` on the pages' box), so only the selection moves. What else the dock
+  carries on Chats (the floating search button, Slate's search pill and compose button, the
+  floating compose button) belongs to the Chats page and slides with it; on the other tabs the
+  floating bar keeps the search button's room empty, so the pill does not move.[^tabs]
+- **State.** The tab lives in `ChatListFragment` (saved in its instance state); each page keeps
+  its saveable state (scroll, search, call filter) in a `SaveableStateHolder` while another tab
+  shows; a page not shown is not composed, so its first frame on return composes it.
+- **Back** on a tab other than Chats returns to Chats, after the page's own Back (closing the
+  Contacts search). A tap on the current tab scrolls it to the top (`ScrollToTopOn`).
+- **Contacts** is `NewChatScreen` in contacts-only mode driven by `ContactsTab`
+  (`NewChatCompose.kt`, sharing `NewChatModel` with the "New message" screen). The flows it
+  needs from `StartConversationActivity` were moved unchanged into `ContactFlows` (owner's
+  decision, 2026-11-21): the contact filter, "Add contact" (`EnterJidDialog`), the delete
+  dialog, "hide offline" and the contact-list permission request with its result (forwarded by
+  `ConversationsActivity.onRequestPermissionsResult`); the activity's methods delegate to it.
+  Details, QR, block and call call the same `XmppActivity` methods the activity's menu calls.
+  Opening a chat uses `switchToConversation`, which `ConversationsActivity` overrides to open in
+  place; it now also overrides `switchToConversationDoNotAppend` (the "Add contact" result),
+  which `XmppActivity` would answer by restarting the activity.[^flows]
+- **Calls** is `CallsScreen` over `CallList` (moved out of `CallsActivity`, which uses it too).
+- **Profile** is the settings home (`ProfileTab` over `SettingsHomeScreen`, the rows of
+  `settingsSections`); a row opens its page above everything: `SettingsActivity` with
+  `SettingsHomeFragment.EXTRA_PAGE` (the row's title; `SettingsHomeFragment.page` maps only the
+  rows' titles, since the activity is exported).
+- The drawer's Contacts, Calls and Settings still open their activities (deeper screens); the
+  Profile item's click stays free for a later account long-press.
+
+| Old action of the screen | Where it is now |
+|---|---|
+| Contacts: open a contact's chat, search, "done" on one result | Contacts tab, `ContactsTab` (same calls) |
+| Contacts: "Add contact" row | `ContactFlows.showCreateContactDialog` |
+| Contacts menu: details, call, QR, block/unblock, delete | `switchToContactDetails`, `RtpCallStarter`, `showQrCode`, `BlockContactDialog.show`, `ContactFlows.deleteContact` |
+| Contacts: "Hide offline", contact-list permission | `ContactFlows.setHideOfflineContacts`, `ContactFlows.askForContactsPermissions` (tab shown, fragment start) |
+| Calls: open chat, call back, filter tabs | Calls tab over `CallList` |
+| Settings: account header (manage accounts), each page, About | Profile tab; pages in `SettingsActivity` |
+
 # Tests
 
 `ChatListScreenshotTest` (Robolectric, `sdk = [35]`, `w411dp-h891dp-xxhdpi`,
@@ -146,7 +210,10 @@ while it is being swiped.
 `avatarLongPressPreviewsTheChat` covers the avatar / row long press split and the custom action;
 `ChatScreenshotTest` records `chat_preview_light.png` / `chat_preview_dark.png` (whole screen with
 the dialog) and checks that a drag scrolls without opening, a tap opens, and `markRead` is never
-called. See
+called.
+`MainTabsTest` covers the selected tab, Back to Chats, a mid-switch frame with both pages
+(`main_tabs_switching.png`), the direction, a tap on the current tab and a page's kept state, and
+records every tab of both docks by day and night (`main_tabs_<floating|slate>_<tab>_<light|dark>.png`).[^tabstest] See
 [build setup](../build/build-setup.md).
 
 [^state]: ChatListState.kt
@@ -157,3 +224,7 @@ called. See
 [^rows]: ChatRows.kt
 [^test]: ChatListScreenshotTest.kt
 [^preview]: ChatPreview.kt
+[^tabs]: MainTabs.kt
+[^flows]: ContactFlows.java
+[^tabstest]: MainTabsTest.kt
+[^telegram]: Telegram MainTabsActivity

@@ -5,6 +5,11 @@ import am.cyberhayq.chat.ui.common.AVATAR_SIZE
 import am.cyberhayq.chat.ui.common.EmptyText
 import am.cyberhayq.chat.ui.common.TatrakScaffold
 import am.cyberhayq.chat.ui.common.TatrakTopBar
+import am.cyberhayq.chat.ui.common.ScrollToTopOn
+import am.cyberhayq.chat.ui.common.listBottom
+import am.cyberhayq.chat.ui.common.listPadding
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import androidx.compose.foundation.lazy.rememberLazyListState
 import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.common.MenuEntry
 import android.graphics.Bitmap
@@ -15,13 +20,11 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -102,17 +105,29 @@ internal enum class CallsTab(val label: Int, val empty: Int, val keep: (CallEntr
     MISSED(R.string.tatrak_calls_missed, R.string.tatrak_calls_no_missed, { it.missed }),
 }
 
-/** Telegram-style call list: all, incoming, outgoing or missed calls, newest first, call back from a row. */
+/**
+ * Telegram-style call list: all, incoming, outgoing or missed calls, newest first, call back from a row. With a [dock]
+ * it is the chat list's Calls tab: no back button, [scrollToTop] from a tap on the current tab.
+ */
 @Composable
-fun CallsScreen(state: CallsState, actions: CallsActions, modifier: Modifier = Modifier) {
+fun CallsScreen(
+    state: CallsState,
+    actions: CallsActions,
+    modifier: Modifier = Modifier,
+    dock: (@Composable (BarBackdrop?) -> Unit)? = null,
+    scrollToTop: Int = 0,
+) {
     var tab by rememberSaveable { mutableStateOf(CallsTab.ALL) }
+    val list = rememberLazyListState()
+    ScrollToTopOn(scrollToTop, list)
     val shown = remember(state.entries, tab) { if (tab == CallsTab.ALL) state.entries else state.entries.filter(tab.keep) }
     val time = rememberCallTimeFormatter()
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         // floating: the tabs sit in their own pill, which draws the fill
         val tabFill = if (LocalFloatingBars.current) Color.Transparent else MaterialTheme.colorScheme.surface
         TatrakScaffold(
-            topBar = { TatrakTopBar(title = stringResource(R.string.tatrak_calls), onBack = actions::back) },
+            topBar = { TatrakTopBar(title = stringResource(R.string.tatrak_calls), onBack = if (dock == null) actions::back else null) },
+            bottomBar = dock,
             modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             tabs = {
                 // scrollable: four Russian labels do not fit equal widths
@@ -132,7 +147,7 @@ fun CallsScreen(state: CallsState, actions: CallsActions, modifier: Modifier = M
             if (state.loaded && shown.isEmpty()) {
                 EmptyText(stringResource(tab.empty), Modifier.padding(top = top))
             } else {
-                LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(top = top)) {
+                LazyColumn(Modifier.fillMaxSize().listBottom(), state = list, contentPadding = listPadding(top)) {
                     items(shown, key = { it.key }) { CallRow(it, time, actions) }
                 }
             }

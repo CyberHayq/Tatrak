@@ -274,6 +274,9 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     public void onRequestPermissionsResult(
             int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        // Tatrak: the chat list's Contacts tab asks for the contacts permission as
+        // StartConversationActivity does
+        ContactFlows.onRequestPermissionsResult(this, requestCode, grantResults, () -> {});
         if (grantResults.length > 0) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 switch (requestCode) {
@@ -656,6 +659,19 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     public void switchToConversation(Conversation conversation) {
         Log.d(Config.LOGTAG, "override");
         openConversation(conversation, null);
+    }
+
+    // Tatrak: the chat list's Contacts tab adds contacts from inside this activity; XmppActivity's
+    // version would restart it
+    @Override
+    public void switchToConversationDoNotAppend(
+            final Conversation conversation, final String text) {
+        final Bundle extras = new Bundle();
+        if (text != null) {
+            extras.putString(Intent.EXTRA_TEXT, text);
+        }
+        extras.putBoolean(EXTRA_DO_NOT_APPEND, true);
+        openConversation(conversation, extras);
     }
 
     @Override

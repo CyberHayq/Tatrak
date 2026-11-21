@@ -4,7 +4,28 @@ import am.cyberhayq.chat.ui.chat.ChatPreview
 import am.cyberhayq.chat.ui.chat.ChatViewModel
 import am.cyberhayq.chat.ui.chat.NoChatActions
 import am.cyberhayq.chat.ui.chat.currentTextPalette
+import am.cyberhayq.chat.ui.calls.CallsScreen
 import am.cyberhayq.chat.ui.chatlist.ChatListActions
+import am.cyberhayq.chat.ui.chatlist.MainTab
+import am.cyberhayq.chat.ui.chatlist.MainTabs
+import am.cyberhayq.chat.ui.chatlist.TabDock
+import am.cyberhayq.chat.ui.chatlist.mainTabOrder
+import am.cyberhayq.chat.ui.newchat.NewChatScreen
+import am.cyberhayq.chat.ui.settings.AccountHeader
+import am.cyberhayq.chat.ui.settings.ProfileTab
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
+import am.cyberhayq.chat.ui.theme.LocalTatrakStyle
+import am.cyberhayq.chat.ui.theme.TatrakStyle
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import eu.siacs.conversations.ui.fragment.settings.SettingsHomeFragment
+import eu.siacs.conversations.ui.fragment.settings.settingsAccount
+import eu.siacs.conversations.ui.fragment.settings.settingsSections
+import kotlinx.coroutines.launch
 import am.cyberhayq.chat.ui.chatlist.ChatListScreen
 import am.cyberhayq.chat.ui.chatlist.ChatListViewModel
 import am.cyberhayq.chat.ui.theme.TatrakTheme
@@ -77,12 +98,31 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
             override fun cachedThumbnail(uuid: String): Bitmap? = xmppConnectionService?.bitmapCache?.get(uuid)
         }
 
+    /** The dock's tab ([MainTabs]); the dock styles only, Telegram's style has none and stays on Chats. */
+    private var tab by mutableStateOf(MainTab.CHATS)
+    /** A tap on the current tab other than Chats: its list scrolls to the top. */
+    private var scrollToTop by mutableIntStateOf(0)
+    // the other tabs: made in onCreate, where a fragment may register the call permission request
+    private lateinit var callList: CallList
+    private lateinit var contactsTab: ContactsTab
+    private var profile by mutableStateOf<AccountHeader?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        val activity = requireXmppActivity()
+        val calls = RtpCallStarter(activity, this)
+        callList = CallList(activity, calls, lifecycleScope) { selectTab(MainTab.CHATS) }
+        contactsTab = ContactsTab(activity, calls)
+        savedInstanceState?.getString(STATE_TAB)?.let { tab = MainTab.valueOf(it) }
         // delivered once this list is started again, after the chat has gone back to it
         parentFragmentManager.setFragmentResultListener(ARCHIVE_FROM_CHAT, this) { _, result ->
             archiveFromChat = result.getString(ARCHIVE_FROM_CHAT)
         }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString(STATE_TAB, tab.name)
     }
 
     override fun onCreateView(
@@ -98,14 +138,41 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                 TatrakTheme {
                     val state by viewModel.state.collectAsStateWithLifecycle()
                     val messages by messageResults.state.collectAsStateWithLifecycle()
-                    ChatListScreen(
-                        state,
-                        this@ChatListFragment,
-                        messages = messages,
-                        canInvite = canInvite,
-                        archiveRequest = archiveFromChat,
-                        onArchiveRequestDone = { archiveFromChat = null },
-                    )
+                    val floating = LocalFloatingBars.current
+                    // Telegram's style without floating bars has no dock, so no tabs
+                    val docked = floating || LocalTatrakStyle.current == TatrakStyle.SLATE_SEA
+                    val dock = { selected: MainTab -> @Composable { backdrop: BarBackdrop? -> TabDock(selected, state.account, ::selectTab, backdrop) } }
+                    MainTabs(
+                        if (docked) tab else MainTab.CHATS,
+                        mainTabOrder(floating),
+                        onBack = { selectTab(MainTab.CHATS) },
+                        dock = { selected, backdrop -> TabDock(selected, state.account, ::selectTab, backdrop) },
+                    ) { page ->
+                        when (page) {
+                            MainTab.CHATS ->
+                                ChatListScreen(
+                                    state,
+                                    this@ChatListFragment,
+                                    messages = messages,
+                                    canInvite = canInvite,
+                                    archiveRequest = archiveFromChat,
+                                    onArchiveRequestDone = { archiveFromChat = null },
+                                    onTab = ::selectTab,
+                                )
+                            MainTab.CONTACTS -> {
+                                val contacts by contactsTab.state.collectAsStateWithLifecycle()
+                                NewChatScreen(contacts, contactsTab, contactsOnly = true, dock = dock(page), scrollToTop = scrollToTop)
+                            }
+                            MainTab.CALLS -> {
+                                val calls by callList.state.collectAsStateWithLifecycle()
+                                CallsScreen(calls, callList, dock = dock(page), scrollToTop = scrollToTop)
+                            }
+                            MainTab.PROFILE -> {
+                                val sections = remember { settingsSections(requireContext(), ::openSettingsPage) }
+                                ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop)
+                            }
+                        }
+                    }
                     previewing?.let { c ->
                         val palette = currentTextPalette()
                         LaunchedEffect(palette) { previewModel.setPalette(palette) }
@@ -150,6 +217,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         super.onStart()
         refresh()
         Updater.checkIfDue(requireContext())
+        if (tab == MainTab.CONTACTS) contactsTab.askForContactsPermissions()
     }
 
     override fun refresh() {
@@ -160,6 +228,38 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         viewModel.invalidate(service)
         // a chat closed meanwhile (e.g. a bookmark changed on another client) closes its preview, as ChatFragment.refresh does
         previewing?.let { if (service.isConversationStillOpen(it)) previewModel.invalidate(service) else previewing = null }
+        refreshTab()
+    }
+
+    /** The shown tab's data, as its own screen refreshed it (roster, block list and conversation updates). */
+    private fun refreshTab() {
+        when (tab) {
+            MainTab.CHATS -> Unit
+            MainTab.CONTACTS -> contactsTab.filter()
+            MainTab.CALLS -> callList.invalidate()
+            MainTab.PROFILE -> loadProfile()
+        }
+    }
+
+    /** A dock tap: another tab slides in ([MainTabs]); the current one scrolls to the top. */
+    private fun selectTab(selected: MainTab) {
+        if (selected == tab) {
+            scrollToTop++
+            return
+        }
+        tab = selected
+        // the Contacts screen filters as it comes in (its search, kept across tabs, may be open)
+        if (selected == MainTab.CONTACTS) contactsTab.askForContactsPermissions() else refreshTab()
+    }
+
+    private fun loadProfile() {
+        val service = xmppConnectionService ?: return
+        lifecycleScope.launch { profile = settingsAccount(service, resources) ?: return@launch }
+    }
+
+    /** A settings row of the Profile tab: its page opens above everything, in the settings screen. */
+    private fun openSettingsPage(title: Int) {
+        startActivity(Intent(requireContext(), SettingsActivity::class.java).putExtra(SettingsHomeFragment.EXTRA_PAGE, title))
     }
 
     /**
@@ -311,6 +411,8 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         service.updateConversationUi()
     }
 }
+
+private const val STATE_TAB = "tatrak_main_tab"
 
 /** Walks back from the newest message, so a reply sent after it doesn't hide the new message. */
 internal fun hasReceivedSince(messages: List<Message>, since: Long): Boolean {

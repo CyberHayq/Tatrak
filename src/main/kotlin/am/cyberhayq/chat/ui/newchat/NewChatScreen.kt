@@ -1,6 +1,11 @@
 package am.cyberhayq.chat.ui.newchat
 
 import am.cyberhayq.chat.ui.chatlist.inErrorColor
+import am.cyberhayq.chat.ui.common.ScrollToTopOn
+import am.cyberhayq.chat.ui.common.listBottom
+import am.cyberhayq.chat.ui.common.listPadding
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import androidx.compose.foundation.lazy.rememberLazyListState
 import am.cyberhayq.chat.ui.common.AvatarRow
 import am.cyberhayq.chat.ui.common.EmptyText
 import am.cyberhayq.chat.ui.common.TatrakScaffold
@@ -18,9 +23,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.imePadding
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -117,7 +120,10 @@ interface NewChatActions {
     fun toggleHideOffline()
 }
 
-/** Telegram's "New message": search, create / join rows, then contacts and groups. */
+/**
+ * Telegram's "New message": search, create / join rows, then contacts and groups. With a [dock] it is the chat list's
+ * Contacts tab: a back button only while searching, [scrollToTop] from a tap on the current tab.
+ */
 @Composable
 fun NewChatScreen(
     state: NewChatState,
@@ -126,7 +132,11 @@ fun NewChatScreen(
     initialSearch: String? = null,
     contactsOnly: Boolean = false,
     searchRequest: Pair<Int, String?>? = null,
+    dock: (@Composable (BarBackdrop?) -> Unit)? = null,
+    scrollToTop: Int = 0,
 ) {
+    val list = rememberLazyListState()
+    ScrollToTopOn(scrollToTop, list)
     var searching by rememberSaveable { mutableStateOf(initialSearch != null) }
     var needle by rememberSaveable { mutableStateOf(initialSearch.orEmpty()) }
     LaunchedEffect(actions) { actions.search(needle) }
@@ -148,13 +158,17 @@ fun NewChatScreen(
             topBar = {
                 TatrakTopBar(
                     title = stringResource(if (contactsOnly) R.string.contacts else R.string.tatrak_new_chat_title),
-                    onBack = {
-                        if (!searching) {
-                            actions.back()
-                        } else {
-                            closeSearch()
-                        }
-                    },
+                    onBack =
+                        if (dock != null && !searching) null
+                        else {
+                            {
+                                if (!searching) {
+                                    actions.back()
+                                } else {
+                                    closeSearch()
+                                }
+                            }
+                        },
                     search =
                         if (!searching) null
                         else
@@ -181,8 +195,9 @@ fun NewChatScreen(
                 }
             },
             modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+            bottomBar = dock,
         ) { top ->
-            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding().imePadding(), contentPadding = PaddingValues(top = top)) {
+            LazyColumn(Modifier.fillMaxSize().listBottom().imePadding(), state = list, contentPadding = listPadding(top)) {
                 if (needle.isEmpty()) {
                     items(state.rows.filter { !contactsOnly || it == NewChatRow.ADD_CONTACT }, key = { "row:" + it.name }) { row ->
                         ActionRow(row) { actions.row(row) }

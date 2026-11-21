@@ -217,6 +217,8 @@ fun ChatListScreen(
     /** A chat archived from its own menu: archived here like the selection's archive, with Undo. */
     archiveRequest: String? = null,
     onArchiveRequestDone: () -> Unit = {},
+    /** A dock's tab other than Chats ([MainTabs]); Chats itself scrolls the list to the top. */
+    onTab: (MainTab) -> Unit = {},
 ) {
     val drawer = rememberDrawerController()
     val scope = rememberCoroutineScope()
@@ -427,14 +429,16 @@ fun ChatListScreen(
                     )
                 },
                 bottomBar = {
+                    val tab: (MainTab) -> Unit = { if (it == MainTab.CHATS) scrollToTop++ else onTab(it) }
                     if (floating) {
-                        FloatingBottomBar(dock, state.account, actions, onSearch = { searching = true }, onChats = { scrollToTop++ }, backdrop)
+                        FloatingBottomBar(dock, MainTab.CHATS, state.account, tab, onSearch = { searching = true }, backdrop)
                     } else if (slate) {
                         ChatListBottomBar(
                             visible = dock,
-                            actions = actions,
+                            selected = MainTab.CHATS,
+                            onTab = tab,
                             onSearch = { searching = true },
-                            onChats = { scrollToTop++ },
+                            onNewChat = actions::newChat,
                         )
                     }
                 },

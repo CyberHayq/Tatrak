@@ -14,7 +14,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -36,6 +35,17 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import am.cyberhayq.chat.ui.common.ScrollToTopOn
+import am.cyberhayq.chat.ui.common.TatrakScaffold
+import am.cyberhayq.chat.ui.common.TatrakTopBar
+import am.cyberhayq.chat.ui.common.listBottom
+import am.cyberhayq.chat.ui.common.listPadding
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.unit.Dp
+import eu.siacs.conversations.R
 import androidx.compose.ui.unit.sp
 
 @Immutable data class AccountHeader(val name: String, val address: String, val avatar: Bitmap?, val color: Int)
@@ -57,11 +67,16 @@ fun SettingsHomeScreen(
     onAccount: () -> Unit,
     sections: List<List<SettingsRow>>,
     modifier: Modifier = Modifier,
+    /** In a [TatrakScaffold]: its floating top bar's height. */
+    top: Dp = 0.dp,
+    list: LazyListState = rememberLazyListState(),
 ) {
     // Text without a colour would fall back to black outside a Surface (unreadable in the dark theme)
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         LazyColumn(
-            modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).navigationBarsPadding()
+            modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).listBottom(),
+            state = list,
+            contentPadding = listPadding(top),
         ) {
             // always present: an item inserted above the first visible one would open scrolled past it
             item(key = "account") {
@@ -97,6 +112,26 @@ fun SettingsHomeScreen(
                 if (index != sections.lastIndex) item(key = "gap$index") { Spacer(Modifier.height(10.dp)) }
             }
         }
+    }
+}
+
+/** The chat list's Profile tab: the settings home under a "Settings" bar without a back button, over the [dock]. */
+@Composable
+fun ProfileTab(
+    account: AccountHeader?,
+    onAccount: () -> Unit,
+    sections: List<List<SettingsRow>>,
+    dock: @Composable (BarBackdrop?) -> Unit,
+    scrollToTop: Int = 0,
+) {
+    val list = rememberLazyListState()
+    ScrollToTopOn(scrollToTop, list)
+    TatrakScaffold(
+        topBar = { TatrakTopBar(title = stringResource(R.string.title_activity_settings), onBack = null) },
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+        bottomBar = dock,
+    ) { top ->
+        SettingsHomeScreen(account, onAccount, sections, top = top, list = list)
     }
 }
 

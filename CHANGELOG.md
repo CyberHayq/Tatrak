@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Interface
+- Chats, Contacts, Calls and Profile are tabs under the bottom bar: a tap slides to the tab, the
+  bar stays in place, Back returns to Chats (as in Telegram).
+
 ## 0.4.0-beta.1 (pre-release)
 
 ### Interface
