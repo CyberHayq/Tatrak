@@ -11,6 +11,10 @@
   unread chats; choosing one shows only that account's chats, contacts, calls and profile, until
   "All accounts" is chosen. Notifications still come from every account.
 
+### Chat
+- A reply to a photo or video shows its thumbnail, in the quote and in the reply bar above the
+  text field.
+
 ## 0.4.0-beta.1 (pre-release)
 
 ### Interface

@@ -369,8 +369,9 @@ internal open class NoChatActions : ChatActions {
 @Immutable
 data class MessageFocus(val uuid: String, val id: Long = System.nanoTime())
 
+/** [thumbnail]: the answered message's picture is drawn beside the text (see [hasReplyThumbnail]). */
 @Immutable
-data class ReplyPreview(val uuid: String, val name: String, val text: String, val color: Int)
+data class ReplyPreview(val uuid: String, val name: String, val text: String, val color: Int, val thumbnail: Boolean = false)
 
 /** Older messages are asked for while this many items are left above the top visible one. */
 private const val LOAD_MORE_AHEAD = 25

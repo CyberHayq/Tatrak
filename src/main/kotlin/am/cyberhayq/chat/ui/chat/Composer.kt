@@ -277,6 +277,7 @@ fun Composer(
                         title = stringResource(R.string.tatrak_chat_reply_to, reply.name),
                         text = reply.text,
                         onClose = actions::cancelReply,
+                        thumbnail = reply.thumbnailFor(actions),
                     )
             }
             when {
@@ -370,7 +371,7 @@ private fun SlateComposer(
                     { ContextPanel(R.drawable.ic_edit_24dp, stringResource(R.string.tatrak_chat_editing), editing.text, actions::cancelEdit) }
                 }
                 reply != null -> {
-                    { ContextPanel(R.drawable.ic_reply_24dp, stringResource(R.string.tatrak_chat_reply_to, reply.name), reply.text, actions::cancelReply) }
+                    { ContextPanel(R.drawable.ic_reply_24dp, stringResource(R.string.tatrak_chat_reply_to, reply.name), reply.text, actions::cancelReply, reply.thumbnailFor(actions)) }
                 }
                 else -> null
             }
@@ -1170,6 +1171,7 @@ private fun ContextPanel(
     title: String,
     text: String,
     onClose: () -> Unit,
+    thumbnail: (@Composable () -> Unit)? = null,
 ) {
     val colors = MaterialTheme.colorScheme
     Row(
@@ -1180,6 +1182,10 @@ private fun ContextPanel(
         Spacer(Modifier.width(14.dp))
         Box(Modifier.width(2.dp).height(34.dp).background(colors.primary))
         Spacer(Modifier.width(8.dp))
+        if (thumbnail != null) {
+            thumbnail()
+            Spacer(Modifier.width(10.dp))
+        }
         Column(Modifier.weight(1f)) {
             Text(
                 title,
@@ -1206,6 +1212,10 @@ private fun ContextPanel(
         }
     }
 }
+
+/** Telegram's reply panel (ChatReplyContainer): a 34 dp square with 2 dp corners, the text 10 dp after it. */
+private fun ReplyPreview.thumbnailFor(actions: ChatActions): (@Composable () -> Unit)? =
+    if (thumbnail) { { ReplyThumbnail(uuid, 34.dp, 2.dp, actions) } } else null
 
 @Composable
 private fun Notice(text: String, actions: ChatActions) {

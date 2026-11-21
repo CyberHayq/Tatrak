@@ -109,6 +109,15 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   the parent is looked up only in the same conversation, and tapping the header scrolls to it.
   Without a parent the header shows the quote's first line. Edits keep the quote; copy and edit
   use `Message.getBodyWithoutReplyFallback`.
+  A parent that is a local photo or video (`hasReplyThumbnail`: the chat list's
+  `previewIsFileDescription` and `hasThumbnail`, stickers excluded as in Telegram) adds a square
+  thumbnail left of the name, in the bubble header (33 dp, 4 dp corners, Telegram's
+  `ChatMessageCell` formula with our 13 sp text) and in the reply panel above the composer
+  (34 dp, 2 dp corners, Telegram's `ChatReplyContainer`). The flag is set when the model is built
+  (`ReplyHeader.thumbnail`, `ReplyPreview.thumbnail`); the picture comes from
+  `ChatActions.loadThumbnail` at the photo bubble's size, because `FileBackend`'s bitmap cache is
+  keyed by message uuid only and a smaller first load would blur the bubble. A parent not found
+  locally gets none. The thumbnail has no content description, so TalkBack reads the same text.
 - Delete for everyone (XEP-0424): menu entry with a confirmation for our own sent messages
   (channels need occupant-ids and a stanza-id). `ModerationManager.retract` sends the retraction
   with a fallback body and deletes the local copy like a moderation; incoming retractions are

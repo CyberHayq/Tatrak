@@ -3,6 +3,7 @@ package am.cyberhayq.chat.ui.chat
 import am.cyberhayq.chat.ui.chatlist.chatTitle
 import am.cyberhayq.chat.ui.chatlist.styledChatTitle
 import am.cyberhayq.chat.ui.chatlist.ChatListSnapshot
+import am.cyberhayq.chat.ui.chatlist.hasThumbnail
 
 import android.content.Context
 import android.graphics.Bitmap
@@ -268,9 +269,18 @@ internal fun fingerprintLines(fingerprint: String): String =
     // "05" is the key type byte, left out as the classic key screens do
     fingerprint.substring(2).chunked(8).chunked(4).joinToString("\n") { it.joinToString(" ") }
 
-/** [targetKey] is null when the answered message isn't loaded or no longer exists. */
+/**
+ * [targetKey] is null when the answered message isn't loaded or no longer exists; [thumbnail]: its picture is
+ * drawn beside the text (see [hasReplyThumbnail]).
+ */
 @Immutable
-data class ReplyHeader(val name: String, val text: String, val color: Int, val targetKey: String?)
+data class ReplyHeader(
+    val name: String,
+    val text: String,
+    val color: Int,
+    val targetKey: String?,
+    val thumbnail: Boolean = false,
+)
 
 @Immutable
 data class DateItem(override val key: String, override val day: String) : ChatItem {
@@ -1168,6 +1178,7 @@ object ChatSnapshot {
                 text.lineSequence().firstOrNull { it.isNotBlank() }.orEmpty(),
                 UIHelper.getColorForName(name),
                 parent.uuid,
+                hasReplyThumbnail(parent),
             )
         }
 
@@ -1481,6 +1492,14 @@ object ChatSnapshot {
 /** A file, image or file offered for download: its body is the file URL, for OMEMO with the key. */
 internal fun isAttachment(message: Message): Boolean =
     message.isFileOrImage || message.treatAsDownloadable() || MessageUtils.unInitiatedButKnownSize(message)
+
+/** A reply to [message] shows its picture: a local image or video, not a sticker (Telegram shows none for those). */
+internal fun hasReplyThumbnail(message: Message): Boolean {
+    val params = message.fileParams
+    return ChatListSnapshot.previewIsFileDescription(message) &&
+        hasThumbnail(message.mimeType, params.width, params.height) &&
+        !isSticker(message, params)
+}
 
 /** What a reply quotes of [message]: an attachment by its kind ("image"), never by its URL. */
 internal fun replyQuote(context: Context, message: Message): String =

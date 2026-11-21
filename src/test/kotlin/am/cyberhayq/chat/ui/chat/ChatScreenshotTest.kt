@@ -245,6 +245,28 @@ class ChatScreenshotTest {
             privateChat(it)
         }
 
+    @Test fun chatReplyPhoto() = replyPhoto("chat_reply_photo", darkTheme = false)
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun chatReplyPhotoDark() = replyPhoto("chat_reply_photo_dark", darkTheme = true)
+
+    /** A bubble and the composer panel answering a photo: both show its thumbnail. */
+    private fun replyPhoto(name: String, darkTheme: Boolean) =
+        capture(
+            name,
+            darkTheme = darkTheme,
+            input = TextFieldValue("And this one?"),
+            reply = ReplyPreview("i1", "Davit", "Photo", 0xFFFAA774.toInt(), thumbnail = true),
+        ) { s ->
+            mediaChat(s).let { st ->
+                val answer =
+                    s.text("r1", true, GroupPosition.SINGLE, "Where was this taken?", "11:03", status = DeliveryStatus.READ)
+                        .copy(reply = ReplyHeader("Davit", "Photo", 0xFFFAA774.toInt(), "i1", thumbnail = true))
+                st.copy(items = listOf(answer) + st.items.filter { it.key == "i1" || it is DateItem })
+            }
+        }
+
     @Test
     fun chatWallpaper() = capture("chat_wallpaper", darkTheme = false) { privateChat(it).copy(wallpaper = "preset:ocean") }
 

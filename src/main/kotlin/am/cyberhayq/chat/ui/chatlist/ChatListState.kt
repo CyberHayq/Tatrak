@@ -297,7 +297,7 @@ object ChatListSnapshot {
     }
 
     /** The branches of UIHelper.getMessagePreview that end in the file's description. */
-    private fun previewIsFileDescription(message: Message): Boolean =
+    internal fun previewIsFileDescription(message: Message): Boolean =
         message.transferable == null &&
             message.type != Message.TYPE_RETRACTED &&
             message.type != Message.TYPE_HIDDEN &&

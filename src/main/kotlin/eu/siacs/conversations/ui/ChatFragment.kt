@@ -29,6 +29,7 @@ import am.cyberhayq.chat.ui.chat.currentTextPalette
 import am.cyberhayq.chat.ui.chat.appendToDraft
 import am.cyberhayq.chat.ui.chat.insertLinkAtCursor
 import am.cyberhayq.chat.ui.chat.replyId
+import am.cyberhayq.chat.ui.chat.hasReplyThumbnail
 import am.cyberhayq.chat.ui.chat.replyQuote
 import am.cyberhayq.chat.ui.chat.SelectedText
 import am.cyberhayq.chat.ui.chat.selectionCopyText
@@ -1082,7 +1083,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         if (quote.isEmpty()) return
         if (c.correctingMessage != null) cancelEdit()
         val name = UIHelper.getMessageDisplayName(message)
-        viewModel.reply = ReplyPreview(uuid, name, quote, UIHelper.getColorForName(name))
+        viewModel.reply = ReplyPreview(uuid, name, quote, UIHelper.getColorForName(name), hasReplyThumbnail(message))
     }
 
     override fun cancelReply() {

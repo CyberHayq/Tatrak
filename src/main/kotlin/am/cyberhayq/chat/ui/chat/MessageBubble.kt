@@ -533,7 +533,7 @@ fun Bubble(
                     modifier = headerPadding.padding(bottom = 1.dp),
                 )
             }
-            item.reply?.let { ReplyQuote(it, item.isOutgoing, headerPadding) }
+            item.reply?.let { ReplyQuote(it, item.isOutgoing, actions, headerPadding) }
             BubbleContent(item, actions, voice)
             if (item.reactions.isNotEmpty()) {
                 Reactions(
@@ -558,7 +558,7 @@ fun Bubble(
 internal val LocalOpenMessage = staticCompositionLocalOf<(String) -> Unit> { {} }
 
 @Composable
-private fun ReplyQuote(reply: ReplyHeader, outgoing: Boolean, modifier: Modifier) {
+private fun ReplyQuote(reply: ReplyHeader, outgoing: Boolean, actions: ChatActions, modifier: Modifier) {
     val accent =
         if (reply.color != 0) {
             ChatScreenTheme.colors.senderName(Color(reply.color))
@@ -584,9 +584,32 @@ private fun ReplyQuote(reply: ReplyHeader, outgoing: Boolean, modifier: Modifier
             .height(IntrinsicSize.Min)
     ) {
         Box(Modifier.width(3.dp).fillMaxHeight().background(accent))
-        Column(Modifier.padding(start = 7.dp, end = 8.dp, top = 3.dp, bottom = 3.dp)) {
+        // Telegram's ChatMessageCell: 4 dp corners, the side of 7 dp plus the name's and the text's sizes, text 3 dp further
+        val thumbnailKey = reply.targetKey?.takeIf { reply.thumbnail }
+        if (thumbnailKey != null) {
+            ReplyThumbnail(thumbnailKey, 33.dp, 4.dp, actions, Modifier.align(Alignment.CenterVertically).padding(start = 5.dp, top = 3.dp, bottom = 3.dp))
+        }
+        Column(Modifier.padding(start = if (thumbnailKey != null) 5.dp else 7.dp, end = 8.dp, top = 3.dp, bottom = 3.dp)) {
             Text(reply.name, color = accent, fontSize = 13.sp, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(reply.text, color = textColor, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+/**
+ * The answered photo or video, cropped to a square. Asked for at the bubble's size: the bitmap cache is keyed by the
+ * message alone, so a smaller first load would leave the bubble itself blurred.
+ */
+@Composable
+internal fun ReplyThumbnail(uuid: String, size: Dp, radius: Dp, actions: ChatActions, modifier: Modifier = Modifier) {
+    val sizePx = with(LocalDensity.current) { MediaMaxWidth.roundToPx() }
+    val thumbnail by
+        produceState(actions.cachedThumbnail(uuid), uuid) {
+            if (value == null) value = actions.loadThumbnail(uuid, sizePx)
+        }
+    Box(modifier.size(size).clip(RoundedCornerShape(radius)).background(Color.Black.copy(alpha = 0.08f))) {
+        thumbnail?.let {
+            Image(remember(it) { it.asImageBitmap() }, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
         }
     }
 }
