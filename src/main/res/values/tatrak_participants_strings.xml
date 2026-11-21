@@ -2,4 +2,7 @@
 <resources>
     <!-- chat list preview of a voice message: "audio, 0:12" -->
     <string name="tatrak_preview_with_duration">%1$s, %2$s</string>
+    <!-- TalkBack: a group sender's avatar in the chat; a tap on it, or on a participants row, opens the participant menu -->
+    <string name="tatrak_participant_avatar">Participant</string>
+    <string name="tatrak_participant_actions">show actions</string>
 </resources>

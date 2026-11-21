@@ -4,6 +4,7 @@ import am.cyberhayq.chat.ui.theme.contentOn
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onPlaced
 import androidx.compose.ui.graphics.graphicsLayer
+import am.cyberhayq.chat.ui.common.EntryMenuBox
 import am.cyberhayq.chat.ui.state.ReportComposition
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.TatrakStyle
@@ -341,13 +342,20 @@ fun MessageRow(
         ) {
             if (isGroup && !item.isOutgoing) {
                 if (item.showAvatar) {
-                    val mention = stringResource(R.string.tatrak_chat_mention_sender)
-                    Box(
-                        Modifier.clip(LocalAvatarShape.current)
-                            .clickable(onClickLabel = mention) { actions.mentionSender(item.key) }
-                            .semantics { contentDescription = mention }
-                    ) {
-                        LetterAvatar(item.avatar, item.avatarLetter, item.senderColor, AvatarSize, 15.sp)
+                    val description = stringResource(R.string.tatrak_participant_avatar)
+                    EntryMenuBox { show ->
+                        Box(
+                            Modifier.clip(LocalAvatarShape.current)
+                                .combinedClickable(
+                                    onClickLabel = stringResource(R.string.tatrak_participant_actions),
+                                    onLongClickLabel = stringResource(R.string.tatrak_chat_mention_sender),
+                                    onClick = { show(actions.senderMenu(item.key)) },
+                                    onLongClick = { actions.mentionSender(item.key) },
+                                )
+                                .semantics { contentDescription = description }
+                        ) {
+                            LetterAvatar(item.avatar, item.avatarLetter, item.senderColor, AvatarSize, 15.sp)
+                        }
                     }
                 } else {
                     Spacer(Modifier.width(AvatarSize))

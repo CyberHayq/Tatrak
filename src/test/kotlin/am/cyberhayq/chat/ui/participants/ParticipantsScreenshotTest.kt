@@ -104,7 +104,7 @@ class ParticipantsScreenshotTest {
     }
 
     @Test
-    fun longPressShowsTheHostMenu() {
+    fun tapShowsTheHostMenu() {
         var picked: String? = null
         val actions = object : NoActions() {
             override fun menu(key: String) =
@@ -114,11 +114,26 @@ class ParticipantsScreenshotTest {
                 )
         }
         compose.setContent { TatrakTheme(darkTheme = false) { ParticipantsScreen(state, actions) } }
-        compose.onNodeWithText("Lilit").performTouchInput { longClick() }
+        compose.onNodeWithText("Lilit").performClick()
         compose.onNodeWithText("Send private message").assertIsNotEnabled()
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/participants_menu.png")
         compose.onNodeWithText("Make admin").performClick()
         assertEquals("d", picked)
+    }
+
+    @Test
+    fun longPressMentions() {
+        var opened: String? = null
+        val actions = object : NoActions() {
+            override fun open(key: String) {
+                opened = key
+            }
+
+            override fun menu(key: String): List<MenuEntry> = error("a long press must not open the menu")
+        }
+        compose.setContent { TatrakTheme(darkTheme = false) { ParticipantsScreen(state, actions) } }
+        compose.onNodeWithText("Lilit").performTouchInput { longClick() }
+        assertEquals("d", opened)
     }
 
     @Test

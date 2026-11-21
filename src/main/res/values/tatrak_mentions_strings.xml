@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- tap on a sender's avatar in a group puts the nick into the message -->
+    <!-- long press on a sender's avatar in a group, or on a participants row, puts the nick into the message -->
     <string name="tatrak_chat_mention_sender">Mention</string>
     <!-- round button above "scroll down": jumps to the next unread message that mentions you -->
     <string name="tatrak_chat_next_mention">Next mention</string>

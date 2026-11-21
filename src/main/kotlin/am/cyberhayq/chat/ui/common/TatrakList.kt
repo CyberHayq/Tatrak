@@ -309,10 +309,63 @@ fun EmptyText(text: String, modifier: Modifier = Modifier) {
 }
 
 /**
+ * [content] with a dropdown of [MenuEntry]s under it; [content] gets `show`, which opens it with the
+ * given entries (none: nothing opens). [AvatarRow]'s menu, and the group sender's in the chat.
+ */
+@Composable
+fun EntryMenuBox(modifier: Modifier = Modifier, content: @Composable (show: (List<MenuEntry>) -> Unit) -> Unit) {
+    var menuOpen by remember { mutableStateOf(false) }
+    var entries by remember { mutableStateOf(emptyList<MenuEntry>()) }
+    // a menu opened over the keyboard is placed for the shorter window and stays there once the
+    // keyboard goes (a long one ends at the window top), so the keyboard goes first
+    var menuPending by remember { mutableStateOf(false) }
+    val keyboard = LocalSoftwareKeyboardController.current
+    val ime = WindowInsets.ime
+    val density = LocalDensity.current
+    val show: (List<MenuEntry>) -> Unit =
+        remember(keyboard, ime, density) {
+            { list ->
+                if (list.isNotEmpty()) {
+                    entries = list
+                    if (ime.getBottom(density) > 0) {
+                        keyboard?.hide()
+                        menuPending = true
+                    } else {
+                        menuOpen = true
+                    }
+                }
+            }
+        }
+    LaunchedEffect(menuPending) {
+        if (!menuPending) return@LaunchedEffect
+        withTimeoutOrNull(1000) { snapshotFlow { ime.getBottom(density) == 0 }.first { it } }
+        menuPending = false
+        menuOpen = true
+    }
+    Box(modifier) {
+        content(show)
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            entries.forEach { item ->
+                DropdownMenuItem(
+                    text = { Text(item.label) },
+                    enabled = item.enabled,
+                    onClick = {
+                        menuOpen = false
+                        item.onClick()
+                    },
+                )
+            }
+        }
+    }
+}
+
+/**
  * Avatar, name and one subtitle line, with an optional [trailing] slot and a long-press menu.
  * [subtitleAccent] paints the subtitle in the primary colour (online, connected). [menuOnLongPress]
  * builds the menu at the long press instead of [menu], for menus too costly to work out per row.
  * [onLongClick] runs an action at the long press instead of a menu; [longClickLabel] names it for TalkBack.
+ * [menuOnTap] swaps tap and long press: a tap opens the menu, a long press runs [onClick]; [onClickLabel]
+ * tells TalkBack what the tap does.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -330,47 +383,30 @@ fun AvatarRow(
     menuOnLongPress: (() -> List<MenuEntry>)? = null,
     onLongClick: (() -> Unit)? = null,
     longClickLabel: String? = null,
+    menuOnTap: Boolean = false,
+    onClickLabel: String? = null,
 ) {
-    var menuOpen by remember { mutableStateOf(false) }
-    var built by remember { mutableStateOf(emptyList<MenuEntry>()) }
-    // a menu opened over the keyboard is placed for the shorter window and stays there once the
-    // keyboard goes (a long one ends at the window top), so the keyboard goes first
-    var menuPending by remember { mutableStateOf(false) }
-    val keyboard = LocalSoftwareKeyboardController.current
-    val ime = WindowInsets.ime
-    val density = LocalDensity.current
-    val openMenu = {
-        if (ime.getBottom(density) > 0) {
-            keyboard?.hide()
-            menuPending = true
-        } else {
-            menuOpen = true
-        }
-    }
-    LaunchedEffect(menuPending) {
-        if (!menuPending) return@LaunchedEffect
-        withTimeoutOrNull(1000) { snapshotFlow { ime.getBottom(density) == 0 }.first { it } }
-        menuPending = false
-        menuOpen = true
-    }
-    Box(modifier) {
+    EntryMenuBox(modifier) { show ->
+        val openMenu =
+            when {
+                menuOnLongPress != null -> ({ show(menuOnLongPress()) })
+                menu.isNotEmpty() -> ({ show(menu) })
+                else -> null
+            }
         Row(
             verticalAlignment = Alignment.CenterVertically,
             modifier =
                 Modifier.fillMaxWidth()
                     .combinedClickable(
                         role = Role.Button,
-                        onClick = onClick,
+                        onClickLabel = onClickLabel,
                         onLongClickLabel = longClickLabel,
+                        onClick = if (menuOnTap && openMenu != null) openMenu else onClick,
                         onLongClick =
                             when {
+                                menuOnTap -> onClick
                                 onLongClick != null -> onLongClick
-                                menuOnLongPress != null -> ({
-                                    built = menuOnLongPress()
-                                    if (built.isNotEmpty()) openMenu()
-                                })
-                                menu.isNotEmpty() -> openMenu
-                                else -> null
+                                else -> openMenu
                             },
                     )
                     .padding(horizontal = 16.dp, vertical = 8.dp),
@@ -413,18 +449,6 @@ fun AvatarRow(
             if (trailing != null) {
                 Spacer(Modifier.width(8.dp))
                 trailing()
-            }
-        }
-        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-            (if (menuOnLongPress != null) built else menu).forEach { item ->
-                DropdownMenuItem(
-                    text = { Text(item.label) },
-                    enabled = item.enabled,
-                    onClick = {
-                        menuOpen = false
-                        item.onClick()
-                    },
-                )
             }
         }
     }

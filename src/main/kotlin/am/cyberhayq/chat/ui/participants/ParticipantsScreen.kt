@@ -77,9 +77,10 @@ interface ParticipantsActions {
 
     fun search(needle: String)
 
+    /** Long press: the classic row click, a mention of the participant back in the chat. */
     fun open(key: String)
 
-    /** The classic context menu's visible entries for this participant, worked out at the long press. */
+    /** Tap: the classic context menu's visible entries for this participant, worked out at the tap. */
     fun menu(key: String): List<MenuEntry>
 
     /** An avatar already in memory, so a row scrolled back in starts with it. */
@@ -108,7 +109,7 @@ fun attributeLabel(affiliation: Affiliation, role: Role): Int =
             }
     }
 
-/** Telegram's member list over MucUsersActivity: search in the top bar, long press for the actions. */
+/** Telegram's member list over MucUsersActivity: search in the top bar, a tap for the actions, a long press to mention. */
 @Composable
 fun ParticipantsScreen(state: ParticipantsState, actions: ParticipantsActions, initialSearch: String? = null) {
     var searching by rememberSaveable { mutableStateOf(initialSearch != null) }
@@ -162,6 +163,9 @@ fun ParticipantsScreen(state: ParticipantsState, actions: ParticipantsActions, i
                         onClick = { actions.open(participant.key) },
                         topEnd = if (participant.role != 0) stringResource(participant.role) else null,
                         menuOnLongPress = { actions.menu(participant.key) },
+                        menuOnTap = true,
+                        onClickLabel = stringResource(R.string.tatrak_participant_actions),
+                        longClickLabel = stringResource(R.string.tatrak_chat_mention_sender),
                         trailing = participant.pgpKey?.let { keyId -> { PgpKey(keyId) { actions.openPgpKey(participant.key) } } },
                     )
                 }

@@ -1,6 +1,7 @@
 package am.cyberhayq.chat.ui.chat
 
 import am.cyberhayq.chat.ui.chatlist.inErrorColor
+import am.cyberhayq.chat.ui.common.MenuEntry
 import am.cyberhayq.chat.ui.theme.contentOn
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
@@ -298,8 +299,11 @@ interface ChatActions {
     /** Ctrl+Up: edit the newest own message; false when there is none. */
     fun editLast(): Boolean = false
 
-    /** Group avatar tap: the classic onContactPictureClicked, which puts the sender's nick into the message. */
+    /** Group avatar long press: the classic onContactPictureClicked, which puts the sender's nick into the message. */
     fun mentionSender(uuid: String) {}
+
+    /** Group avatar tap: the classic onContactPictureLongClicked participant menu's visible entries; none outside a group. */
+    fun senderMenu(uuid: String): List<MenuEntry> = emptyList()
 
     /** The group's participants for the "@" list, own nick left out; called off the main thread. */
     suspend fun mentionCandidates(): List<MentionCandidate> = emptyList()

@@ -1,6 +1,7 @@
 package eu.siacs.conversations.ui
 
 import am.cyberhayq.chat.storage.media.TemporaryMedia
+import am.cyberhayq.chat.ui.common.MenuEntry
 import am.cyberhayq.chat.ui.media.mediaDecodeDispatcher
 import am.cyberhayq.chat.ui.storage.MediaPrompts
 import am.cyberhayq.chat.ui.chat.ChatSnapshot
@@ -95,6 +96,7 @@ import eu.siacs.conversations.persistance.FileBackend
 import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.ui.text.FixedURLSpan
 import eu.siacs.conversations.ui.util.Attachment
+import eu.siacs.conversations.ui.util.MucDetailsContextMenuHelper
 import eu.siacs.conversations.ui.util.PresenceSelector
 import eu.siacs.conversations.ui.util.QuoteHelper
 import eu.siacs.conversations.ui.util.ShareUtil
@@ -1408,6 +1410,21 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             val counterpart = message.counterpart
             if (counterpart != null && counterpart.isFullJid) highlightInConference(c, counterpart.resource)
         }
+    }
+
+    /** The group branch of ConversationFragment.onContactPictureLongClicked: the classic participant menu. */
+    override fun senderMenu(uuid: String): List<MenuEntry> {
+        val message = message(uuid) ?: return emptyList()
+        val fingerprint =
+            if (message.encryption == Message.ENCRYPTION_PGP || message.encryption == Message.ENCRYPTION_DECRYPTED) "pgp"
+            else message.fingerprint
+        val contact = message.contact
+        val c = message.conversation as? Conversation ?: return emptyList()
+        // shortcut: the legacy one-to-one and own-account menus are left out, the avatar shows only for others in a group
+        if (message.status > Message.STATUS_RECEIVED || contact?.isSelf == true || c.mode != Conversation.MODE_MULTI) return emptyList()
+        val user = c.mucOptions.getUserOrStub(message)
+        val activity = requireXmppActivity()
+        return participantMenu(activity, user) { MucDetailsContextMenuHelper.onContextItemSelected(it, user, activity, fingerprint) }
     }
 
     /** ConversationFragment.highlightInConference. */

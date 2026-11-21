@@ -10,6 +10,7 @@ import am.cyberhayq.chat.ui.participants.attributeLabel
 import android.content.Context
 import android.graphics.Bitmap
 import android.view.Menu
+import android.view.MenuItem
 import android.view.View
 import android.widget.PopupMenu
 import android.widget.Toast
@@ -106,42 +107,11 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
         activity.highlightInMuc(user.conversation, user.resource())
     }
 
-    /**
-     * The classic context menu, inflated and configured by MucDetailsContextMenuHelper as for the
-     * hidden list; its "Manage permissions" submenu is flattened into the one Compose menu.
-     */
+    /** The classic context menu of the hidden list, as MucUsersActivity runs it. */
     override fun menu(key: String): List<MenuEntry> {
         val user = users[key] ?: return emptyList()
-        val menu = PopupMenu(activity, activity.window.decorView).menu
-        activity.menuInflater.inflate(R.menu.muc_details_context, menu)
-        MucDetailsContextMenuHelper.configureMucDetailsContextMenu(activity, menu, user)
-        return visible(menu).map { item ->
-            MenuEntry(item.title.toString(), enabled = item.isEnabled) {
-                val select = Runnable { MucDetailsContextMenuHelper.onContextItemSelected(item, user, activity) }
-                if (item.itemId == R.id.remove_membership) confirmRemoveMembership(user, select) else select.run()
-            }
-        }
+        return participantMenu(activity, user) { MucDetailsContextMenuHelper.onContextItemSelected(it, user, activity) }
     }
-
-    /** "Remove membership" changes the affiliation at once; a members-only room also drops the user. */
-    private fun confirmRemoveMembership(user: MucOptions.User, remove: Runnable) {
-        val name = user.displayName
-        val text =
-            if (user.mucOptions.membersOnly()) R.string.tatrak_remove_membership_members_only
-            else R.string.tatrak_remove_membership_open
-        confirmAction(
-            activity,
-            activity.getString(R.string.tatrak_remove_membership_title, name),
-            activity.getString(text, name),
-            R.string.tatrak_remove,
-            remove,
-        )
-    }
-
-    private fun visible(menu: Menu): List<android.view.MenuItem> =
-        (0 until menu.size()).map(menu::getItem).filter { it.isVisible }.flatMap {
-            if (it.hasSubMenu()) visible(it.subMenu!!) else listOf(it)
-        }
 
     override fun openPgpKey(key: String) {
         val user = users[key] ?: return
@@ -159,6 +129,42 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
         val service = activity.xmppConnectionService ?: return null
         return withContext(Dispatchers.IO) { service.avatarService.get(user, sizePx, false) }
     }
+}
+
+/**
+ * The classic participant menu: muc_details_context inflated and configured by
+ * MucDetailsContextMenuHelper, its visible items ("Manage permissions" submenu flattened) as Compose
+ * entries that run [onSelected]. The participants list's and the chat avatar's menu.
+ */
+internal fun participantMenu(activity: XmppActivity, user: MucOptions.User, onSelected: (MenuItem) -> Unit): List<MenuEntry> {
+    val menu = PopupMenu(activity, activity.window.decorView).menu
+    activity.menuInflater.inflate(R.menu.muc_details_context, menu)
+    MucDetailsContextMenuHelper.configureMucDetailsContextMenu(activity, menu, user)
+    return visible(menu).map { item ->
+        MenuEntry(item.title.toString(), enabled = item.isEnabled) {
+            if (item.itemId == R.id.remove_membership) confirmRemoveMembership(activity, user) { onSelected(item) } else onSelected(item)
+        }
+    }
+}
+
+private fun visible(menu: Menu): List<MenuItem> =
+    (0 until menu.size()).map(menu::getItem).filter { it.isVisible }.flatMap {
+        if (it.hasSubMenu()) visible(it.subMenu!!) else listOf(it)
+    }
+
+/** "Remove membership" changes the affiliation at once; a members-only room also drops the user. */
+private fun confirmRemoveMembership(activity: XmppActivity, user: MucOptions.User, remove: Runnable) {
+    val name = user.displayName
+    val text =
+        if (user.mucOptions.membersOnly()) R.string.tatrak_remove_membership_members_only
+        else R.string.tatrak_remove_membership_open
+    confirmAction(
+        activity,
+        activity.getString(R.string.tatrak_remove_membership_title, name),
+        activity.getString(text, name),
+        R.string.tatrak_remove,
+        remove,
+    )
 }
 
 /** UserAdapter.setHats' text of a tag other than [DynamicTag.Attributes] (drawn as the role); also the new-chat rows' tags. */

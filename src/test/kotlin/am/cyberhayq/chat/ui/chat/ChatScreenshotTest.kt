@@ -27,6 +27,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.assertIsNotEnabled
+import am.cyberhayq.chat.ui.common.MenuEntry
 import androidx.compose.ui.test.click
 import androidx.activity.OnBackPressedDispatcher
 import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
@@ -204,11 +206,38 @@ class ChatScreenshotTest {
     @Config(qualifiers = "+night")
     fun chatMentionJumpDark() = capture("chat_mention_jump_dark", darkTheme = true) { longGroupChat(it) }
 
-    @Test fun avatarTapMentionsTheSender() {
+    @Test fun avatarTapOpensTheParticipantMenu() {
+        val asked = mutableListOf<String>()
+        var picked: String? = null
+        val actions = object : ChatActions by FakeActions {
+            override fun mentionSender(uuid: String) = error("a tap must not mention")
+            override fun senderMenu(uuid: String): List<MenuEntry> {
+                asked += uuid
+                return listOf(MenuEntry("Contact details") { picked = uuid }, MenuEntry("Send private message", enabled = false) {})
+            }
+        }
+        groupChatWith(actions)
+        compose.onAllNodesWithContentDescription("Participant")[0].performClick()
+        assertEquals(1, asked.size)
+        assert(asked[0] in setOf("g2", "g3", "g5", "g6")) { asked }
+        compose.onNodeWithText("Send private message").assertIsNotEnabled()
+        compose.onNodeWithText("Contact details").performClick()
+        assertEquals(asked[0], picked)
+    }
+
+    @Test fun avatarLongPressMentionsTheSender() {
         val mentioned = mutableListOf<String>()
         val actions = object : ChatActions by FakeActions {
             override fun mentionSender(uuid: String) { mentioned += uuid }
+            override fun senderMenu(uuid: String): List<MenuEntry> = error("a long press must not open the menu")
         }
+        groupChatWith(actions)
+        compose.onAllNodesWithContentDescription("Participant")[0].performTouchInput { longClick() }
+        assertEquals(1, mentioned.size)
+        assert(mentioned[0] in setOf("g2", "g3", "g5", "g6")) { mentioned }
+    }
+
+    private fun groupChatWith(actions: ChatActions) =
         compose.setContent {
             TatrakTheme(darkTheme = false) {
                 ChatScreen(
@@ -216,10 +245,6 @@ class ChatScreenshotTest {
                 )
             }
         }
-        compose.onAllNodesWithContentDescription("Mention")[0].performClick()
-        assertEquals(1, mentioned.size)
-        assert(mentioned[0] in setOf("g2", "g3", "g5", "g6")) { mentioned }
-    }
 
     @Test fun chatMedia() = capture("chat_media", darkTheme = false) { mediaChat(it) }
 

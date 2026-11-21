@@ -281,8 +281,8 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   judge smoothness on the `benchmark` build.
 - Swipe to reply sends an XEP-0393 quote for now; XEP-0461 replies come in stage 5
   ([XEP support](../protocol/xep-support.md)).
-- Mentions in groups (2026-11-13, `Mentions.kt`): a tap on a sender's avatar runs the group
-  branch of the classic `onContactPictureClicked` (participation check, "has left" toast) and
+- Mentions in groups (2026-11-13, `Mentions.kt`): a long press on a sender's avatar (a tap
+  until 2026-11-21) runs the group branch of the classic `onContactPictureClicked` (participation check, "has left" toast) and
   inserts the nick with a pure port of `highlightInConference` ("nick: " at the start, ", nick"
   merged into an existing "a, b: " prefix, "nick " elsewhere; checked against the legacy method on
   3,000 random cases). Typing "@" at a word start offers the participants
@@ -291,6 +291,19 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   the "@" (XMPP clients highlight the bare nick). An "@" button above "scroll down" jumps to the
   oldest unread message that matches our nick pattern (`NotificationService`'s highlight pattern)
   through the search-result jump. monocles' "@" completion needs a third-party library, not used.
+- Participant menu (2026-11-21): a tap on a sender's avatar in a group opens the classic participant
+  menu, built as the group branch of `onContactPictureLongClicked` (`getUserOrStub`, the message's
+  fingerprint or `"pgp"`, `muc_details_context` configured by `MucDetailsContextMenuHelper` and
+  dispatched to its `onContextItemSelected`): contact details, start a chat, a private message in an
+  anonymous room, remove from the room for admins; what is unavailable is hidden as in the classic
+  popup. `ChatActions.senderMenu` returns its visible items as `MenuEntry`s through
+  `participantMenu` (`MucUsersCompose.kt`), the participants list's own conversion; the dropdown is
+  `EntryMenuBox` (`TatrakList.kt`), the one `AvatarRow` draws. The participants list
+  (`ParticipantsScreen`, `MucUsersActivity`) swaps the same way: a tap opens that menu, a long press
+  is the classic row click (`highlightInMuc`, a mention back in the chat). TalkBack: "show actions"
+  on the tap, "Mention" on the long press. Upstream Conversations and monocles keep the tap as the
+  mention and the menu on the long press, on the avatar and on the participants row alike; monocles
+  also opens the private chat on a tap of a private message's avatar.
 - `centerOn` (jump to a message) centres on where the item actually landed; the fixed
   half-viewport step pushed a message near the oldest loaded one off screen (fixed 2026-11-13,
   affected search results too).

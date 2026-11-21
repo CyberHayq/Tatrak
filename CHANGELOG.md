@@ -14,6 +14,8 @@
 ### Chat
 - A reply to a photo or video shows its thumbnail, in the quote and in the reply bar above the
   text field.
+- A tap on a participant's avatar in a group, or on a row of the participants list, opens the
+  participant menu (profile, write to them); a long press mentions them.
 
 ## 0.4.0-beta.1 (pre-release)
 
