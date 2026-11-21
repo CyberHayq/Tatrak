@@ -2253,19 +2253,45 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 }
 
 /**
- * The Telegram slide between list and chat: [enterAnim] comes in from `fraction` of the width,
- * [exitAnim] goes out to it; other transitions keep their resource. Width is only known at run
- * time, which the XML animators can't express.
+ * Animators between list and chat for [enterAnim] / [exitAnim]; other transitions keep their
+ * resource. A tap opens or closes with Telegram's push ([pushAnimator]); a swipe back
+ * ([SwipeBackLayout.dragging]) slides the chat a full width and the list from `fraction` of it
+ * ([dragAnimator]). Width is only known at run time, which the XML animators can't express.
  */
 internal fun slideAnimator(fragment: Fragment, nextAnim: Int, enterAnim: Int, exitAnim: Int, fraction: Float): Animator? {
     val view = fragment.view ?: return null
-    val width = view.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
-    val (from, to) =
+    val enter =
         when (nextAnim) {
-            enterAnim -> width * fraction to 0f
-            exitAnim -> 0f to width * fraction
+            enterAnim -> true
+            exitAnim -> false
             else -> return null
         }
+    if (!SwipeBackLayout.dragging) return pushAnimator(view, enter, moves = fraction > 0)
+    val width = view.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
+    return if (enter) dragAnimator(fragment, view, width * fraction, 0f) else dragAnimator(fragment, view, 0f, width * fraction)
+}
+
+/**
+ * Telegram's ActionBarLayout.startLayoutAnimation: the top screen fades in from 48 dp to the
+ * right, or out to it, in 150 ms; the screen below stays ([moves] false: it only lasts, so it
+ * is still drawn under the fading chat, as long as the classic chat's 220 ms XML fade).
+ */
+internal fun pushAnimator(view: View, enter: Boolean, moves: Boolean): Animator =
+    ValueAnimator.ofFloat(0f, 1f).apply {
+        duration = if (moves) 150 else 220
+        interpolator = DecelerateInterpolator(1.5f)
+        if (moves) {
+            val shift = 48 * view.resources.displayMetrics.density
+            addUpdateListener {
+                val shown = if (enter) it.animatedValue as Float else 1f - it.animatedValue as Float
+                view.alpha = shown
+                view.translationX = shift * (1f - shown)
+            }
+        }
+    }
+
+/** The swipe-back slide from [from] to [to]; the API 34+ FragmentManager seeks it by the finger. */
+internal fun dragAnimator(fragment: Fragment, view: View, from: Float, to: Float): Animator {
     // Below API 34 SwipeBackLayout has already moved the views with the finger: carry on from
     // there. Read on the first frame, since the animator is made when the gesture starts.
     var start: Float? = null

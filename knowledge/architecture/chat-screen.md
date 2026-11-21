@@ -31,8 +31,15 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   chose "Classic view" for that chat in this session. Both fragments implement
   `ConversationHost`, which replaces the `instanceof ConversationFragment` checks used for
   navigation, archiving, rotation and the two-pane layout.
-- Opening a chat slides it in from the right while the list shifts left (`res/anim/tatrak_*`).
-- The slide waits for the first messages (2026-11-19), as Telegram delays its chat open. Before,
+- Opening a chat by a tap plays Telegram's push (2026-11-21, `ActionBarLayout.startLayoutAnimation`,
+  `21f7d10`): the chat fades in from 48 dp to the right in 150 ms, `DecelerateInterpolator(1.5f)`, and
+  the list below does not move; Back without a gesture (back button, 3-button navigation, toolbar
+  arrow, the system edge gesture on release) plays the reverse. The tabs slide a full width
+  instead, so a deeper screen looks different, as in Telegram. Only the swipe back still slides a
+  full width (see Swipe-back). The custom animations are the `res/animator/tatrak_*` ids; the
+  classic chat screen keeps their XML fade (220 ms; the list's still animator lasts as long, so
+  the list stays drawn under it).
+- The open animation waits for the first messages (2026-11-19), as Telegram delays its chat open. Before,
   the slide started on an empty screen and the messages were composed mid-slide, which the owner
   saw as jerks on some phones. `showConversation` sets `ChatFragment.slideAfterLoad` only when it
   sets the slide animators (not in two panes, not classic to Compose); the fragment then postpones
@@ -322,15 +329,18 @@ the unchanged `ContactDetailsActivity` / `ConferenceDetailsActivity`.
 `ChatFragment` wraps its view in `SwipeBackLayout` (`ui/chat/SwipeBack.kt`). A rightward drag
 feeds predictive back (`dispatchOnBackStarted / Progressed / Cancelled`, `onBackPressed`) to the
 activity's dispatcher; finishing past a third of the width or on a fling. The slide itself is
-the fragments' `onCreateAnimator` (`slideAnimator` in `ChatFragment.kt`: chat slides out,
-the list comes in from −25 %; 300 ms, `DecelerateInterpolator(1.5f)` = 1 − (1 − x)³, Telegram's chat curve).
+the fragments' `onCreateAnimator`: `slideAnimator` in `ChatFragment.kt` asks
+`SwipeBackLayout.dragging` (true from the drag's back-started until its finish or cancel is
+dispatched, when the FragmentManager makes the pop animators) and makes `dragAnimator` (chat slides
+out, the list comes in from −25 %; 300 ms, `DecelerateInterpolator(1.5f)` = 1 − (1 − x)³, Telegram's
+chat curve) for a drag, `pushAnimator` (the tap push above) otherwise. The flag is one per process.
 
 - **API 34+**: the FragmentManager seeks those animators with the back progress. They use a
   `DecelerateInterpolator(1.5f)`, so the layout sends `seekProgress(p) = 1 − ∛(1 − p)`, its inverse,
   which keeps the chat edge under the finger.
 - **Below API 34**: back-started already pops the fragment, but nothing seeks the animators.
   The layout moves the chat (`translationX = dx`) and the list below it (parallax) by hand.
-  On finish `slideAnimator` starts from the current `translationX`; on cancel the layout
+  On finish `dragAnimator` starts from the current `translationX`; on cancel the layout
   animates both back to 0 and then dispatches back-cancelled.
 
 **System edge back.** With gesture navigation the left system back zone (`systemGestures` inset)
@@ -342,7 +352,7 @@ gestures at once. Now `SwipeBackLayout`, while attached and `swipeEnabled`, regi
 `OnBackInvokedCallback` on the window at priority 1 (above the dispatcher's input at
 `PRIORITY_DEFAULT`, below `PRIORITY_OVERLAY`) that only calls `dispatcher.onBackPressed()` on
 release. So during the edge gesture the system shows its arrow and the chat does not move; on
-release the normal 300 ms pop plays; a cancelled gesture changes nothing. Compose BackHandlers
+release the tap close plays (the 150 ms push since 2026-11-21, the 300 ms slide before); a cancelled gesture changes nothing. Compose BackHandlers
 (emoji panel, recording discard, message menu) keep priority because the release still goes
 through the dispatcher. The keyboard's own back callback sits at `PRIORITY_DEFAULT`, below ours,
 so before 2026-11-16 a back gesture with the keyboard up closed the chat; the callback now hides

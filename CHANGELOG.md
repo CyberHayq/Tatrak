@@ -5,6 +5,8 @@
 ### Interface
 - Chats, Contacts, Calls and Profile are tabs under the bottom bar: a tap slides to the tab, the
   bar stays in place, Back returns to Chats (as in Telegram).
+- A chat opens and closes as in Telegram: a short fade with a small shift; the list stays still.
+  The swipe back still drags the whole chat under the finger.
 
 ## 0.4.0-beta.1 (pre-release)
 

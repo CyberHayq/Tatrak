@@ -37,7 +37,10 @@ import kotlin.math.abs
  *
  * Below API 34 the FragmentManager still starts the pop when back starts (the list is added to
  * the container under the chat) but does not seek animators, so this layout moves the chat and
- * the list with the finger itself; [slideAnimator] then carries on from where they are.
+ * the list with the finger itself; [dragAnimator] then carries on from where they are.
+ *
+ * Only this drag uses the full-width slide; a tap on back gets Telegram's short push
+ * ([pushAnimator]), so the fragments' animators ask [dragging] which one to make.
  *
  * The system's edge back (API 34+) is taken in front of the dispatcher and passed on only on
  * release: the system shows its arrow, the chat stays put, then the normal pop plays (as in
@@ -167,6 +170,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
                 }
             }
         container = parent as? ViewGroup
+        dragging = true
         dispatcher.dispatchOnBackStarted(event(ev))
     }
 
@@ -192,6 +196,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
                         translationX = 0f
                         container = null
                         dispatcher.dispatchOnBackCancelled()
+                        dragging = false
                     }
                 }
             )
@@ -212,6 +217,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
                 if (shouldFinish(ev.rawX - downX, vx, swipeWidth)) {
                     container = null
                     dispatcher.onBackPressed()
+                    dragging = false
                 } else cancel()
                 return false
             }
@@ -226,6 +232,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
     private fun cancel() {
         if (manual) return settleBack()
         dispatcher.dispatchOnBackCancelled()
+        dragging = false
         // API 34+: after a quick cancel the FragmentManager may leave the reversed animator short
         // of its start, so the chat would stay shifted; slide it home once it is back in place
         postDelayed(
@@ -248,6 +255,14 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
 
     companion object {
         private const val FLING_VELOCITY = 3500f
+
+        /**
+         * True from the start of a swipe-back until its finish or cancel is dispatched, when the
+         * FragmentManager makes (and on API 34+ seeks) the pop animators.
+         * shortcut: one flag for the process, fine while a single finger can swipe one chat at a time
+         */
+        var dragging = false
+            private set
 
         fun progress(dx: Float, width: Int): Float = if (width <= 0) 0f else (dx / width).coerceIn(0f, 1f)
 

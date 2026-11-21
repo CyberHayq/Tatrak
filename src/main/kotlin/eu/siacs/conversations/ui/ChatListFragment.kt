@@ -194,7 +194,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
             }
         }
 
-    /** Parallax under the chat: a quarter of the width to the left, as in Telegram. */
+    /** Under the chat: still on a tap, a quarter of the width to the left during a swipe back, as in Telegram. */
     override fun onCreateAnimator(transit: Int, enter: Boolean, nextAnim: Int): Animator? =
         slideAnimator(this, nextAnim, R.animator.tatrak_list_pop_enter, R.animator.tatrak_list_exit, -0.25f)
 

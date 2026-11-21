@@ -26,7 +26,7 @@ class SwipeBackTest {
 
     @Test
     fun seekProgressUndoesTheDecelerateInterpolator() {
-        // API 34+ seeks the 300 ms DecelerateInterpolator(1.5f) animators by this fraction; feeding it
+        // API 34+ seeks the swipe-back animators (dragAnimator: 300 ms, DecelerateInterpolator(1.5f)) by this fraction; feeding it
         // back through the interpolator must give the finger's own progress, so the chat stays under it
         // (DecelerateInterpolator with factor 1.5 is 1 - (1 - t)^3; android.jar here is only a stub)
         fun decelerate(t: Float) = 1f - (1f - t) * (1f - t) * (1f - t)
