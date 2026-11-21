@@ -538,6 +538,58 @@ class ChatListScreenshotTest {
         }
     }
 
+    // ---- account switcher ----
+
+    @Test
+    fun accountSwitcherLight() = accountSwitcher(darkTheme = false, "account_switcher_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun accountSwitcherDark() = accountSwitcher(darkTheme = true, "account_switcher_dark")
+
+    /** A long press on the floating bar's Profile opens it over the list; a pick reports the account and closes it. */
+    private fun accountSwitcher(darkTheme: Boolean, name: String) {
+        var anchor by mutableStateOf<androidx.compose.ui.geometry.Rect?>(null)
+        var chosen: String? = "none"
+        val accounts =
+            listOf(
+                AccountChoice("a", "Test", letterAvatar("Test", 0xFF5CAFFA.toInt()), 3),
+                AccountChoice("b", "Work account with a rather long name", letterAvatar("Work", 0xFFE57A3C.toInt()), 0),
+            )
+        compose.setContent {
+            TatrakTheme(darkTheme = darkTheme, style = TatrakStyle.GLASS, accent = Accent.BLUE, dynamicColors = false, floatingBars = true, barBlur = BarBlur.OFF) {
+                androidx.compose.runtime.CompositionLocalProvider(LocalAccountSwitcher provides { anchor = it }) {
+                    androidx.compose.foundation.layout.Box {
+                        ChatListScreen(sampleState(), NoListActions)
+                        AccountSwitcher(anchor, accounts, "a", MainTab.CHATS, sampleState().account?.avatar, { anchor = null }, {}, { chosen = it })
+                    }
+                }
+            }
+        }
+        compose.onNodeWithText("Profile").performTouchInput { longClick() }
+        compose.waitForIdle()
+        compose.onNodeWithText("All accounts").assertIsDisplayed()
+        compose.onNodeWithText("Add account").assertIsDisplayed()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+        compose.onNodeWithText("Work account with a rather long name").performClick()
+        compose.waitForIdle()
+        assertEquals("b", chosen)
+        compose.onNodeWithText("All accounts").assertDoesNotExist()
+    }
+
+    /** One account: nothing to filter, so no "All accounts". */
+    @Test
+    fun accountSwitcherOneAccount() {
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.OFF) {
+                AccountSwitcher(androidx.compose.ui.geometry.Rect(800f, 2400f, 1100f, 2550f), listOf(AccountChoice("a", "Test", null, 0)), null, MainTab.CHATS, null, {}, {}, {})
+            }
+        }
+        compose.onNodeWithText("Add account").assertIsDisplayed()
+        compose.onNodeWithText("Test").assertIsSelected()
+        compose.onNodeWithText("All accounts").assertDoesNotExist()
+    }
+
     // ---- floating bars ----
 
     /** Floating bars in the styles that default to the fixed bars (the setting wins over the style). */

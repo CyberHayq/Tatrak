@@ -14,7 +14,14 @@ import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.layout.boundsInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -343,7 +350,7 @@ internal fun TabDock(selected: MainTab, account: AccountHeader?, onTab: (MainTab
 }
 
 @Composable
-private fun RowScope.TabItem(tab: MainTab, selected: MainTab, onTab: (MainTab) -> Unit, floating: Boolean, avatar: Bitmap?) {
+internal fun RowScope.TabItem(tab: MainTab, selected: MainTab, onTab: (MainTab) -> Unit, floating: Boolean, avatar: Bitmap?) {
     val (icon, label) =
         when (tab) {
             MainTab.CHATS -> R.drawable.ic_chat_24dp to R.string.tatrak_dock_chats
@@ -352,11 +359,27 @@ private fun RowScope.TabItem(tab: MainTab, selected: MainTab, onTab: (MainTab) -
             // the floating bar's Profile shows the account; Slate's classic bar keeps Settings
             MainTab.PROFILE -> if (floating) R.drawable.ic_person_24dp to R.string.tatrak_tab_profile else R.drawable.ic_settings_24dp to R.string.action_settings
         }
-    DockItem(icon, stringResource(label), selected = tab == selected, onClick = { onTab(tab) }, avatar = if (tab == MainTab.PROFILE) avatar else null, capsule = floating)
+    // Telegram: a long press on the floating bar's Profile opens the account switcher
+    val switcher = if (floating && tab == MainTab.PROFILE) LocalAccountSwitcher.current else null
+    DockItem(icon, stringResource(label), selected = tab == selected, onClick = { onTab(tab) }, avatar = if (tab == MainTab.PROFILE) avatar else null, capsule = floating, onLongClick = switcher)
 }
 
+/** Opens the account switcher over the dock's Profile item, given the item's bounds in the root; null: no switcher. */
+internal val LocalAccountSwitcher = staticCompositionLocalOf<((Rect) -> Unit)?> { null }
+
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun RowScope.DockItem(icon: Int, label: String, selected: Boolean, onClick: () -> Unit, avatar: Bitmap? = null, capsule: Boolean = false) {
+private fun RowScope.DockItem(
+    icon: Int,
+    label: String,
+    selected: Boolean,
+    onClick: () -> Unit,
+    avatar: Bitmap? = null,
+    capsule: Boolean = false,
+    onLongClick: ((Rect) -> Unit)? = null,
+) {
+    // read only in the long press, so moving recomposes nothing
+    var bounds by remember { mutableStateOf(Rect.Zero) }
     // link: the accent fitted to read on the bar (gen_accents.py); primary is only 3:1 there for light accents
     val color = if (selected) TatrakTheme.chatColors.link else TatrakTheme.chatColors.onTopBarMuted
     // [capsule] (floating bar): Telegram 13's selection, a capsule over the whole tab, icon and label; Slate: round the icon
@@ -366,7 +389,13 @@ private fun RowScope.DockItem(icon: Int, label: String, selected: Boolean, onCli
         modifier =
             Modifier.weight(1f)
                 .then(if (capsule) Modifier.clip(CircleShape).background(mark) else Modifier.clip(RoundedCornerShape(16.dp)))
-                .clickable(role = Role.Button, onClick = onClick)
+                .then(if (onLongClick != null) Modifier.onGloballyPositioned { bounds = it.boundsInRoot() } else Modifier)
+                .combinedClickable(
+                    role = Role.Button,
+                    onClick = onClick,
+                    onLongClickLabel = if (onLongClick != null) stringResource(R.string.tatrak_switch_account) else null,
+                    onLongClick = onLongClick?.let { { it(bounds) } },
+                )
                 .semantics { this.selected = selected }
                 .padding(vertical = 4.dp),
     ) {

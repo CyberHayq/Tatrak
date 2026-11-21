@@ -14,6 +14,8 @@ import am.cyberhayq.chat.ui.chat.toAnnotatedString
 import eu.siacs.conversations.utils.IrregularUnicodeDetector
 import eu.siacs.conversations.xmpp.Jid
 import eu.siacs.conversations.R
+import am.cyberhayq.chat.ui.accounts.AccountFilter
+import eu.siacs.conversations.entities.Account
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Conversational
 import eu.siacs.conversations.entities.Message
@@ -74,6 +76,10 @@ data class ChatListItem(
 @Immutable
 data class AccountHeader(val name: String, val address: String, val avatar: Bitmap?)
 
+/** An enabled account in the dock's account switcher, with its unread chats (as the folder tabs count them). */
+@Immutable
+data class AccountChoice(val uuid: String, val name: String, val avatar: Bitmap?, val unread: Int)
+
 @Immutable
 data class ChatListState(
     val loaded: Boolean = false,
@@ -84,6 +90,10 @@ data class ChatListState(
     val account: AccountHeader? = null,
     /** True while an enabled account is not connected; the title then reads "Connecting…". */
     val connecting: Boolean = false,
+    /** Every enabled account, whatever the filter. */
+    val accounts: List<AccountChoice> = emptyList(),
+    /** The account the app is filtered to ([AccountFilter]); null: all. */
+    val selectedAccount: String? = null,
 )
 
 private val Whitespace = Regex("\\s+")
@@ -107,6 +117,7 @@ fun ChatListState.keepAvatars(previous: ChatListState): ChatListState {
         chats = chats.keep(),
         archived = archived.keep(),
         account = account?.let { if (it.avatar == null) it.copy(avatar = previous.account?.avatar) else it },
+        accounts = accounts.map { a -> if (a.avatar == null) a.copy(avatar = previous.accounts.firstOrNull { it.uuid == a.uuid }?.avatar) else a },
     )
 }
 
@@ -121,8 +132,10 @@ object ChatListSnapshot {
         loadAvatarsFor: Int = Int.MAX_VALUE,
         thumbnailSize: Int,
     ): ChatListState {
-        val conversations = ArrayList<Conversation>()
-        service.populateWithOrderedConversations(conversations)
+        val all = ArrayList<Conversation>()
+        service.populateWithOrderedConversations(all)
+        val only = AccountFilter.selected(service)
+        val conversations = all.filter { AccountFilter.shows(only, it.account) }
         var loaded = 0
         val (archived, chats) =
             conversations
@@ -134,23 +147,37 @@ object ChatListSnapshot {
                     toItem(context, service, it, avatarSize, cachedOnly, thumbnailSize)
                 }
                 .partition { it.isArchived }
+        val accounts = service.accounts.filter { it.isEnabled }
         val account =
-            service.accounts.firstOrNull()?.let {
+            (only ?: service.accounts.firstOrNull())?.let {
                 AccountHeader(
-                    name = it.displayName ?: it.jid.local ?: it.jid.toString(),
+                    name = accountName(it),
                     address = it.jid.asBareJid().toString(),
                     avatar = service.avatarService.get(it, avatarSize, avatarsCachedOnly),
                 )
             }
-        val connecting = service.accounts.any { it.isConnectionEnabled && !it.isOnlineAndConnected }
+        val connecting = service.accounts.any { AccountFilter.shows(only, it) && it.isConnectionEnabled && !it.isOnlineAndConnected }
         return ChatListState(
             loaded = true,
             chats = chats,
             archived = archived,
             account = account,
             connecting = connecting,
+            accounts =
+                accounts.map { a ->
+                    AccountChoice(
+                        uuid = a.uuid,
+                        name = accountName(a),
+                        avatar = service.avatarService.get(a, avatarSize, avatarsCachedOnly),
+                        // the folder tabs' count: unmuted chats outside the archive
+                        unread = all.count { it.account === a && it.tatrakArchivedAt == null && !it.isMuted && it.unreadCount() > 0 },
+                    )
+                },
+            selectedAccount = only?.uuid,
         )
     }
+
+    private fun accountName(account: Account): String = account.displayName ?: account.jid.local ?: account.jid.toString()
 
     private fun toItem(
         context: Context,

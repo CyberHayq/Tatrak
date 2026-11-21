@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui
 
+import am.cyberhayq.chat.ui.accounts.AccountFilter
 import am.cyberhayq.chat.ui.calls.CallEntry
 import am.cyberhayq.chat.ui.calls.CallLog
 import am.cyberhayq.chat.ui.calls.CallRecord
@@ -15,6 +16,8 @@ import androidx.compose.runtime.getValue
 import androidx.core.view.WindowCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.lifecycleScope
+import eu.siacs.conversations.entities.Account
+import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Message
 import eu.siacs.conversations.entities.RtpSessionStatus
 import eu.siacs.conversations.services.XmppConnectionService
@@ -49,6 +52,10 @@ class CallsActivity : XmppActivity(), XmppConnectionService.OnConversationUpdate
     override fun onConversationUpdate() = refreshUi()
 }
 
+/** The chats whose calls the list shows, by uuid: those of the account the app is filtered to. */
+internal fun callChats(service: XmppConnectionService, only: Account? = AccountFilter.selected(service)): Map<String, Conversation> =
+    ArrayList(service.conversations).filter { AccountFilter.shows(only, it.account) }.associateBy { it.uuid }
+
 /**
  * The call list's data and actions, for [CallsActivity] and the chat list's Calls tab. Calls are
  * the `TYPE_RTP_SESSION` messages of all chats, read with one indexed query (monocles' call list
@@ -81,9 +88,10 @@ internal class CallList(
     }
 
     private fun build(service: XmppConnectionService, publish: (CallsState) -> Unit) {
-        val chats = ArrayList(service.conversations).associateBy { it.uuid }
+        val only = AccountFilter.selected(service)
+        val chats = callChats(service, only)
         // a call with a chat that was closed since has no conversation to open or call back from
-        val groups = CallLog.group(query(service).filter { it.chat in chats })
+        val groups = CallLog.group(query(service, only).filter { it.chat in chats })
         val previous = source.state.value.entries.associate { it.chat to it.avatar }
         val entries =
             groups.map { g ->
@@ -109,15 +117,21 @@ internal class CallList(
         if (withAvatars != source.state.value) publish(withAvatars.also { cache = it })
     }
 
-    /** The newest calls of all chats; only the columns the list shows, over `message_type_index`. */
-    private fun query(service: XmppConnectionService): List<CallRecord> {
+    /**
+     * The newest calls of all chats, or of [only]'s chats (filtered before the limit); only the columns the list shows,
+     * over `message_type_index`.
+     */
+    private fun query(service: XmppConnectionService, only: Account?): List<CallRecord> {
         val records = ArrayList<CallRecord>()
+        val ofAccount =
+            if (only == null) ""
+            else " AND ${Message.CONVERSATION} IN (SELECT ${Conversation.UUID} FROM ${Conversation.TABLENAME} WHERE ${Conversation.ACCOUNT}=?)"
         service.databaseBackend.readableDatabase
             .query(
                 Message.TABLENAME,
                 arrayOf(Message.UUID, Message.CONVERSATION, Message.TIME_SENT, Message.STATUS, Message.BODY),
-                "${Message.TYPE}=? AND ${Message.DELETED}=0",
-                arrayOf(Message.TYPE_RTP_SESSION.toString()),
+                "${Message.TYPE}=? AND ${Message.DELETED}=0$ofAccount",
+                listOfNotNull(Message.TYPE_RTP_SESSION.toString(), only?.uuid).toTypedArray(),
                 null,
                 null,
                 "${Message.TIME_SENT} DESC",

@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui
 
+import am.cyberhayq.chat.ui.accounts.AccountFilter
 import am.cyberhayq.chat.ui.common.AVATAR_SIZE
 import am.cyberhayq.chat.ui.search.SearchMenu
 import am.cyberhayq.chat.ui.search.SearchResult
@@ -42,8 +43,10 @@ internal class MessageSearchResults(
     /** Results for [terms], oldest first as the service delivers them; shown newest first. */
     fun publish(terms: List<String>, results: List<Message>) {
         val byKey = LinkedHashMap<String, Message>()
+        // the search of all chats shows only the filtered account's; shortcut: the service's result limit applies before
+        val only = if (global) service()?.let(AccountFilter::selected) else null
         val entries =
-            results.asReversed().map { message ->
+            results.asReversed().filter { AccountFilter.shows(only, it.conversation.account) }.map { message ->
                 byKey[message.uuid] = message
                 val conversation = message.conversation
                 val multi = conversation.mode == Conversational.MODE_MULTI

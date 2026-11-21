@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.chatlist
 
+import am.cyberhayq.chat.ui.accounts.AccountFilter
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.services.XmppConnectionService
 
@@ -11,6 +12,7 @@ object ChatSuggestions {
         service ?: return null
         val conversations = ArrayList<Conversation>()
         service.populateWithOrderedConversations(conversations)
-        return conversations.firstOrNull { it !== exclude && it.tatrakArchivedAt == null }
+        val only = AccountFilter.selected(service)
+        return conversations.firstOrNull { it !== exclude && it.tatrakArchivedAt == null && AccountFilter.shows(only, it.account) }
     }
 }

@@ -40,6 +40,15 @@ sources:
   - id: telegram
     resource: https://github.com/DrKLO/Telegram/blob/21f7d109da6ab3506c9e9577f98c6a38771ab335/TMessagesProj/src/main/java/org/telegram/ui/MainTabsActivity.java
     title: Telegram MainTabsActivity (commit 21f7d10)
+  - id: filter
+    resource: ../../src/main/kotlin/am/cyberhayq/chat/ui/accounts/AccountFilter.kt
+    title: AccountFilter.kt
+  - id: switcher
+    resource: ../../src/main/kotlin/am/cyberhayq/chat/ui/chatlist/AccountSwitcher.kt
+    title: AccountSwitcher.kt
+  - id: filtertest
+    resource: ../../src/test/kotlin/eu/siacs/conversations/ui/AccountFilterTest.kt
+    title: AccountFilterTest.kt
   - id: plan
     resource: ~/.claude/plans/ticklish-weaving-boole.md
     title: Approved implementation plan (local file, outside the repository)
@@ -190,8 +199,8 @@ without floating bars has no dock and stays on Chats.[^tabs]
   `settingsSections`); a row opens its page above everything: `SettingsActivity` with
   `SettingsHomeFragment.EXTRA_PAGE` (the row's title; `SettingsHomeFragment.page` maps only the
   rows' titles, since the activity is exported).
-- The drawer's Contacts, Calls and Settings still open their activities (deeper screens); the
-  Profile item's click stays free for a later account long-press.
+- The drawer's Contacts, Calls and Settings still open their activities (deeper screens); a long
+  press on the floating bar's Profile opens the account switcher (below).
 
 | Old action of the screen | Where it is now |
 |---|---|
@@ -201,6 +210,45 @@ without floating bars has no dock and stays on Chats.[^tabs]
 | Contacts: "Hide offline", contact-list permission | `ContactFlows.setHideOfflineContacts`, `ContactFlows.askForContactsPermissions` (tab shown, fragment start) |
 | Calls: open chat, call back, filter tabs | Calls tab over `CallList` |
 | Settings: account header (manage accounts), each page, About | Profile tab; pages in `SettingsActivity` |
+
+# Account switcher and account filter (2026-11-21, not yet verified on a device)
+
+Tatrak has no current account: every enabled account is online and their chats share one list.
+The owner's decision (2026-11-21) is an app-wide filter instead of Telegram's account switch.
+
+- **Switcher.** A long press on the floating bar's Profile item opens Telegram's account selector
+  (`MainTabsActivity.openAccountSelector` with `ItemOptions` and `accountView`):[^switcher] the
+  screen behind dims (`0x66` over a light window, `0x33` over a dark one) and blurs (12 dp, only when
+  "Blur under bars" is on, so API 31+), the Profile item is drawn again above the dim on a plate with
+  28 dp corners and a soft shadow, and a 230 dp menu grows from above it: "Add account", a gap, then
+  "All accounts" (only with more than one enabled account) and every enabled account with a 32 dp
+  avatar (shrunk inside a 1.33 dp accent ring when selected), its name in up to two lines and its
+  unread chats. Back or a tap outside closes it. Only the floating dock has the item: Slate and
+  Sea's classic bar has Settings in that slot, and Telegram's style without floating bars has no
+  dock; a Glass style with "Floating bars" turned off has no dock either (not the classic one).
+  The overlay lives in `ChatListFragment`'s composition; the dock item reports its bounds through
+  `LocalAccountSwitcher`.
+- **One place.** `AccountFilter` holds the choice in the `tatrak_account_filter` preference (the
+  account's uuid; persisted, renaming the key resets existing choices) and answers `selected`
+  (null: all accounts; also when the stored account was removed or disabled, only one account
+  is enabled, or the style has no floating dock, where nothing would show or clear the filter; the
+  stored choice comes back with the dock) and `shows`.[^filter] Every screen asks it: the chat list snapshot (chats, archive,
+  folder counters, the "Connecting…" title, the header and dock avatar), message search of all
+  chats (`MessageSearchResults`, also `SearchActivity`'s global search), the tablet's suggested
+  chat, `ContactFlows.filterContacts` (Contacts tab and New chat), New chat's groups and the
+  accounts its dialogs offer (`StartConversationActivity.mActivatedAccounts`, the Contacts tab's
+  "Add contact"), the Calls list (`callChats`, and in its query before the 300-call limit), the Profile tab and the settings home header
+  (`settingsAccount`), and the share picker (`ShareCompose`). Notifications ignore it.
+- **Unread per account** counts unmuted chats with unread messages outside the archive, as the
+  folder tabs count; "All accounts" shows the sum.
+- **Choosing** writes the preference and refreshes the list and every tab's data; "Add account"
+  starts `EditAccountActivity`, as the Accounts screen's row (`ManageAccountActivity.menuAction`).
+- **From outside.** `ConversationsActivity.processViewIntent` (notification, shortcut, `xmpp:` link,
+  the other screens' `switchToConversation`) calls `AccountFilter.follow`: a filter set to another
+  account switches to the opened chat's account; "All accounts" stays.
+- monocles keeps a drawer account filter in the activity's instance state and passes it to New
+  chat as an intent extra; Tatrak needs one persisted value read by every screen, so nothing of it
+  fits (and it is AGPL).
 
 # Tests
 
@@ -213,7 +261,13 @@ the dialog) and checks that a drag scrolls without opening, a tap opens, and `ma
 called.
 `MainTabsTest` covers the selected tab, Back to Chats, a mid-switch frame with both pages
 (`main_tabs_switching.png`), the direction, a tap on the current tab and a page's kept state, and
-records every tab of both docks by day and night (`main_tabs_<floating|slate>_<tab>_<light|dark>.png`).[^tabstest] See
+records every tab of both docks by day and night (`main_tabs_<floating|slate>_<tab>_<light|dark>.png`).[^tabstest]
+`ChatListScreenshotTest` opens the account switcher with a long press and records
+`account_switcher_light.png` and `account_switcher_dark.png`, checks that a pick reports the account
+and closes it, and that one account shows no "All accounts". `AccountFilterTest` (fake service and
+connection-less accounts) covers chats, archive and counters, contacts, calls, search, New chat's
+accounts, the fallback when the account is removed or disabled, one enabled account, and the switch
+on an outside open, and the pause without the floating dock.[^filtertest] See
 [build setup](../build/build-setup.md).
 
 [^state]: ChatListState.kt
@@ -228,3 +282,6 @@ records every tab of both docks by day and night (`main_tabs_<floating|slate>_<t
 [^flows]: ContactFlows.java
 [^tabstest]: MainTabsTest.kt
 [^telegram]: Telegram MainTabsActivity
+[^filter]: AccountFilter.kt
+[^switcher]: AccountSwitcher.kt
+[^filtertest]: AccountFilterTest.kt

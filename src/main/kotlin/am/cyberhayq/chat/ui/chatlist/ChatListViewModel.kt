@@ -40,7 +40,8 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
 
     private fun ChatListState.missingBitmaps() =
         (chats + archived).any { it.avatar == null || (it.previewMediaKey != null && it.previewThumbnail == null) } ||
-            account?.avatar == null
+            account?.avatar == null ||
+            accounts.any { it.avatar == null }
 
     private companion object {
         const val TOP_ROWS = 20

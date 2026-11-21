@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui;
 
+import am.cyberhayq.chat.ui.accounts.AccountFilter;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
@@ -64,8 +65,10 @@ final class ContactFlows {
         contacts.clear();
         final List<Account> accounts = xmppConnectionService.getAccounts();
         final var showOffline = !hideOfflineContacts;
+        // Tatrak: only the account the app is filtered to (the dock's account switcher)
+        final Account only = AccountFilter.selected(xmppConnectionService);
         for (final Account account : accounts) {
-            if (account.isEnabled()) {
+            if (account.isEnabled() && AccountFilter.shows(only, account)) {
                 for (Contact contact : account.getRoster().getContacts()) {
                     Presence.Availability s = contact.getShownStatus();
                     if (contact.showInContactList()

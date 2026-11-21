@@ -266,6 +266,9 @@ public class ConversationsActivity extends QrCodeProcessingActivity
             Log.d(Config.LOGTAG, "unable to view conversation with uuid:" + uuid);
             return false;
         }
+        // Tatrak: a chat of another account opened from outside switches the app's account filter to it
+        am.cyberhayq.chat.ui.accounts.AccountFilter.follow(
+                xmppConnectionService, conversation.getAccount());
         openConversation(conversation, intent.getExtras());
         return true;
     }

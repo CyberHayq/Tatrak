@@ -4,7 +4,20 @@ import am.cyberhayq.chat.ui.chat.ChatPreview
 import am.cyberhayq.chat.ui.chat.ChatViewModel
 import am.cyberhayq.chat.ui.chat.NoChatActions
 import am.cyberhayq.chat.ui.chat.currentTextPalette
+import am.cyberhayq.chat.ui.accounts.AccountFilter
 import am.cyberhayq.chat.ui.calls.CallsScreen
+import am.cyberhayq.chat.ui.chatlist.AccountSwitcher
+import am.cyberhayq.chat.ui.chatlist.LocalAccountSwitcher
+import am.cyberhayq.chat.ui.theme.BarBlur
+import am.cyberhayq.chat.ui.theme.LocalBarBlur
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.geometry.Rect
+import androidx.compose.ui.unit.dp
 import am.cyberhayq.chat.ui.chatlist.ChatListActions
 import am.cyberhayq.chat.ui.chatlist.MainTab
 import am.cyberhayq.chat.ui.chatlist.MainTabs
@@ -106,6 +119,8 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     private lateinit var callList: CallList
     private lateinit var contactsTab: ContactsTab
     private var profile by mutableStateOf<AccountHeader?>(null)
+    /** The dock's Profile item while its account switcher is open. */
+    private var switcher by mutableStateOf<Rect?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -142,35 +157,54 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                     // Telegram's style without floating bars has no dock, so no tabs
                     val docked = floating || LocalTatrakStyle.current == TatrakStyle.SLATE_SEA
                     val dock = { selected: MainTab -> @Composable { backdrop: BarBackdrop? -> TabDock(selected, state.account, ::selectTab, backdrop) } }
-                    MainTabs(
-                        if (docked) tab else MainTab.CHATS,
-                        mainTabOrder(floating),
-                        onBack = { selectTab(MainTab.CHATS) },
-                        dock = { selected, backdrop -> TabDock(selected, state.account, ::selectTab, backdrop) },
-                    ) { page ->
-                        when (page) {
-                            MainTab.CHATS ->
-                                ChatListScreen(
-                                    state,
-                                    this@ChatListFragment,
-                                    messages = messages,
-                                    canInvite = canInvite,
-                                    archiveRequest = archiveFromChat,
-                                    onArchiveRequestDone = { archiveFromChat = null },
-                                    onTab = ::selectTab,
-                                )
-                            MainTab.CONTACTS -> {
-                                val contacts by contactsTab.state.collectAsStateWithLifecycle()
-                                NewChatScreen(contacts, contactsTab, contactsOnly = true, dock = dock(page), scrollToTop = scrollToTop)
+                    // ItemOptions' blur of the screen under the account switcher
+                    val blur by animateDpAsState(if (switcher != null && LocalBarBlur.current != BarBlur.OFF) 12.dp else 0.dp, label = "blur")
+                    CompositionLocalProvider(LocalAccountSwitcher provides { switcher = it }) {
+                        Box(Modifier.fillMaxSize()) {
+                            // blur(0) would still add a clipping layer
+                            Box(Modifier.fillMaxSize().then(if (blur > 0.dp) Modifier.blur(blur) else Modifier)) {
+                                MainTabs(
+                                    if (docked) tab else MainTab.CHATS,
+                                    mainTabOrder(floating),
+                                    onBack = { selectTab(MainTab.CHATS) },
+                                    dock = { selected, backdrop -> TabDock(selected, state.account, ::selectTab, backdrop) },
+                                ) { page ->
+                                    when (page) {
+                                        MainTab.CHATS ->
+                                            ChatListScreen(
+                                                state,
+                                                this@ChatListFragment,
+                                                messages = messages,
+                                                canInvite = canInvite,
+                                                archiveRequest = archiveFromChat,
+                                                onArchiveRequestDone = { archiveFromChat = null },
+                                                onTab = ::selectTab,
+                                            )
+                                        MainTab.CONTACTS -> {
+                                            val contacts by contactsTab.state.collectAsStateWithLifecycle()
+                                            NewChatScreen(contacts, contactsTab, contactsOnly = true, dock = dock(page), scrollToTop = scrollToTop)
+                                        }
+                                        MainTab.CALLS -> {
+                                            val calls by callList.state.collectAsStateWithLifecycle()
+                                            CallsScreen(calls, callList, dock = dock(page), scrollToTop = scrollToTop)
+                                        }
+                                        MainTab.PROFILE -> {
+                                            val sections = remember { settingsSections(requireContext(), ::openSettingsPage) }
+                                            ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop)
+                                        }
+                                    }
+                                }
                             }
-                            MainTab.CALLS -> {
-                                val calls by callList.state.collectAsStateWithLifecycle()
-                                CallsScreen(calls, callList, dock = dock(page), scrollToTop = scrollToTop)
-                            }
-                            MainTab.PROFILE -> {
-                                val sections = remember { settingsSections(requireContext(), ::openSettingsPage) }
-                                ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop)
-                            }
+                            AccountSwitcher(
+                                switcher,
+                                state.accounts,
+                                state.selectedAccount,
+                                if (docked) tab else MainTab.CHATS,
+                                state.account?.avatar,
+                                onDismiss = { switcher = null },
+                                onAdd = ::addAccount,
+                                onSelect = ::selectAccount,
+                            )
                         }
                     }
                     previewing?.let { c ->
@@ -251,6 +285,19 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         // the Contacts screen filters as it comes in (its search, kept across tabs, may be open)
         if (selected == MainTab.CONTACTS) contactsTab.askForContactsPermissions() else refreshTab()
     }
+
+    /** The account switcher's choice: every tab shows that account (null: all) from now on, also after a restart. */
+    private fun selectAccount(uuid: String?) {
+        AccountFilter.select(requireContext(), uuid)
+        refresh()
+        // the tabs not shown come in with it
+        contactsTab.filter()
+        callList.invalidate()
+        loadProfile()
+    }
+
+    /** As the Accounts screen's "Add account" (ManageAccountActivity.menuAction). */
+    private fun addAccount() = startActivity(Intent(requireContext(), EditAccountActivity::class.java))
 
     private fun loadProfile() {
         val service = xmppConnectionService ?: return

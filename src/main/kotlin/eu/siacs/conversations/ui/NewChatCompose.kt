@@ -1,6 +1,7 @@
 package eu.siacs.conversations.ui
 
 import am.cyberhayq.chat.ui.chatlist.styledAddress
+import am.cyberhayq.chat.ui.accounts.AccountFilter
 import am.cyberhayq.chat.ui.newchat.NewChatActions
 import am.cyberhayq.chat.ui.newchat.NewChatEntry
 import am.cyberhayq.chat.ui.newchat.NewChatMenu
@@ -11,7 +12,6 @@ import android.view.View
 import androidx.preference.PreferenceManager
 import de.gultsch.common.MiniUri
 import eu.siacs.conversations.ui.util.SoftKeyboardUtils
-import eu.siacs.conversations.utils.AccountUtils
 import eu.siacs.conversations.xmpp.Jid
 import java.util.concurrent.atomic.AtomicBoolean
 import androidx.compose.runtime.getValue
@@ -327,7 +327,7 @@ internal class ContactsTab(activity: XmppActivity, calls: RtpCallStarter) :
         val service = activity.xmppConnectionService ?: return
         val prefilled = if (StartConversationActivity.isValidJid(needle)) Jid.of(needle).toString() else null
         // the activity's mActivatedAccounts, as its onBackendConnected fills it
-        ContactFlows.showCreateContactDialog(activity, ArrayList(AccountUtils.getEnabledAccounts(service)), prefilled, null)
+        ContactFlows.showCreateContactDialog(activity, ArrayList(AccountFilter.enabledAccounts(service)), prefilled, null)
     }
 
     /** As the activity's `openConversationForContact(Contact)`. */

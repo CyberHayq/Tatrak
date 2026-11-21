@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui.fragment.settings
 
+import am.cyberhayq.chat.ui.accounts.AccountFilter
 import am.cyberhayq.chat.ui.settings.AccountHeader
 import am.cyberhayq.chat.ui.settings.SettingsHomeScreen
 import am.cyberhayq.chat.ui.settings.SettingsRow
@@ -98,9 +99,12 @@ class SettingsHomeFragment : Fragment(), OnBackendConnected {
     }
 }
 
-/** The settings home's header: the first account, as [SettingsHomeFragment] and the chat list's Profile tab show it. */
+/**
+ * The settings home's header: the account the app is filtered to, else the first, as [SettingsHomeFragment] and the chat
+ * list's Profile tab show it.
+ */
 internal suspend fun settingsAccount(service: XmppConnectionService, resources: Resources): AccountHeader? {
-    val first = service.accounts.firstOrNull() ?: return null
+    val first = AccountFilter.selected(service) ?: service.accounts.firstOrNull() ?: return null
     val size = (64 * resources.displayMetrics.density).toInt()
     val avatar = withContext(Dispatchers.IO) { service.avatarService.get(first, size, false) }
     val name = first.displayName ?: first.jid.local ?: first.jid.toString()

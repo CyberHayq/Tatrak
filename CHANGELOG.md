@@ -7,6 +7,9 @@
   bar stays in place, Back returns to Chats (as in Telegram).
 - A chat opens and closes as in Telegram: a short fade with a small shift; the list stays still.
   The swipe back still drags the whole chat under the finger.
+- Account switcher: a long press on Profile in the floating bar shows the accounts with their
+  unread chats; choosing one shows only that account's chats, contacts, calls and profile, until
+  "All accounts" is chosen. Notifications still come from every account.
 
 ## 0.4.0-beta.1 (pre-release)
 

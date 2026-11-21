@@ -1,5 +1,6 @@
 package eu.siacs.conversations.ui;
 
+import am.cyberhayq.chat.ui.accounts.AccountFilter;
 import android.Manifest;
 import android.annotation.SuppressLint;
 import android.app.Dialog;
@@ -823,7 +824,8 @@ public class StartConversationActivity extends XmppActivity
             this.mPostponedActivityResult = null;
         }
         this.mActivatedAccounts.clear();
-        this.mActivatedAccounts.addAll(AccountUtils.getEnabledAccounts(xmppConnectionService));
+        // Tatrak: New chat starts from the account the app is filtered to
+        this.mActivatedAccounts.addAll(AccountFilter.enabledAccounts(xmppConnectionService));
         configureHomeButton();
         Intent intent = pendingViewIntent.pop();
         if (intent != null && processViewIntent(intent)) {
@@ -975,8 +977,10 @@ public class StartConversationActivity extends XmppActivity
 
     protected void filterConferences(final String needle) {
         this.conferences.clear();
+        // Tatrak: only the account the app is filtered to
+        final Account only = AccountFilter.selected(xmppConnectionService);
         for (final Account account : xmppConnectionService.getAccounts()) {
-            if (account.isEnabled()) {
+            if (account.isEnabled() && AccountFilter.shows(only, account)) {
                 for (final Bookmark bookmark :
                         account.getXmppConnection()
                                 .getManager(BookmarkManager.class)

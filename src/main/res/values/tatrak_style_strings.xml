@@ -20,4 +20,7 @@
     <string name="tatrak_bar_blur_frosted">Frosted</string>
     <string name="tatrak_bar_blur_frosted_summary">Readable over the style\'s own colours</string>
     <string name="tatrak_bar_blur_clear">Clear, like Telegram</string>
+    <!-- the account switcher (long press on the floating bar's Profile) -->
+    <string name="tatrak_all_accounts">All accounts</string>
+    <string name="tatrak_switch_account">Switch account</string>
 </resources>
