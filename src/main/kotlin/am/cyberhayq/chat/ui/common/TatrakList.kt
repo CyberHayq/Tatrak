@@ -1,8 +1,15 @@
 package am.cyberhayq.chat.ui.common
 
 import am.cyberhayq.chat.ui.chat.LetterAvatar
+import am.cyberhayq.chat.ui.chatlist.FloatingTopBar
+import am.cyberhayq.chat.ui.chatlist.TatrakAppBar
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
+import am.cyberhayq.chat.ui.theme.backdropSource
+import am.cyberhayq.chat.ui.theme.fadeUnderBars
+import am.cyberhayq.chat.ui.theme.rememberBarBackdrop
 import android.graphics.Bitmap
 import androidx.annotation.DrawableRes
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -10,11 +17,13 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.only
@@ -31,8 +40,8 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
@@ -45,6 +54,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.res.painterResource
@@ -55,6 +65,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.layout.ime
@@ -108,7 +119,7 @@ fun TatrakTopBar(
     val bar = TatrakTheme.chatColors
     val onBar = bar.onTopBar
     StatusBarIcons(dark = bar.topBar.luminance() > 0.5f)
-    TopAppBar(
+    TatrakAppBar(
         // landscape: keep the actions clear of a side navigation bar or cutout
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         colors =
@@ -127,23 +138,7 @@ fun TatrakTopBar(
         },
         title = {
             if (search != null) {
-                val focus = remember { FocusRequester() }
-                LaunchedEffect(search.focusRequest) { focus.requestFocus() }
-                Box(contentAlignment = Alignment.CenterStart) {
-                    if (search.needle.isEmpty()) {
-                        Text(search.hint, color = onBar.copy(alpha = 0.6f), fontSize = 18.sp, maxLines = 1)
-                    }
-                    BasicTextField(
-                        value = search.needle,
-                        onValueChange = search.onNeedle,
-                        singleLine = true,
-                        textStyle = TextStyle(color = onBar, fontSize = 18.sp),
-                        cursorBrush = SolidColor(onBar),
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { search.onDone() }),
-                        modifier = Modifier.fillMaxWidth().focusRequester(focus),
-                    )
-                }
+                BarSearchField(search)
             } else {
                 Text(title, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
@@ -153,6 +148,64 @@ fun TatrakTopBar(
             if (menu.isNotEmpty()) OverflowMenu(menu)
         },
     )
+}
+
+/**
+ * A screen with [topBar] (and [tabs] under it) over [content]. With floating bars on, they float in the chat list's pills
+ * ([FloatingTopBar]) and the content runs under them, fading into them (blurred under them with "Blur under bars"); [content]
+ * gets their height to pad its list's top with. [floatingTop] draws the floating top slot itself instead (its own pills over
+ * the backdrop). Off: bar, tabs and content in a column as before, [content] gets 0 dp.
+ */
+@Composable
+fun TatrakScaffold(
+    topBar: @Composable () -> Unit,
+    modifier: Modifier = Modifier,
+    tabs: (@Composable () -> Unit)? = null,
+    floatingTop: (@Composable (BarBackdrop?) -> Unit)? = null,
+    content: @Composable ColumnScope.(top: Dp) -> Unit,
+) {
+    if (!LocalFloatingBars.current) {
+        Column(modifier) {
+            topBar()
+            tabs?.invoke()
+            content(0.dp)
+        }
+        return
+    }
+    val backdrop = rememberBarBackdrop()
+    Scaffold(
+        modifier = modifier,
+        containerColor = Color.Transparent,
+        contentWindowInsets = WindowInsets(0),
+        topBar = { if (floatingTop != null) floatingTop(backdrop) else FloatingTopBar(backdrop, tabs, topBar) },
+    ) { bars ->
+        Column(Modifier.fillMaxSize().fadeUnderBars(bars).backdropSource(backdrop)) {
+            content(bars.calculateTopPadding())
+        }
+    }
+}
+
+/** The search field of a top bar's title: [TatrakTopBar]'s, and the chat list's in the floating header. */
+@Composable
+internal fun BarSearchField(search: TopBarSearch) {
+    val onBar = TatrakTheme.chatColors.onTopBar
+    val focus = remember { FocusRequester() }
+    LaunchedEffect(search.focusRequest) { focus.requestFocus() }
+    Box(contentAlignment = Alignment.CenterStart) {
+        if (search.needle.isEmpty()) {
+            Text(search.hint, color = TatrakTheme.chatColors.onTopBarMuted, fontSize = 18.sp, maxLines = 1)
+        }
+        BasicTextField(
+            value = search.needle,
+            onValueChange = search.onNeedle,
+            singleLine = true,
+            textStyle = TextStyle(color = onBar, fontSize = 18.sp),
+            cursorBrush = SolidColor(onBar),
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+            keyboardActions = KeyboardActions(onSearch = { search.onDone() }),
+            modifier = Modifier.fillMaxWidth().focusRequester(focus),
+        )
+    }
 }
 
 @Composable

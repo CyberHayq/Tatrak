@@ -1,6 +1,10 @@
 package am.cyberhayq.chat.ui.search
 
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performTouchInput
+import am.cyberhayq.chat.ui.theme.TatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBlur
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -77,5 +81,27 @@ class MessageSearchScreenshotTest {
             }
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/search_empty_dark.png")
+    }
+
+    /** Floating bars (Glass): the top bar in a capsule over the list; frosted with the rows scrolled under it. */
+    @Test
+    fun floatingLight() = floating(dark = false, BarBlur.OFF, "search_floating_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun floatingDark() = floating(dark = true, BarBlur.OFF, "search_floating_dark")
+
+    @Test
+    fun floatingFrosted() = floating(dark = false, BarBlur.FROSTED, "search_floating_frosted", scrolled = true)
+
+    private fun floating(dark: Boolean, blur: BarBlur, file: String, scrolled: Boolean = false) {
+        compose.setContent {
+            TatrakTheme(darkTheme = dark, style = TatrakStyle.GLASS, barBlur = blur) { MessageSearchScreen(if (scrolled) state.copy(results = (1..12).map { i -> state.results[i % 3].copy(key = "k$i") }) else state, NoActions, initialText = "cafe") }
+        }
+        if (scrolled) {
+            compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+            compose.waitForIdle()
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$file.png")
     }
 }

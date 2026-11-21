@@ -17,6 +17,9 @@ import am.cyberhayq.chat.ui.theme.backdropSource
 import am.cyberhayq.chat.ui.theme.fadeUnderBars
 import am.cyberhayq.chat.ui.theme.rememberBarBackdrop
 import am.cyberhayq.chat.ui.chatlist.FloatingTopBar
+import am.cyberhayq.chat.ui.chatlist.LocalHeaderPills
+import am.cyberhayq.chat.ui.chatlist.PieceInset
+import am.cyberhayq.chat.ui.chatlist.TatrakAppBar
 import androidx.compose.foundation.lazy.LazyListLayoutInfo
 import androidx.compose.material3.Scaffold
 import androidx.compose.ui.graphics.RectangleShape
@@ -49,7 +52,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.WindowInsetsSides
 import androidx.compose.foundation.layout.add
-import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -81,7 +83,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -438,9 +439,10 @@ fun ChatScreen(
             val global = rememberStringPreference(AppSettings.WALLPAPER)
             val wallpaper = state.wallpaper ?: global
             val dark = ChatScreenTheme.colors.isDark
-            // blur under floating bars: the wallpaper is drawn with the messages instead, so the bars blur both
+            // blur under floating bars: the wallpaper is drawn with the messages too, so the bars blur both; this one shows
+            // where the messages are masked (around the header's pieces)
             val backdrop = rememberBarBackdrop()
-            if (backdrop == null) ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
+            ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
             val tint =
                 Wallpapers.preset(wallpaper)?.takeIf { it.id != Wallpapers.DEFAULT }
                     ?.let { (if (dark) it.night else it.day)[0] }
@@ -502,15 +504,22 @@ fun ChatScreen(
                         // the margins take touches too: messages faded out under them are not tappable
                         topBar = {
                             Column(Modifier.pointerInput(Unit) {}) {
-                                FloatingTopBar(bottom = 0.dp, backdrop = backdrop, content = header)
-                                state.banner?.let { ChatBannerBar(it, state.blockMenu, actions, Modifier.padding(start = 8.dp, end = 8.dp, top = 6.dp), floating = true, backdrop) }
+                                FloatingTopBar(backdrop, content = header)
+                                // Telegram 13's pinned bar: 7 dp from the sides and under the header glass
+                                state.banner?.let { ChatBannerBar(it, state.blockMenu, actions, Modifier.padding(start = 7.dp, end = 7.dp, top = 7.dp - PieceInset), floating = true, backdrop) }
                             }
                         },
                         bottomBar = { composer(Modifier.pointerInput(Unit) {}) },
                     ) { bars ->
                         Box(Modifier.fillMaxSize()) {
                             // one call site for the messages with blur on or off: switching it keeps the list's scroll
-                            Box(Modifier.fillMaxSize().backdropSource(backdrop)) {
+                            // with blur, the messages are hidden round the header's pieces and the banner (the pills show
+                            // them blurred): the mask sits outside the recording, as in the chat list
+                            Box(
+                                Modifier.fillMaxSize()
+                                    .then(if (backdrop != null) Modifier.fadeUnderBars(remember(bars) { TopPadding(bars) }) else Modifier)
+                                    .backdropSource(backdrop)
+                            ) {
                                 if (backdrop != null) ChatWallpaper(wallpaper, dark, Modifier.fillMaxSize())
                                 messages(bars)
                             }
@@ -566,7 +575,10 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
     if (!preview) StatusBarIcons(dark = bar.topBar.luminance() > 0.5f)
     var menuOpen by remember { mutableStateOf(false) }
     var encryptionOpen by remember { mutableStateOf(false) }
-    TopAppBar(
+    // floating header: Telegram 13's chat title pill, as wide as avatar and name, centred; 17.5 / 13.5 sp
+    val pill = LocalHeaderPills.current != null
+    TatrakAppBar(
+        centerTitle = true,
         // landscape: keep the actions clear of a side navigation bar or cutout
         windowInsets = if (preview) WindowInsets(0) else WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         colors =
@@ -587,7 +599,8 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
         title = {
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = if (preview) Modifier else Modifier.clickable(onClick = actions::openDetails),
+                // Telegram: the 40 dp avatar 3 dp in from the glass, 17 dp after the text
+                modifier = (if (preview) Modifier else Modifier.clickable(onClick = actions::openDetails)).then(if (pill) Modifier.padding(start = 3.dp, end = 17.dp) else Modifier),
             ) {
                 Box(Modifier.size(40.dp)) {
                     LetterAvatar(
@@ -610,11 +623,11 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
                         )
                     }
                 }
-                Spacer(Modifier.width(12.dp))
+                Spacer(Modifier.width(if (pill) 9.dp else 12.dp))
                 Column {
                     Text(
                         header.styledTitle?.inErrorColor() ?: AnnotatedString(header.title),
-                        fontSize = 18.sp,
+                        fontSize = if (pill) 17.5.sp else 18.sp,
                         fontWeight = FontWeight.Medium,
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
@@ -622,7 +635,7 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
                     if (header.subtitle != null) {
                         Text(
                             header.subtitle,
-                            fontSize = 14.sp,
+                            fontSize = if (pill) 13.5.sp else 14.sp,
                             color = if (header.subtitleActive) MaterialTheme.colorScheme.primary else bar.onTopBarMuted,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -632,7 +645,7 @@ private fun ChatTopBar(header: ChatHeader, encryption: Int?, actions: ChatAction
             }
         },
         actions = {
-            if (preview) return@TopAppBar
+            if (preview) return@TatrakAppBar
             if (header.canCall && header.canVideo && !header.ongoingCall) {
                 IconButton(onClick = { actions.call(true) }) {
                     Icon(painterResource(R.drawable.ic_videocam_24dp), contentDescription = stringResource(R.string.video_call))
@@ -883,15 +896,8 @@ private fun MessageList(
                     else PaddingValues(top = 8.dp, bottom = 8.dp),
                 modifier =
                     Modifier.fillMaxSize()
-                        .then(
-                            when {
-                                bars == null -> Modifier
-                                !blurred -> Modifier.fadeUnderBars(bars)
-                                // only above the header pill (status bar strip and FloatingTopBar's 4 dp), fading in under its
-                                // edge: the status bar icons stay over the plain wallpaper; the side margins stay unmasked
-                                else -> Modifier.fadeUnderBars(TopAppBarDefaults.windowInsets.only(WindowInsetsSides.Top).add(WindowInsets(top = 4.dp)).asPaddingValues())
-                            }
-                        )
+                        // blurred: the box round the list masks it down to the header's bottom (ChatScreen)
+                        .then(if (bars != null && !blurred) Modifier.fadeUnderBars(bars) else Modifier)
                         .then(
                             if (preview) Modifier
                             else Modifier.pointerInput(listState) {
@@ -986,6 +992,17 @@ private fun LazyListLayoutInfo.shownItems(padded: Boolean): List<LazyListItemInf
     if (!padded) visibleItemsInfo else visibleItemsInfo.filter { it.offset + it.size > 0 && it.offset < shownHeight(true) }
 
 /** [bars] plus [gap] at the top and bottom, read when the list is laid out: the keyboard growing the composer only re-lays it out. */
+/** Only the top of [bars] (read while drawing): the chat's mask round the header with blur leaves the composer alone. */
+private class TopPadding(private val bars: PaddingValues) : PaddingValues {
+    override fun calculateLeftPadding(layoutDirection: LayoutDirection) = 0.dp
+
+    override fun calculateTopPadding() = bars.calculateTopPadding()
+
+    override fun calculateRightPadding(layoutDirection: LayoutDirection) = 0.dp
+
+    override fun calculateBottomPadding() = 0.dp
+}
+
 private class BarsPadding(private val bars: PaddingValues, private val gap: Dp) : PaddingValues {
     override fun calculateLeftPadding(layoutDirection: LayoutDirection) = 0.dp
 
@@ -1258,14 +1275,17 @@ private fun ChatNotice(notice: Int?, onShown: () -> Unit, modifier: Modifier = M
     }
 }
 
+/** Telegram 13's pinned bar: min(18 dp, half its height), so not a capsule at 44 dp. */
+private val BannerShape = RoundedCornerShape(18.dp)
+
 /** [floating]: a pill of its own under the header's (Telegram's pinned bar), in the composer's pill colour; over [backdrop] blurred. */
 @Composable
 private fun ChatBannerBar(banner: ChatBanner, blockMenu: BlockMenu?, actions: ChatActions, modifier: Modifier = Modifier, floating: Boolean = false, backdrop: BarBackdrop? = null) {
     Surface(
         color = if (floating) floatingPill(backdrop?.mode ?: BarBlur.OFF) else MaterialTheme.colorScheme.surface,
-        shape = if (floating) RoundedCornerShape(24.dp) else RectangleShape,
+        shape = if (floating) BannerShape else RectangleShape,
         shadowElevation = 2.dp,
-        modifier = modifier.fillMaxWidth().backdropBlur(backdrop, RoundedCornerShape(24.dp)),
+        modifier = modifier.fillMaxWidth().backdropBlur(backdrop, BannerShape),
     ) {
         Row(
             verticalAlignment = Alignment.CenterVertically,

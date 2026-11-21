@@ -1,6 +1,10 @@
 package am.cyberhayq.chat.ui.newchat
 
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performTouchInput
+import am.cyberhayq.chat.ui.theme.TatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBlur
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -117,5 +121,27 @@ class NewChatScreenshotTest {
             }
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/new_chat_empty.png")
+    }
+
+    /** Floating bars (Glass): the top bar in a capsule over the list; frosted with the rows scrolled under it. */
+    @Test
+    fun floatingLight() = floating(dark = false, BarBlur.OFF, "new_chat_floating_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun floatingDark() = floating(dark = true, BarBlur.OFF, "new_chat_floating_dark")
+
+    @Test
+    fun floatingFrosted() = floating(dark = false, BarBlur.FROSTED, "new_chat_floating_frosted", scrolled = true)
+
+    private fun floating(dark: Boolean, blur: BarBlur, file: String, scrolled: Boolean = false) {
+        compose.setContent {
+            TatrakTheme(darkTheme = dark, style = TatrakStyle.GLASS, barBlur = blur) { NewChatScreen(if (scrolled) state.copy(contacts = (1..12).map { i -> state.contacts[i % 3].copy(key = "k$i") }) else state, NoActions) }
+        }
+        if (scrolled) {
+            compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+            compose.waitForIdle()
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$file.png")
     }
 }

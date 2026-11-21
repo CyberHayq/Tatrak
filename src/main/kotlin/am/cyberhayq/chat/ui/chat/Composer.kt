@@ -346,13 +346,19 @@ private fun SlateComposer(
     val colors = MaterialTheme.colorScheme
     // raised over the wallpaper (in the night style the plain surface equals it)
     val pill = colors.surfaceContainer
+    // floating: Telegram 13's input island, 7 dp from the sides and 9 dp from the bottom; the "@" list and the reply block take
+    // the input's radius (Telegram's mention list does, its reply sits inside the island); Slate keeps its own
+    val floating = LocalFloatingBars.current
+    val side = if (floating) 7.dp else 10.dp
+    val inputShape = RoundedCornerShape(if (floating) InputRadius else 28.dp)
+    val block = RoundedCornerShape(if (floating) InputRadius else 16.dp)
     Column(modifier.fillMaxWidth().windowInsetsPadding(insets)) {
         if (mentions != null) {
             Surface(
                 color = fill,
-                shape = RoundedCornerShape(16.dp),
+                shape = block,
                 shadowElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 6.dp).backdropBlur(backdrop, RoundedCornerShape(16.dp)),
+                modifier = Modifier.fillMaxWidth().padding(start = side, end = side, bottom = 6.dp).backdropBlur(backdrop, block),
             ) {
                 MentionList(mentions, actions)
             }
@@ -371,17 +377,17 @@ private fun SlateComposer(
         if (contextPanel != null) {
             Surface(
                 color = fill,
-                shape = RoundedCornerShape(16.dp),
+                shape = block,
                 shadowElevation = 3.dp,
-                modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 6.dp).backdropBlur(backdrop, RoundedCornerShape(16.dp)),
+                modifier = Modifier.fillMaxWidth().padding(start = side, end = side, bottom = 6.dp).backdropBlur(backdrop, block),
                 content = contextPanel,
             )
         }
         Surface(
             color = fill,
-            shape = RoundedCornerShape(28.dp),
+            shape = inputShape,
             shadowElevation = 6.dp,
-            modifier = Modifier.fillMaxWidth().padding(start = 10.dp, end = 10.dp, bottom = 8.dp).backdropBlur(backdrop, RoundedCornerShape(28.dp)),
+            modifier = Modifier.fillMaxWidth().padding(start = side, end = side, bottom = if (floating) 9.dp else 8.dp).backdropBlur(backdrop, inputShape),
         ) {
             when {
                 composer.requiresClassic -> Notice(stringResource(R.string.tatrak_chat_pgp_notice), actions)
@@ -401,10 +407,15 @@ private fun SlateComposer(
             }
         }
         if (panelShown) {
-            Surface(color = pill, shape = RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp), modifier = Modifier.fillMaxWidth(), content = panelContent)
+            // floating: Telegram's panel under the keyboard island, 29 dp corners
+            val top = if (floating) 29.dp else 16.dp
+            Surface(color = pill, shape = RoundedCornerShape(topStart = top, topEnd = top), modifier = Modifier.fillMaxWidth(), content = panelContent)
         }
     }
 }
+
+/** Floating: half the one-line input's height (about 53 dp: a capsule), kept as it grows, as Telegram's 22 dp on its 44 dp island. */
+private val InputRadius = 27.dp
 
 @Composable
 private fun InputRow(

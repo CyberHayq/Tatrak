@@ -3,6 +3,7 @@ package am.cyberhayq.chat.ui.newchat
 import am.cyberhayq.chat.ui.chatlist.inErrorColor
 import am.cyberhayq.chat.ui.common.AvatarRow
 import am.cyberhayq.chat.ui.common.EmptyText
+import am.cyberhayq.chat.ui.common.TatrakScaffold
 import am.cyberhayq.chat.ui.common.TatrakTopBar
 import am.cyberhayq.chat.ui.common.MenuEntry
 import am.cyberhayq.chat.ui.common.SectionTitle
@@ -13,11 +14,11 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
@@ -143,41 +144,45 @@ fun NewChatScreen(
     }
     BackHandler(enabled = searching) { closeSearch() }
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            TatrakTopBar(
-                title = stringResource(if (contactsOnly) R.string.contacts else R.string.tatrak_new_chat_title),
-                onBack = {
-                    if (!searching) {
-                        actions.back()
-                    } else {
-                        closeSearch()
-                    }
-                },
-                search =
-                    if (!searching) null
-                    else
-                        TopBarSearch(
-                            needle = needle,
-                            hint = stringResource(R.string.search_contacts),
-                            onNeedle = {
-                                needle = it
-                                actions.search(it)
-                            },
-                            onDone = actions::searchDone,
-                            focusRequest = searchRequest?.first,
+        TatrakScaffold(
+            topBar = {
+                TatrakTopBar(
+                    title = stringResource(if (contactsOnly) R.string.contacts else R.string.tatrak_new_chat_title),
+                    onBack = {
+                        if (!searching) {
+                            actions.back()
+                        } else {
+                            closeSearch()
+                        }
+                    },
+                    search =
+                        if (!searching) null
+                        else
+                            TopBarSearch(
+                                needle = needle,
+                                hint = stringResource(R.string.search_contacts),
+                                onNeedle = {
+                                    needle = it
+                                    actions.search(it)
+                                },
+                                onDone = actions::searchDone,
+                                focusRequest = searchRequest?.first,
+                            ),
+                    menu =
+                        listOf(
+                            MenuEntry(stringResource(R.string.hide_offline), state.hideOffline, onClick = actions::toggleHideOffline)
                         ),
-                menu =
-                    listOf(
-                        MenuEntry(stringResource(R.string.hide_offline), state.hideOffline, onClick = actions::toggleHideOffline)
-                    ),
-            ) {
-                if (!searching) {
-                    IconButton(onClick = { searching = true }) {
-                        Icon(painterResource(R.drawable.ic_search_24dp), stringResource(R.string.search))
+                ) {
+                    if (!searching) {
+                        IconButton(onClick = { searching = true }) {
+                            Icon(painterResource(R.drawable.ic_search_24dp), stringResource(R.string.search))
+                        }
                     }
                 }
-            }
-            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+            },
+            modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+        ) { top ->
+            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding().imePadding(), contentPadding = PaddingValues(top = top)) {
                 if (needle.isEmpty()) {
                     items(state.rows.filter { !contactsOnly || it == NewChatRow.ADD_CONTACT }, key = { "row:" + it.name }) { row ->
                         ActionRow(row) { actions.row(row) }

@@ -1,6 +1,10 @@
 package am.cyberhayq.chat.ui.calls
 
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performTouchInput
+import am.cyberhayq.chat.ui.theme.TatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBlur
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithText
@@ -102,5 +106,27 @@ class CallsScreenshotTest {
             )
         val groups = CallLog.group(records, zone as ZoneId)
         assertEquals(listOf("1" to 2, "3" to 1, "4" to 1, "5" to 1), groups.map { it.newest.key to it.count })
+    }
+
+    /** Floating bars (Glass): the top bar in a capsule over the list; frosted with the rows scrolled under it. */
+    @Test
+    fun floatingLight() = floating(dark = false, BarBlur.OFF, "calls_floating_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun floatingDark() = floating(dark = true, BarBlur.OFF, "calls_floating_dark")
+
+    @Test
+    fun floatingFrosted() = floating(dark = false, BarBlur.FROSTED, "calls_floating_frosted", scrolled = true)
+
+    private fun floating(dark: Boolean, blur: BarBlur, file: String, scrolled: Boolean = false) {
+        compose.setContent {
+            TatrakTheme(darkTheme = dark, style = TatrakStyle.GLASS, barBlur = blur) { CallsScreen(if (scrolled) state.copy(entries = (1..12).map { i -> state.entries[i % 4].copy(key = "k$i") }) else state, NoActions) }
+        }
+        if (scrolled) {
+            compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+            compose.waitForIdle()
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$file.png")
     }
 }

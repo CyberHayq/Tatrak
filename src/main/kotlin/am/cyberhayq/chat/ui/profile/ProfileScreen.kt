@@ -3,6 +3,11 @@ package am.cyberhayq.chat.ui.profile
 import am.cyberhayq.chat.ui.chatlist.inErrorColor
 import am.cyberhayq.chat.ui.chat.ChatHeader
 import am.cyberhayq.chat.ui.chat.LetterAvatar
+import am.cyberhayq.chat.ui.chatlist.FloatingTopMargin
+import am.cyberhayq.chat.ui.chatlist.floatingBar
+import am.cyberhayq.chat.ui.common.TatrakScaffold
+import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.theme.backdropBlur
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
 import android.graphics.Bitmap
@@ -26,9 +31,11 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -38,6 +45,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -53,6 +61,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -136,9 +145,12 @@ fun ProfileScreen(state: ProfileState, actions: ProfileActions, modifier: Modifi
     val header = state.header
     // no Surface around it: without this, plain Text stays black in dark mode
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-    Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant)) {
-        ProfileTopBar(actions)
-        LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
+    TatrakScaffold(
+        topBar = { ProfileTopBar(actions) },
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+        floatingTop = { FloatingProfileButtons(actions, it) },
+    ) { top ->
+        LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(top = top)) {
             item(key = "header") {
                 Column(
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -261,7 +273,6 @@ private fun ProfileTopBar(actions: ProfileActions) {
     val bar = TatrakTheme.chatColors
     val onBar = bar.onTopBar
     StatusBarIcons(dark = bar.topBar.luminance() > 0.5f)
-    var menuOpen by remember { mutableStateOf(false) }
     TopAppBar(
         // landscape: keep the actions clear of a side navigation bar or cutout
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
@@ -278,26 +289,58 @@ private fun ProfileTopBar(actions: ProfileActions) {
             }
         },
         title = {},
-        actions = {
-            IconButton(onClick = actions::showQr) {
-                Icon(painterResource(R.drawable.ic_qr_code_24dp), stringResource(R.string.show_qr_code))
-            }
-            Box {
-                IconButton(onClick = { menuOpen = true }) {
-                    Icon(painterResource(R.drawable.tatrak_ic_more_vert_24dp), stringResource(R.string.more_options))
-                }
-                DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
-                    DropdownMenuItem(
-                        text = { Text(stringResource(R.string.share_uri_with)) },
-                        onClick = {
-                            menuOpen = false
-                            actions.share()
-                        },
-                    )
-                }
-            }
-        },
+        actions = { ProfileMenu(actions) },
     )
+}
+
+/**
+ * Floating bars: Telegram 13's profile header buttons, the back button in a round glass and the others in a capsule, 6 dp
+ * from the sides and [FloatingTopMargin] under the status bar; no bar between them, the header runs under the status bar.
+ */
+@Composable
+private fun FloatingProfileButtons(actions: ProfileActions, backdrop: BarBackdrop?) {
+    val bar = TatrakTheme.chatColors
+    StatusBarIcons(dark = bar.topBar.luminance() > 0.5f)
+    val fill = floatingBar(backdrop)
+    Row(
+        // the margins take touches too, as the other floating bars' do
+        Modifier.fillMaxWidth()
+            .pointerInput(Unit) {}
+            .windowInsetsPadding(WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal))
+            .padding(start = 6.dp, end = 6.dp, top = FloatingTopMargin)
+    ) {
+        Surface(shape = CircleShape, color = fill, contentColor = bar.onTopBar, shadowElevation = 3.dp, modifier = Modifier.backdropBlur(backdrop, CircleShape)) {
+            IconButton(onClick = actions::back) {
+                Icon(painterResource(R.drawable.ic_arrow_back_24dp), stringResource(R.string.tatrak_chat_back))
+            }
+        }
+        Spacer(Modifier.weight(1f))
+        Surface(shape = CircleShape, color = fill, contentColor = bar.onTopBar, shadowElevation = 3.dp, modifier = Modifier.backdropBlur(backdrop, CircleShape)) {
+            Row { ProfileMenu(actions) }
+        }
+    }
+}
+
+@Composable
+private fun ProfileMenu(actions: ProfileActions) {
+    var menuOpen by remember { mutableStateOf(false) }
+    IconButton(onClick = actions::showQr) {
+        Icon(painterResource(R.drawable.ic_qr_code_24dp), stringResource(R.string.show_qr_code))
+    }
+    Box {
+        IconButton(onClick = { menuOpen = true }) {
+            Icon(painterResource(R.drawable.tatrak_ic_more_vert_24dp), stringResource(R.string.more_options))
+        }
+        DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
+            DropdownMenuItem(
+                text = { Text(stringResource(R.string.share_uri_with)) },
+                onClick = {
+                    menuOpen = false
+                    actions.share()
+                },
+            )
+        }
+    }
 }
 
 @Composable

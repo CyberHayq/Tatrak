@@ -3,7 +3,9 @@ package am.cyberhayq.chat.ui.calls
 import am.cyberhayq.chat.ui.chat.LetterAvatar
 import am.cyberhayq.chat.ui.common.AVATAR_SIZE
 import am.cyberhayq.chat.ui.common.EmptyText
+import am.cyberhayq.chat.ui.common.TatrakScaffold
 import am.cyberhayq.chat.ui.common.TatrakTopBar
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.common.MenuEntry
 import android.graphics.Bitmap
 import android.text.format.DateFormat
@@ -13,6 +15,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -44,6 +47,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
@@ -105,24 +109,30 @@ fun CallsScreen(state: CallsState, actions: CallsActions, modifier: Modifier = M
     val shown = remember(state.entries, tab) { if (tab == CallsTab.ALL) state.entries else state.entries.filter(tab.keep) }
     val time = rememberCallTimeFormatter()
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            TatrakTopBar(title = stringResource(R.string.tatrak_calls), onBack = actions::back)
-            // scrollable: four Russian labels do not fit equal widths
-            PrimaryScrollableTabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.surface, edgePadding = 0.dp) {
-                CallsTab.entries.forEach { t ->
-                    Tab(
-                        selected = t == tab,
-                        onClick = { tab = t },
-                        text = { Text(stringResource(t.label), maxLines = 1) },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        // floating: the tabs sit in their own pill, which draws the fill
+        val tabFill = if (LocalFloatingBars.current) Color.Transparent else MaterialTheme.colorScheme.surface
+        TatrakScaffold(
+            topBar = { TatrakTopBar(title = stringResource(R.string.tatrak_calls), onBack = actions::back) },
+            modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+            tabs = {
+                // scrollable: four Russian labels do not fit equal widths
+                PrimaryScrollableTabRow(selectedTabIndex = tab.ordinal, containerColor = tabFill, edgePadding = 0.dp) {
+                    CallsTab.entries.forEach { t ->
+                        Tab(
+                            selected = t == tab,
+                            onClick = { tab = t },
+                            text = { Text(stringResource(t.label), maxLines = 1) },
+                            selectedContentColor = MaterialTheme.colorScheme.primary,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
                 }
-            }
+            },
+        ) { top ->
             if (state.loaded && shown.isEmpty()) {
-                EmptyText(stringResource(tab.empty))
+                EmptyText(stringResource(tab.empty), Modifier.padding(top = top))
             } else {
-                LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
+                LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(top = top)) {
                     items(shown, key = { it.key }) { CallRow(it, time, actions) }
                 }
             }

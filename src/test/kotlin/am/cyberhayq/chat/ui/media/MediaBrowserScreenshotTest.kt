@@ -1,6 +1,10 @@
 package am.cyberhayq.chat.ui.media
 
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performTouchInput
+import am.cyberhayq.chat.ui.theme.TatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBlur
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -64,5 +68,27 @@ class MediaBrowserScreenshotTest {
     fun emptyDark() {
         compose.setContent { TatrakTheme(darkTheme = true) { MediaBrowserScreen(MediaState(loaded = true), NoActions) } }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/media_empty_dark.png")
+    }
+
+    /** Floating bars (Glass): the top bar in a capsule over the list; frosted with the rows scrolled under it. */
+    @Test
+    fun floatingLight() = floating(dark = false, BarBlur.OFF, "media_floating_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun floatingDark() = floating(dark = true, BarBlur.OFF, "media_floating_dark")
+
+    @Test
+    fun floatingFrosted() = floating(dark = false, BarBlur.FROSTED, "media_floating_frosted", scrolled = true)
+
+    private fun floating(dark: Boolean, blur: BarBlur, file: String, scrolled: Boolean = false) {
+        compose.setContent {
+            TatrakTheme(darkTheme = dark, style = TatrakStyle.GLASS, barBlur = blur) { MediaBrowserScreen(if (scrolled) state.copy(items = (1..30).map { MediaItem("m$it", MediaTab.MEDIA, "IMG_$it.jpg", "", R.drawable.ic_image_48dp, thumbnail = true) }) else state, NoActions) }
+        }
+        if (scrolled) {
+            compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+            compose.waitForIdle()
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$file.png")
     }
 }

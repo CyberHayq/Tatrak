@@ -2,6 +2,9 @@ package am.cyberhayq.chat.ui.participants
 
 import am.cyberhayq.chat.ui.common.MenuEntry
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import androidx.compose.ui.test.swipeUp
+import am.cyberhayq.chat.ui.theme.TatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBlur
 import android.app.Application
 import android.graphics.Bitmap
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -129,5 +132,27 @@ class ParticipantsScreenshotTest {
         compose.setContent { TatrakTheme(darkTheme = false) { ParticipantsScreen(state, actions) } }
         compose.onNodeWithContentDescription("OpenPGP Key ID 0x1A2B3C4D5E6F7081").performClick()
         assertEquals("b", opened)
+    }
+
+    /** Floating bars (Glass): the top bar in a capsule over the list; frosted with the rows scrolled under it. */
+    @Test
+    fun floatingLight() = floating(dark = false, BarBlur.OFF, "participants_floating_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun floatingDark() = floating(dark = true, BarBlur.OFF, "participants_floating_dark")
+
+    @Test
+    fun floatingFrosted() = floating(dark = false, BarBlur.FROSTED, "participants_floating_frosted", scrolled = true)
+
+    private fun floating(dark: Boolean, blur: BarBlur, file: String, scrolled: Boolean = false) {
+        compose.setContent {
+            TatrakTheme(darkTheme = dark, style = TatrakStyle.GLASS, barBlur = blur) { ParticipantsScreen(if (scrolled) state.copy(participants = (1..12).map { i -> state.participants[i % 6].copy(key = "k$i") }) else state, NoActions()) }
+        }
+        if (scrolled) {
+            compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 100f, durationMillis = 800) }
+            compose.waitForIdle()
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$file.png")
     }
 }

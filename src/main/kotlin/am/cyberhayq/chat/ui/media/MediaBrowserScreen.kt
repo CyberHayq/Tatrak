@@ -1,7 +1,9 @@
 package am.cyberhayq.chat.ui.media
 
 import am.cyberhayq.chat.ui.common.EmptyText
+import am.cyberhayq.chat.ui.common.TatrakScaffold
 import am.cyberhayq.chat.ui.common.TatrakTopBar
+import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.common.MenuEntry
 import android.graphics.Bitmap
 import androidx.annotation.DrawableRes
@@ -13,6 +15,7 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -119,38 +122,47 @@ fun MediaBrowserScreen(state: MediaState, actions: MediaActions, modifier: Modif
     val toggle: (String) -> Unit = { key -> selection = if (key in selection) selection - key else selection + key }
     val open: (String) -> Unit = { key -> if (selection.isEmpty()) actions.open(key) else toggle(key) }
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            if (selection.isEmpty()) {
-                TatrakTopBar(title = stringResource(R.string.media_browser), onBack = actions::back)
-            } else {
-                SelectionBar(selection, shown, actions) { selection = it }
-            }
-            PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = MaterialTheme.colorScheme.surface) {
-                MediaTab.entries.forEach { t ->
-                    Tab(
-                        selected = t == tab,
-                        onClick = { tab = t },
-                        text = { Text(stringResource(t.label)) },
-                        selectedContentColor = MaterialTheme.colorScheme.primary,
-                        unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
+        // floating: the tabs sit in their own pill, which draws the fill
+        val tabFill = if (LocalFloatingBars.current) Color.Transparent else MaterialTheme.colorScheme.surface
+        TatrakScaffold(
+            topBar = {
+                if (selection.isEmpty()) {
+                    TatrakTopBar(title = stringResource(R.string.media_browser), onBack = actions::back)
+                } else {
+                    SelectionBar(selection, shown, actions) { selection = it }
                 }
-            }
+            },
+            modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+            tabs = {
+                PrimaryTabRow(selectedTabIndex = tab.ordinal, containerColor = tabFill) {
+                    MediaTab.entries.forEach { t ->
+                        Tab(
+                            selected = t == tab,
+                            onClick = { tab = t },
+                            text = { Text(stringResource(t.label)) },
+                            selectedContentColor = MaterialTheme.colorScheme.primary,
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+        ) { top ->
             if (state.loaded && shown.isEmpty()) {
-                EmptyText(stringResource(R.string.tatrak_media_empty))
+                EmptyText(stringResource(R.string.tatrak_media_empty), Modifier.padding(top = top))
             } else if (tab == MediaTab.MEDIA) {
                 LazyVerticalGrid(
                     columns = GridCells.Fixed(GRID_COLUMNS),
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalArrangement = Arrangement.spacedBy(2.dp),
                     modifier = Modifier.fillMaxSize().navigationBarsPadding(),
+                    contentPadding = PaddingValues(top = top),
                 ) {
                     items(shown, key = { it.key }) { item ->
                         GridCell(item, item.key in selection, actions, { open(item.key) }, { toggle(item.key) })
                     }
                 }
             } else {
-                LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
+                LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(top = top)) {
                     items(shown, key = { it.key }) { item ->
                         FileRow(item, item.key in selection, { open(item.key) }, { toggle(item.key) })
                     }

@@ -2,6 +2,10 @@ package am.cyberhayq.chat.ui.profile
 
 import am.cyberhayq.chat.ui.chat.ChatHeader
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import androidx.compose.ui.test.swipeUp
+import androidx.compose.ui.test.performTouchInput
+import am.cyberhayq.chat.ui.theme.TatrakStyle
+import am.cyberhayq.chat.ui.theme.BarBlur
 import android.app.Application
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -103,5 +107,35 @@ class ProfileScreenshotTest {
             }
         }
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/profile_group_dark.png")
+    }
+
+    private val group =
+        ProfileState(
+            loaded = true,
+            header = ChatHeader(title = "Tatrak team", subtitle = "4 participants", isGroup = true, isMuted = true),
+            address = AnnotatedString("team@conference.tatrak.am"),
+            about = "Release planning and builds",
+            members = (1..8).map { ProfileMember("m$it", listOf("Ani", "Bob", "Davit")[it % 3], if (it == 1) "Owner" else null, null) },
+            memberCount = 8,
+        )
+
+    /** Floating bars (Glass): Telegram 13's round back button and the capsule with QR and menu; frosted scrolled under them. */
+    @Test
+    fun floatingLight() = floating(dark = false, BarBlur.OFF, "profile_floating_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun floatingDark() = floating(dark = true, BarBlur.OFF, "profile_floating_dark")
+
+    @Test
+    fun floatingFrosted() = floating(dark = false, BarBlur.FROSTED, "profile_floating_frosted", scrolled = true)
+
+    private fun floating(dark: Boolean, blur: BarBlur, file: String, scrolled: Boolean = false) {
+        compose.setContent { TatrakTheme(darkTheme = dark, style = TatrakStyle.GLASS, barBlur = blur) { ProfileScreen(group, NoActions) } }
+        if (scrolled) {
+            compose.onRoot().performTouchInput { swipeUp(startY = centerY + 300f, endY = centerY - 300f, durationMillis = 800) }
+            compose.waitForIdle()
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$file.png")
     }
 }

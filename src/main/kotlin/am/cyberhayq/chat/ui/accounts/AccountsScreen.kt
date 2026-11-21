@@ -1,13 +1,14 @@
 package am.cyberhayq.chat.ui.accounts
 
 import am.cyberhayq.chat.ui.common.AvatarRow
+import am.cyberhayq.chat.ui.common.TatrakScaffold
 import am.cyberhayq.chat.ui.common.TatrakTopBar
 import am.cyberhayq.chat.ui.common.MenuEntry
 import android.graphics.Bitmap
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -97,14 +98,18 @@ interface AccountsActions {
 @Composable
 fun AccountsScreen(state: AccountsState, actions: AccountsActions, modifier: Modifier = Modifier) {
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            val labels = state.menu.map { stringResource(it.label) }
-            TatrakTopBar(
-                title = stringResource(R.string.title_activity_manage_accounts),
-                onBack = actions::back,
-                menu = state.menu.mapIndexed { i, a -> MenuEntry(labels[i]) { actions.action(a) } },
-            )
-            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding()) {
+        val labels = state.menu.map { stringResource(it.label) }
+        TatrakScaffold(
+            topBar = {
+                TatrakTopBar(
+                    title = stringResource(R.string.title_activity_manage_accounts),
+                    onBack = actions::back,
+                    menu = state.menu.mapIndexed { i, a -> MenuEntry(labels[i]) { actions.action(a) } },
+                )
+            },
+            modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+        ) { top ->
+            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(top = top)) {
                 items(state.accounts, key = { it.key }) { account -> AccountRow(account, actions) }
                 item(key = "add") {
                     Row(

@@ -4,6 +4,7 @@ import am.cyberhayq.chat.ui.common.AVATAR_SIZE
 import am.cyberhayq.chat.ui.common.AvatarRow
 import am.cyberhayq.chat.ui.common.EmptyText
 import am.cyberhayq.chat.ui.common.MenuEntry
+import am.cyberhayq.chat.ui.common.TatrakScaffold
 import am.cyberhayq.chat.ui.common.TatrakTopBar
 import am.cyberhayq.chat.ui.common.TopBarSearch
 import android.graphics.Bitmap
@@ -19,8 +20,8 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.sp
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -120,30 +121,34 @@ fun ParticipantsScreen(state: ParticipantsState, actions: ParticipantsActions, i
     }
     BackHandler(enabled = searching) { closeSearch() }
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            TatrakTopBar(
-                title = stringResource(R.string.group_chat_members),
-                onBack = { if (searching) closeSearch() else actions.back() },
-                search =
-                    if (!searching) null
-                    else
-                        TopBarSearch(
-                            needle = needle,
-                            hint = stringResource(R.string.search_participants),
-                            onNeedle = {
-                                needle = it
-                                actions.search(it)
-                            },
-                        ),
-            ) {
-                if (!searching) {
-                    IconButton(onClick = { searching = true }) {
-                        Icon(painterResource(R.drawable.ic_search_24dp), stringResource(R.string.search))
+        TatrakScaffold(
+            topBar = {
+                TatrakTopBar(
+                    title = stringResource(R.string.group_chat_members),
+                    onBack = { if (searching) closeSearch() else actions.back() },
+                    search =
+                        if (!searching) null
+                        else
+                            TopBarSearch(
+                                needle = needle,
+                                hint = stringResource(R.string.search_participants),
+                                onNeedle = {
+                                    needle = it
+                                    actions.search(it)
+                                },
+                            ),
+                ) {
+                    if (!searching) {
+                        IconButton(onClick = { searching = true }) {
+                            Icon(painterResource(R.drawable.ic_search_24dp), stringResource(R.string.search))
+                        }
                     }
                 }
-            }
+            },
+            modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+        ) { top ->
             val avatarPx = with(LocalDensity.current) { AVATAR_SIZE.dp.toPx().roundToInt() }
-            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding().imePadding(), contentPadding = PaddingValues(top = top)) {
                 items(state.participants, key = { it.key }) { participant ->
                     // keyed by the avatar hash too: the host's cache is cleared on a change, the load fetches the new one
                     val avatar by

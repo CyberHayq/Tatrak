@@ -199,7 +199,8 @@ private class BackdropBlurNode(var backdrop: BarBackdrop, var shape: Shape) :
         val at = at()
         drawnAt = at
         val source = backdrop.source
-        if (at != null && source != null) {
+        // an empty pill (a header without actions) has no size: no layer to record
+        if (at != null && source != null && size.width > 0f && size.height > 0f) {
             // the bar and a blur radius around it, kept inside the content: Clamp then repeats the content's own edge, where
             // Decal (or recording past the edge) would fade the bar's edge towards transparent
             val margin = BlurRadius.roundToPx()
@@ -241,28 +242,26 @@ private val FadeLength = 8.dp
  * The content fades out towards floating bars as high as [bars]' top and bottom (a Scaffold's padding; the screen's edges
  * included): gone under the bars, so the hidden archive row and rows behind the margins never show, and dimming over the
  * [FadeLength] before a bar's inner edge. One offscreen layer for the whole content, no per-item work; the heights are read
- * in the draw cache, so a bar that grows (the keyboard under the chat's composer) redraws without recomposing.
- * [blurred]: the bars show the content blurred, so the fade moves past the edge, under the bars, and fades only the margins
- * beside and above them.
+ * in the draw cache, so a bar that grows (the keyboard under the chat's composer) redraws without recomposing. With blur the
+ * pills show the content blurred from [backdropSource] inside this mask; nothing sharp shows in their rounded corners.
  */
-fun Modifier.fadeUnderBars(bars: PaddingValues, blurred: Boolean = false): Modifier =
+fun Modifier.fadeUnderBars(bars: PaddingValues): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
         .drawWithCache {
             // rebuilt only when the size or a bar's height changes, not on every frame of a scroll
             val fade = FadeLength.toPx()
-            val under = if (blurred) fade else 0f
             val t = bars.calculateTopPadding().toPx()
             val b = bars.calculateBottomPadding().toPx()
             val opaque = listOf(Color.Transparent, Color.Black)
-            val top = t - under
-            val bottom = size.height - b + under
+            val top = t
+            val bottom = size.height - b
             val topMask = Brush.verticalGradient(opaque, top, top + fade)
             val bottomMask = Brush.verticalGradient(opaque.reversed(), bottom - fade, bottom)
             onDrawWithContent {
                 drawContent()
                 if (t > 0f) drawRect(topMask, size = Size(size.width, top + fade), blendMode = BlendMode.DstIn)
                 if (b > 0f) {
-                    drawRect(bottomMask, topLeft = Offset(0f, bottom - fade), size = Size(size.width, b - under + fade), blendMode = BlendMode.DstIn)
+                    drawRect(bottomMask, topLeft = Offset(0f, bottom - fade), size = Size(size.width, b + fade), blendMode = BlendMode.DstIn)
                 }
             }
         }

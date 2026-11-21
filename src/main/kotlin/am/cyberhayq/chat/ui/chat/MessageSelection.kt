@@ -1,5 +1,7 @@
 package am.cyberhayq.chat.ui.chat
 
+import am.cyberhayq.chat.ui.chatlist.barTitleSize
+import am.cyberhayq.chat.ui.chatlist.TatrakAppBar
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import androidx.compose.foundation.background
@@ -21,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.withFrameNanos
@@ -230,7 +231,7 @@ internal fun SelectionBar(
 ) {
     val bar = TatrakTheme.chatColors
     StatusBarIcons(dark = bar.topBar.luminance() > 0.5f)
-    TopAppBar(
+    TatrakAppBar(
         windowInsets = WindowInsets.safeDrawing.only(WindowInsetsSides.Top + WindowInsetsSides.Horizontal),
         colors =
             TopAppBarDefaults.topAppBarColors(
@@ -244,7 +245,7 @@ internal fun SelectionBar(
                 Icon(painterResource(R.drawable.ic_close_24dp), contentDescription = stringResource(R.string.tatrak_close_selection))
             }
         },
-        title = { Text(count.toString(), fontWeight = FontWeight.Medium, fontSize = 20.sp) },
+        title = { Text(count.toString(), fontWeight = FontWeight.Medium, fontSize = barTitleSize(20.sp)) },
         actions = {
             listOfNotNull(
                     onCopy?.let { Triple(R.drawable.tatrak_chat_ic_copy_24dp, R.string.copy_to_clipboard, it) },

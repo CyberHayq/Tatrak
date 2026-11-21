@@ -3,14 +3,15 @@ package am.cyberhayq.chat.ui.search
 import am.cyberhayq.chat.ui.chatlist.rememberChatTimeFormatter
 import am.cyberhayq.chat.ui.common.AvatarRow
 import am.cyberhayq.chat.ui.common.EmptyText
+import am.cyberhayq.chat.ui.common.TatrakScaffold
 import am.cyberhayq.chat.ui.common.TatrakTopBar
 import am.cyberhayq.chat.ui.common.MenuEntry
 import am.cyberhayq.chat.ui.common.TopBarSearch
 import android.graphics.Bitmap
 import androidx.annotation.StringRes
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
@@ -90,27 +91,31 @@ fun MessageSearchScreen(
     var needle by rememberSaveable { mutableStateOf(initialText) }
     val time = rememberChatTimeFormatter()
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        Column(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface)) {
-            val hint =
-                when {
-                    state.chatName != null -> stringResource(R.string.tatrak_search_in_chat, state.chatName)
-                    state.inChat -> stringResource(R.string.tatrak_search_this_chat)
-                    else -> stringResource(R.string.tatrak_search_all_chats)
-                }
-            TatrakTopBar(
-                title = stringResource(R.string.search_messages),
-                onBack = actions::back,
-                search =
-                    TopBarSearch(
-                        needle = needle,
-                        hint = hint,
-                        onNeedle = {
-                            needle = it
-                            actions.search(it)
-                        },
-                    ),
-            )
-            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding().imePadding()) {
+        TatrakScaffold(
+            topBar = {
+                val hint =
+                    when {
+                        state.chatName != null -> stringResource(R.string.tatrak_search_in_chat, state.chatName)
+                        state.inChat -> stringResource(R.string.tatrak_search_this_chat)
+                        else -> stringResource(R.string.tatrak_search_all_chats)
+                    }
+                TatrakTopBar(
+                    title = stringResource(R.string.search_messages),
+                    onBack = actions::back,
+                    search =
+                        TopBarSearch(
+                            needle = needle,
+                            hint = hint,
+                            onNeedle = {
+                                needle = it
+                                actions.search(it)
+                            },
+                        ),
+                )
+            },
+            modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
+        ) { top ->
+            LazyColumn(Modifier.fillMaxSize().navigationBarsPadding().imePadding(), contentPadding = PaddingValues(top = top)) {
                 items(state.results, key = { it.key }) { result ->
                     SearchResultRow(result, state.terms, time.format(result.timestamp), actions::open, actions::menu)
                 }

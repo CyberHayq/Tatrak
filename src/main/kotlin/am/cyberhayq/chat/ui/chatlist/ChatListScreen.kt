@@ -10,6 +10,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 import am.cyberhayq.chat.ui.common.SectionTitle
 import am.cyberhayq.chat.ui.common.deleteChatText
@@ -21,6 +22,8 @@ import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.theme.LocalTatrakStyle
 import am.cyberhayq.chat.ui.theme.BarBlur
 import am.cyberhayq.chat.ui.theme.LocalBarBlur
+import am.cyberhayq.chat.ui.common.BarSearchField
+import am.cyberhayq.chat.ui.common.TopBarSearch
 import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.theme.backdropSource
 import am.cyberhayq.chat.ui.theme.fadeUnderBars
@@ -47,6 +50,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.WindowInsetsSides
@@ -85,7 +89,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -397,15 +400,23 @@ fun ChatListScreen(
                             showSearch = !slate && !floating,
                         )
                 }
-                if (!searching && !inArchive) {
-                    FolderTabs(
-                        chats = state.chats,
-                        selectedIndex = pagerState.currentPage,
-                        onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
-                    )
-                    UpdateNotice()
-                }
             }
+            val tabs: (@Composable () -> Unit)? =
+                if (searching || inArchive) null
+                else {
+                    {
+                        Column {
+                            FolderTabs(
+                                chats = state.chats,
+                                selectedIndex = pagerState.currentPage,
+                                onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
+                                // floating: clear of the tab pill's round ends
+                                edgePadding = if (floating) 16.dp else 8.dp,
+                            )
+                            UpdateNotice()
+                        }
+                    }
+                }
             Scaffold(
                 contentWindowInsets = WindowInsets(0),
                 // Slate and Sea and floating bars: the bottom bar carries the navigation bar inset, and the snackbar sits above it
@@ -429,10 +440,11 @@ fun ChatListScreen(
                 },
                 topBar = {
                     if (floating) {
-                        FloatingTopBar(backdrop = backdrop, content = bars)
+                        FloatingTopBar(backdrop, tabs, bars)
                     } else {
                         Column(Modifier.background(chatColors.topBar)) {
                             bars()
+                            tabs?.invoke()
                             HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }
@@ -441,8 +453,13 @@ fun ChatListScreen(
                     if (floating) {
                         // above the bottom bar, following it in and out
                         AnimatedVisibility(dock, enter = fadeIn() + slideInVertically { it }, exit = fadeOut() + slideOutVertically { it }) {
-                            // clear of a side navigation bar or cutout, as the bottom pill is
-                            NewChatButton(actions::newChat, Modifier.windowInsetsPadding(WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.End)))
+                            // clear of a side navigation bar or cutout, as the bottom pill is; Telegram 13's 48 dp button, 20 dp from the side
+                            NewChatButton(
+                                actions::newChat,
+                                Modifier.windowInsetsPadding(WindowInsets.displayCutout.union(WindowInsets.navigationBars).only(WindowInsetsSides.End))
+                                    .padding(end = 4.dp)
+                                    .size(48.dp),
+                            )
                         }
                     } else if (!slate && !searching && !inArchive && !selectionMode) {
                         NewChatButton(actions::newChat, Modifier.navigationBarsPadding())
@@ -460,7 +477,7 @@ fun ChatListScreen(
                 val listModifier = if (floating) Modifier.fillMaxSize() else Modifier.fillMaxSize().padding(padding)
                 Box(
                     // with blur the bars draw the content under them themselves (unfaded: the source is inside the fade)
-                    if (floating) Modifier.fillMaxSize().fadeUnderBars(padding, blurred = backdrop != null).backdropSource(backdrop)
+                    if (floating) Modifier.fillMaxSize().fadeUnderBars(padding).backdropSource(backdrop)
                     else Modifier
                 ) {
                     when {
@@ -791,8 +808,8 @@ private fun SearchResults(
 
 private const val SEARCH_DEBOUNCE_MS = 300L
 
-/** Floating bars: room under the last row for the FAB above the bottom bar (56 dp and the Scaffold's 16 dp spacing). */
-private val FabClearance = 72.dp
+/** Floating bars: room under the last row for the FAB above the bottom bar (48 dp and the Scaffold's 16 dp spacing). */
+private val FabClearance = 64.dp
 
 @Composable
 private fun NewChatButton(onClick: () -> Unit, modifier: Modifier) {
@@ -811,14 +828,14 @@ private fun NewChatButton(onClick: () -> Unit, modifier: Modifier) {
 }
 
 @Composable
-private fun FolderTabs(chats: List<ChatListItem>, selectedIndex: Int, onSelect: (Int) -> Unit) {
+private fun FolderTabs(chats: List<ChatListItem>, selectedIndex: Int, onSelect: (Int) -> Unit, edgePadding: Dp) {
     val chatColors = TatrakTheme.chatColors
     val accent = MaterialTheme.colorScheme.primary
     PrimaryScrollableTabRow(
         selectedTabIndex = selectedIndex,
         containerColor = chatColors.topBar,
         contentColor = accent,
-        edgePadding = 8.dp,
+        edgePadding = edgePadding,
         divider = {},
         indicator = {
             Box(
@@ -865,14 +882,14 @@ private fun PlainTopBar(
     onSearch: () -> Unit,
     showSearch: Boolean = true,
 ) {
-    TopAppBar(
+    TatrakAppBar(
         colors = topBarColors(),
         navigationIcon = {
             IconButton(onClick = onNavigation) {
                 Icon(painterResource(navigationIcon), contentDescription = navigationLabel)
             }
         },
-        title = { Text(title, fontWeight = FontWeight.Medium, fontSize = 20.sp) },
+        title = { Text(title, fontWeight = FontWeight.Medium, fontSize = barTitleSize(20.sp)) },
         actions = {
             if (showSearch) {
                 IconButton(onClick = onSearch) {
@@ -890,7 +907,7 @@ private fun PlainTopBar(
 @Composable
 private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose: () -> Unit) {
     val onBar = TatrakTheme.chatColors.onTopBar
-    TopAppBar(
+    TatrakAppBar(
         colors = topBarColors(),
         navigationIcon = {
             IconButton(onClick = onClose) {
@@ -901,28 +918,33 @@ private fun SearchTopBar(query: String, onQueryChange: (String) -> Unit, onClose
             }
         },
         title = {
-            val focusRequester = remember { FocusRequester() }
-            TextField(
-                value = query,
-                onValueChange = onQueryChange,
-                singleLine = true,
-                placeholder = { Text(stringResource(R.string.search)) },
-                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                colors =
-                    TextFieldDefaults.colors(
-                        focusedContainerColor = Color.Transparent,
-                        unfocusedContainerColor = Color.Transparent,
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent,
-                        focusedTextColor = onBar,
-                        unfocusedTextColor = onBar,
-                        cursorColor = MaterialTheme.colorScheme.primary,
-                        focusedPlaceholderColor = TatrakTheme.chatColors.onTopBarMuted,
-                        unfocusedPlaceholderColor = TatrakTheme.chatColors.onTopBarMuted,
-                    ),
-                modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
-            )
-            LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            // the floating header's 46 dp pill: the M3 field is 56 dp tall, the bars' plain field fits
+            if (LocalHeaderPills.current != null) {
+                BarSearchField(TopBarSearch(query, stringResource(R.string.search), onQueryChange))
+            } else {
+                val focusRequester = remember { FocusRequester() }
+                TextField(
+                    value = query,
+                    onValueChange = onQueryChange,
+                    singleLine = true,
+                    placeholder = { Text(stringResource(R.string.search)) },
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+                    colors =
+                        TextFieldDefaults.colors(
+                            focusedContainerColor = Color.Transparent,
+                            unfocusedContainerColor = Color.Transparent,
+                            focusedIndicatorColor = Color.Transparent,
+                            unfocusedIndicatorColor = Color.Transparent,
+                            focusedTextColor = onBar,
+                            unfocusedTextColor = onBar,
+                            cursorColor = MaterialTheme.colorScheme.primary,
+                            focusedPlaceholderColor = TatrakTheme.chatColors.onTopBarMuted,
+                            unfocusedPlaceholderColor = TatrakTheme.chatColors.onTopBarMuted,
+                        ),
+                    modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+                )
+                LaunchedEffect(Unit) { focusRequester.requestFocus() }
+            }
         },
     )
 }
@@ -942,7 +964,7 @@ private fun SelectionTopBar(
     val allMuted = selected.all { it.isMuted }
     val allArchived = selected.all { it.isArchived }
     var menu by remember { mutableStateOf(false) }
-    TopAppBar(
+    TatrakAppBar(
         colors = topBarColors(),
         navigationIcon = {
             IconButton(onClick = onClose) {
@@ -952,7 +974,7 @@ private fun SelectionTopBar(
                 )
             }
         },
-        title = { Text(selected.size.toString(), fontWeight = FontWeight.Medium, fontSize = 20.sp) },
+        title = { Text(selected.size.toString(), fontWeight = FontWeight.Medium, fontSize = barTitleSize(20.sp)) },
         actions = {
             IconButton(onClick = { onPin(!allPinned) }) {
                 Icon(
