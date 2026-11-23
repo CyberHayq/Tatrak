@@ -1,6 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
+
+Everything in 0.4.0-beta.1 below, and:
 
 ### Translations
 - Added Eastern Armenian in Soviet and traditional orthographies.

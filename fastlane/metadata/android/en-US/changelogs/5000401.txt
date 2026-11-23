@@ -1,0 +1,9 @@
+- Chats, Contacts, Calls and Profile as tabs under the bottom bar
+- Account switcher and a filter by account
+- Chat opens and closes as in Telegram
+- Private messages to a group participant from the chat
+- Choose the app language in the settings; Armenian added
+- Chat preview on a long press of the avatar; frequent reactions
+- Replies to photos show a thumbnail
+- Confirmations say what is deleted and for whom
+- In-app updates from GitHub releases, with optional betas
