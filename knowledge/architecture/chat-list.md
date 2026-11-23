@@ -179,9 +179,11 @@ without floating bars has no dock and stays on Chats.[^tabs]
   carries on Chats (the floating search button, Slate's search pill and compose button, the
   floating compose button) belongs to the Chats page and slides with it; on the other tabs the
   floating bar keeps the search button's room empty, so the pill does not move.[^tabs]
-- **State.** The tab lives in `ChatListFragment` (saved in its instance state); each page keeps
-  its saveable state (scroll, search, call filter) in a `SaveableStateHolder` while another tab
-  shows; a page not shown is not composed, so its first frame on return composes it.
+- **State.** The tab lives in `ChatListFragment` and is saved in its instance state. The host
+  reuses the restored list fragment in both pane layouts. A `SaveableStateHolder` keeps each
+  page's scroll, search and call filter while another tab shows.
+- **Archive from a chat.** The chat applies the local archive before closing. Its result tells
+  the tab host to offer Undo on the selected page, including Contacts and Calls.
 - **Back** on a tab other than Chats returns to Chats, after the page's own Back (closing the
   Contacts search). A tap on the current tab scrolls it to the top (`ScrollToTopOn`).
 - **Contacts** is `NewChatScreen` in contacts-only mode driven by `ContactsTab`
@@ -194,6 +196,9 @@ without floating bars has no dock and stays on Chats.[^tabs]
   Opening a chat uses `switchToConversation`, which `ConversationsActivity` overrides to open in
   place; it now also overrides `switchToConversationDoNotAppend` (the "Add contact" result),
   which `XmppActivity` would answer by restarting the activity.[^flows]
+- **Add contact** restores the dialog's inputs and binds submission to the current activity.
+  The list activity serializes the Contacts and notification permission requests. An interrupted
+  Contacts request can be retried by returning to or tapping Contacts.
 - **Calls** is `CallsScreen` over `CallList` (moved out of `CallsActivity`, which uses it too).
 - **Profile** is the settings home (`ProfileTab` over `SettingsHomeScreen`, the rows of
   `settingsSections`); a row opens its page above everything: `SettingsActivity` with
@@ -234,15 +239,18 @@ The owner's decision (2026-11-21) is an app-wide filter instead of Telegram's ac
   is enabled, or the style has no floating dock, where nothing would show or clear the filter; the
   stored choice comes back with the dock) and `shows`.[^filter] Every screen asks it: the chat list snapshot (chats, archive,
   folder counters, the "Connecting…" title, the header and dock avatar), message search of all
-  chats (`MessageSearchResults`, also `SearchActivity`'s global search), the tablet's suggested
-  chat, `ContactFlows.filterContacts` (Contacts tab and New chat), New chat's groups and the
+  chats (the SQL applies the account before the result limit), the tablet's suggested chat, `ContactFlows.filterContacts` (Contacts tab and New chat), New chat's groups and the
   accounts its dialogs offer (`StartConversationActivity.mActivatedAccounts`, the Contacts tab's
   "Add contact"), the Calls list (`callChats`, and in its query before the 300-call limit), the Profile tab and the settings home header
-  (`settingsAccount`), and the share picker (`ShareCompose`). Notifications ignore it.
+  (`settingsAccount`), and the share picker (`ShareCompose`). The share picker's + passes its
+  scope to the contact chooser, including the account options. Notifications ignore the filter.
 - **Unread per account** counts unmuted chats with unread messages outside the archive, as the
   folder tabs count; "All accounts" shows the sum.
-- **Choosing** writes the preference and refreshes the list and every tab's data; "Add account"
-  starts `EditAccountActivity`, as the Accounts screen's row (`ManageAccountActivity.menuAction`).
+- **Choosing** writes the preference and refreshes the list and every tab's data. On a tablet,
+  a chat from another account gives way to an eligible suggestion or an empty pane. Calls clears
+  rows from the previous scope and checks the current account before opening a chat or placing
+  a call. Inline search reruns the same query for the new account and discards previous results.
+  "Add account" opens `EditAccountActivity` via the same route as the Accounts screen.
 - **From outside.** `ConversationsActivity.processViewIntent` (notification, shortcut, `xmpp:` link,
   the other screens' `switchToConversation`) calls `AccountFilter.follow`: a filter set to another
   account switches to the opened chat's account; "All accounts" stays.

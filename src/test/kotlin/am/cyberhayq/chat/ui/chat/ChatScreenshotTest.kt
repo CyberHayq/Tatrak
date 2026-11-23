@@ -20,6 +20,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.test.captureToImage
+import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -63,6 +67,7 @@ import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
 import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.swipeDown
 import eu.siacs.conversations.R
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
@@ -275,6 +280,29 @@ class ChatScreenshotTest {
     @Test
     @Config(qualifiers = "+night")
     fun chatReplyPhotoDark() = replyPhoto("chat_reply_photo_dark", darkTheme = true)
+
+    @Test
+    fun replyThumbnailDropsThePreviousPhotoWhileTheNewOneLoads() {
+        var uuid by mutableStateOf("a")
+        val second = CompletableDeferred<Bitmap>()
+        fun bitmap(color: Color) = Bitmap.createBitmap(16, 16, Bitmap.Config.ARGB_8888).apply { eraseColor(color.toArgb()) }
+        val actions = object : NoChatActions() {
+            override suspend fun loadThumbnail(uuid: String, sizePx: Int) =
+                if (uuid == "a") bitmap(Color.Red) else second.await()
+        }
+        compose.setContent {
+            ReplyThumbnail(uuid, 34.dp, 4.dp, actions, Modifier.testTag("reply-thumbnail"))
+        }
+        fun center(): Color {
+            val pixels = compose.onNodeWithTag("reply-thumbnail").captureToImage().toPixelMap()
+            return pixels[pixels.width / 2, pixels.height / 2]
+        }
+        assertEquals(Color.Red.toArgb(), center().toArgb())
+        compose.runOnIdle { uuid = "b" }
+        assertFalse(center().toArgb() == Color.Red.toArgb())
+        compose.runOnIdle { second.complete(bitmap(Color.Blue)) }
+        assertEquals(Color.Blue.toArgb(), center().toArgb())
+    }
 
     /** A bubble and the composer panel answering a photo: both show its thumbnail. */
     private fun replyPhoto(name: String, darkTheme: Boolean) =

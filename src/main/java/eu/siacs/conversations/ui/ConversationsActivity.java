@@ -80,6 +80,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.openintents.openpgp.util.OpenPgpApi;
 
 public class ConversationsActivity extends QrCodeProcessingActivity
@@ -234,11 +235,29 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         return false;
     }
 
+    // Tatrak: Android accepts one outstanding activity permission request at a time.
+    private int mainPermissionRequest;
+    private boolean askedForNotifications;
+    final AtomicBoolean contactsPermissionRequested = new AtomicBoolean();
+
+    boolean requestMainPermissions(final String[] permissions, final int requestCode) {
+        if (mainPermissionRequest != 0) {
+            return false;
+        }
+        mainPermissionRequest = requestCode;
+        if (Arrays.asList(permissions).contains(Manifest.permission.POST_NOTIFICATIONS)) {
+            askedForNotifications = true;
+        }
+        requestPermissions(permissions, requestCode);
+        return true;
+    }
+
     private void requestNotificationPermissionIfNeeded() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+        if (!askedForNotifications
+                && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
                 && ActivityCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                         != PackageManager.PERMISSION_GRANTED) {
-            requestPermissions(
+            requestMainPermissions(
                     new String[] {Manifest.permission.POST_NOTIFICATIONS},
                     REQUEST_POST_NOTIFICATION);
         }
@@ -279,7 +298,19 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
         // Tatrak: the chat list's Contacts tab asks for the contacts permission as
         // StartConversationActivity does
+        if (requestCode == mainPermissionRequest) {
+            mainPermissionRequest = 0;
+            if (grantResults.length == 0) {
+                askedForNotifications = false;
+            }
+        }
         ContactFlows.onRequestPermissionsResult(this, requestCode, grantResults, () -> {});
+        final var main = getSupportFragmentManager().findFragmentById(R.id.main_fragment);
+        if (requestCode == ContactFlows.REQUEST_SYNC_CONTACTS && grantResults.length == 0) {
+            contactsPermissionRequested.set(false);
+        } else if (requestCode == REQUEST_POST_NOTIFICATION && main instanceof ChatListFragment list) {
+            list.requestContactsPermissionIfVisible();
+        }
         if (grantResults.length > 0) {
             if (grantResults[0] == PackageManager.PERMISSION_GRANTED) {
                 switch (requestCode) {
@@ -362,6 +393,12 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     @Override
     protected void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // Tatrak: a permission request survives activity recreation.
+        if (savedInstanceState != null) {
+            mainPermissionRequest = savedInstanceState.getInt("tatrak_main_permission_request");
+            askedForNotifications = savedInstanceState.getBoolean("tatrak_asked_notifications");
+            contactsPermissionRequested.set(savedInstanceState.getBoolean("tatrak_requested_contacts"));
+        }
         OmemoSetting.load(this);
         this.binding = DataBindingUtil.setContentView(this, R.layout.activity_conversations);
         Activities.setStatusAndNavigationBarColors(this, binding.getRoot());
@@ -563,6 +600,10 @@ public class ConversationsActivity extends QrCodeProcessingActivity
 
     @Override
     public void onSaveInstanceState(@NonNull final Bundle savedInstanceState) {
+        // Tatrak: keep the runtime permission requests serialized across recreation.
+        savedInstanceState.putInt("tatrak_main_permission_request", mainPermissionRequest);
+        savedInstanceState.putBoolean("tatrak_asked_notifications", askedForNotifications);
+        savedInstanceState.putBoolean("tatrak_requested_contacts", contactsPermissionRequested.get());
         final Intent pendingIntent = pendingViewIntent.peek();
         savedInstanceState.putParcelable(
                 "intent", pendingIntent != null ? pendingIntent : getIntent());
@@ -614,7 +655,9 @@ public class ConversationsActivity extends QrCodeProcessingActivity
             transaction.commitAllowingStateLoss();
             return;
         }
-        if (existing != null && binding.secondaryFragment == null) {
+        // Tatrak: preserve the restored list and its tab in either pane layout.
+        if (existing instanceof ChatListFragment
+                || (existing != null && binding.secondaryFragment == null)) {
             return;
         }
         final var transaction = fragmentManager.beginTransaction();
@@ -675,6 +718,33 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         }
         extras.putBoolean(EXTRA_DO_NOT_APPEND, true);
         openConversation(conversation, extras);
+    }
+
+    // Tatrak: the classic PM composer handles these extras in the current activity.
+    @Override
+    public void privateMsgInMuc(final Conversation conversation, final String nick) {
+        final Bundle extras = new Bundle();
+        if (nick != null) {
+            extras.putString(EXTRA_NICK, nick);
+            extras.putBoolean(EXTRA_IS_PRIVATE_MESSAGE, true);
+        }
+        openConversation(conversation, extras);
+    }
+
+    // Tatrak: the right pane follows the dock's effective account.
+    void reconcileSecondaryAccount() {
+        if (binding.secondaryFragment == null || xmppConnectionService == null) {
+            return;
+        }
+        final var conversation = getConversationInSecondary();
+        final var selected = am.cyberhayq.chat.ui.accounts.AccountFilter.selected(xmppConnectionService);
+        if (conversation == null
+                || !am.cyberhayq.chat.ui.accounts.AccountFilter.shows(selected, conversation.getAccount())) {
+            final var suggestion = ChatSuggestions.first(xmppConnectionService, conversation);
+            if (conversation != null || suggestion != null) {
+                openConversation(suggestion, null);
+            }
+        }
     }
 
     @Override

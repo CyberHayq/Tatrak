@@ -30,18 +30,20 @@ internal class RtpCallStarter(
     caller: ActivityResultCaller = activity,
 ) {
 
-    private var pending: Pair<Conversation, Boolean>? = null
+    private data class Call(val conversation: Conversation, val video: Boolean, val eligible: () -> Boolean)
+
+    private var pending: Call? = null
 
     private val permissions =
         caller.registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { result ->
-            val (conversation, video) = pending ?: return@registerForActivityResult
+            val call = pending ?: return@registerForActivityResult
             pending = null
             // as ConversationFragment.onRequestPermissionsResult: an interrupted request returns
             // nothing, and Bluetooth / local network are optional for a call
-            if (result.isEmpty()) return@registerForActivityResult
+            if (result.isEmpty() || !call.eligible()) return@registerForActivityResult
             val res = deniedMessage(result)
             if (res == null) {
-                triggerRtpSession(conversation, video)
+                triggerRtpSession(call)
             } else {
                 Toast.makeText(
                         activity,
@@ -71,7 +73,7 @@ internal class RtpCallStarter(
     }
 
     /** Asks for confirmation first, so a mis-tap never rings the contact. */
-    fun call(conversation: Conversation, video: Boolean) {
+    fun call(conversation: Conversation, video: Boolean, eligible: () -> Boolean = { true }) {
         MaterialAlertDialogBuilder(activity)
             .setMessage(
                 activity.getString(
@@ -80,20 +82,22 @@ internal class RtpCallStarter(
                 )
             )
             .setNegativeButton(R.string.cancel, null)
-            .setPositiveButton(R.string.tatrak_call_confirm_yes) { _, _ -> start(conversation, video) }
+            .setPositiveButton(R.string.tatrak_call_confirm_yes) { _, _ ->
+                if (eligible()) start(Call(conversation, video, eligible))
+            }
             .show()
     }
 
-    private fun start(conversation: Conversation, video: Boolean) {
-        if (isAccountInsufficientState(conversation.account)) return
+    private fun start(call: Call) {
+        if (isAccountInsufficientState(call.conversation.account)) return
         val missing =
-            PermissionUtils.rtpPermissions(video).filter {
+            PermissionUtils.rtpPermissions(call.video).filter {
                 activity.checkSelfPermission(it) != PackageManager.PERMISSION_GRANTED
             }
         if (missing.isEmpty()) {
-            triggerRtpSession(conversation, video)
+            triggerRtpSession(call)
         } else {
-            pending = conversation to video
+            pending = call
             permissions.launch(missing.toTypedArray())
         }
     }
@@ -120,7 +124,8 @@ internal class RtpCallStarter(
     }
 
     /** ConversationFragment.triggerRtpSession. */
-    private fun triggerRtpSession(conversation: Conversation, video: Boolean) {
+    private fun triggerRtpSession(call: Call) {
+        val (conversation, video, eligible) = call
         val service = activity.xmppConnectionService ?: return
         if (JingleManager.isBusy(service.accounts)) {
             Toast.makeText(activity, R.string.only_one_call_at_a_time, Toast.LENGTH_LONG).show()
@@ -137,7 +142,7 @@ internal class RtpCallStarter(
         } else {
             val capability = if (video) RtpCapability.Capability.VIDEO else RtpCapability.Capability.AUDIO
             PresenceSelector.selectFullJidForDirectRtpConnection(activity, contact, capability) {
-                placeCall(account, it, action)
+                if (eligible()) placeCall(account, it, action)
             }
         }
     }

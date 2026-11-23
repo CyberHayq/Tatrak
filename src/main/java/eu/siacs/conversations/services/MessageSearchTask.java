@@ -29,6 +29,7 @@
 
 package eu.siacs.conversations.services;
 
+import am.cyberhayq.chat.ui.accounts.AccountFilter;
 import android.database.Cursor;
 import android.os.SystemClock;
 import android.util.Log;
@@ -56,6 +57,7 @@ public class MessageSearchTask implements Runnable, Cancellable {
     private final XmppConnectionService xmppConnectionService;
     private final List<String> term;
     private final String uuid;
+    private final String accountUuid;
     private final OnSearchResultsAvailable onSearchResultsAvailable;
 
     private boolean isCancelled = false;
@@ -64,10 +66,12 @@ public class MessageSearchTask implements Runnable, Cancellable {
             XmppConnectionService xmppConnectionService,
             List<String> term,
             final String uuid,
+            final String accountUuid,
             OnSearchResultsAvailable onSearchResultsAvailable) {
         this.xmppConnectionService = xmppConnectionService;
         this.term = term;
         this.uuid = uuid;
+        this.accountUuid = accountUuid;
         this.onSearchResultsAvailable = onSearchResultsAvailable;
     }
 
@@ -76,7 +80,19 @@ public class MessageSearchTask implements Runnable, Cancellable {
             List<String> term,
             final String uuid,
             OnSearchResultsAvailable onSearchResultsAvailable) {
-        new MessageSearchTask(xmppConnectionService, term, uuid, onSearchResultsAvailable)
+        final var account = uuid == null ? AccountFilter.selected(xmppConnectionService) : null;
+        search(xmppConnectionService, term, uuid,
+                account == null ? null : account.getUuid(), onSearchResultsAvailable);
+    }
+
+    // Tatrak: the inline search supplies the account captured with the query.
+    public static void search(
+            XmppConnectionService xmppConnectionService,
+            List<String> term,
+            final String uuid,
+            final String accountUuid,
+            OnSearchResultsAvailable onSearchResultsAvailable) {
+        new MessageSearchTask(xmppConnectionService, term, uuid, accountUuid, onSearchResultsAvailable)
                 .executeInBackground();
     }
 
@@ -96,7 +112,7 @@ public class MessageSearchTask implements Runnable, Cancellable {
         try {
             final HashMap<String, Conversational> conversationCache = new HashMap<>();
             final List<Message> result = new ArrayList<>();
-            cursor = xmppConnectionService.databaseBackend.getMessageSearchCursor(term, uuid);
+            cursor = xmppConnectionService.databaseBackend.getMessageSearchCursor(term, uuid, accountUuid);
             long dbTimer = SystemClock.elapsedRealtime();
             if (isCancelled) {
                 Log.d(Config.LOGTAG, "canceled search task");

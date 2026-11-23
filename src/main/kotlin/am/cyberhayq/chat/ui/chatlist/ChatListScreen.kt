@@ -32,6 +32,7 @@ import androidx.compose.animation.AnimatedVisibility
 import am.cyberhayq.chat.ui.theme.StatusBarIcons
 import am.cyberhayq.chat.ui.theme.contentOn
 import am.cyberhayq.chat.ui.theme.fabFill
+import android.content.Context
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -214,15 +215,12 @@ fun ChatListScreen(
     initialQuery: String? = null,
     /** An enabled account's server can create invites (AccountPickerDialog.EasyInvite). */
     canInvite: Boolean = false,
-    /** A chat archived from its own menu: archived here like the selection's archive, with Undo. */
-    archiveRequest: String? = null,
-    onArchiveRequestDone: () -> Unit = {},
+    snackbar: SnackbarHostState = remember { SnackbarHostState() },
     /** A dock's tab other than Chats ([MainTabs]); Chats itself scrolls the list to the top. */
     onTab: (MainTab) -> Unit = {},
 ) {
     val drawer = rememberDrawerController()
     val scope = rememberCoroutineScope()
-    val snackbar = remember { SnackbarHostState() }
     var searching by rememberSaveable { mutableStateOf(initialQuery != null) }
     var query by rememberSaveable { mutableStateOf(initialQuery.orEmpty()) }
     var showArchive by rememberSaveable { mutableStateOf(initialArchiveOpen) }
@@ -259,37 +257,11 @@ fun ChatListScreen(
         scope.launch {
             snackbar.currentSnackbarData?.dismiss()
             if (archived) {
-                val done =
-                    if (uuids.size == 1) {
-                        context.getString(R.string.tatrak_archived_one)
-                    } else {
-                        context.getString(R.string.tatrak_archived_many, uuids.size)
-                    }
-                // Telegram's archive hint: once, and only while the archive row is hidden above the list
-                val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-                val hint = prefs.getBoolean(ARCHIVE_HIDDEN_KEY, true) && !prefs.getBoolean(ARCHIVE_HINT_SHOWN_KEY, false)
-                if (hint) prefs.edit().putBoolean(ARCHIVE_HINT_SHOWN_KEY, true).apply()
-                val message = if (hint) done + "\n" + context.getString(R.string.tatrak_archive_hint) else done
-                // with an action M3 defaults to Indefinite, which never goes away
-                val result =
-                    snackbar.showSnackbar(
-                        message,
-                        context.getString(R.string.tatrak_undo),
-                        duration = SnackbarDuration.Long,
-                    )
-                if (result == SnackbarResult.ActionPerformed) {
-                    actions.setArchived(uuids, false)
-                }
+                showArchiveUndo(context, snackbar, actions, uuids, showHint = true)
             } else {
                 snackbar.showSnackbar(context.getString(R.string.tatrak_unarchived))
             }
         }
-    }
-
-    LaunchedEffect(archiveRequest) {
-        archiveRequest ?: return@LaunchedEffect
-        archive(listOf(archiveRequest), true)
-        onArchiveRequestDone()
     }
 
     // derived: reading the drag progress here would recompose the whole screen on every frame
@@ -1220,4 +1192,28 @@ private fun DrawerItem(icon: Int, label: String, onClick: () -> Unit) {
         shape = RectangleShape,
         colors = NavigationDrawerItemDefaults.colors(unselectedContainerColor = Color.Transparent),
     )
+}
+
+/** The archive action in Chats and the Undo shown after archiving from a conversation. */
+internal suspend fun showArchiveUndo(
+    context: Context,
+    snackbar: SnackbarHostState,
+    actions: ChatListActions,
+    uuids: List<String>,
+    showHint: Boolean,
+) {
+    val done =
+        if (uuids.size == 1) context.getString(R.string.tatrak_archived_one)
+        else context.getString(R.string.tatrak_archived_many, uuids.size)
+    val prefs = PreferenceManager.getDefaultSharedPreferences(context)
+    val hint = showHint && prefs.getBoolean(ARCHIVE_HIDDEN_KEY, true) &&
+        !prefs.getBoolean(ARCHIVE_HINT_SHOWN_KEY, false)
+    if (hint) prefs.edit().putBoolean(ARCHIVE_HINT_SHOWN_KEY, true).apply()
+    val message = if (hint) done + "\n" + context.getString(R.string.tatrak_archive_hint) else done
+    val result = snackbar.showSnackbar(
+        message,
+        context.getString(R.string.tatrak_undo),
+        duration = SnackbarDuration.Long,
+    )
+    if (result == SnackbarResult.ActionPerformed) actions.setArchived(uuids, false)
 }

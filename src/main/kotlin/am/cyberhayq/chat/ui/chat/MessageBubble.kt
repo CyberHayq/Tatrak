@@ -47,6 +47,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
@@ -611,10 +612,11 @@ private fun ReplyQuote(reply: ReplyHeader, outgoing: Boolean, actions: ChatActio
 @Composable
 internal fun ReplyThumbnail(uuid: String, size: Dp, radius: Dp, actions: ChatActions, modifier: Modifier = Modifier) {
     val sizePx = with(LocalDensity.current) { MediaMaxWidth.roundToPx() }
-    val thumbnail by
-        produceState(actions.cachedThumbnail(uuid), uuid) {
+    val thumbnail by key(uuid, actions, sizePx) {
+        produceState(actions.cachedThumbnail(uuid)) {
             if (value == null) value = actions.loadThumbnail(uuid, sizePx)
         }
+    }
     Box(modifier.size(size).clip(RoundedCornerShape(radius)).background(Color.Black.copy(alpha = 0.08f))) {
         thumbnail?.let {
             Image(remember(it) { it.asImageBitmap() }, contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())

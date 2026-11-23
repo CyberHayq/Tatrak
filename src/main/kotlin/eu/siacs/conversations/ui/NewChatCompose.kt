@@ -292,7 +292,8 @@ internal class ContactsTab(activity: XmppActivity, calls: RtpCallStarter) :
     // the activity's fields of the same names
     private val list = ArrayList<ListItem>()
     private var hideOffline = ContactFlows.isHidingOfflineContacts(preferences(activity))
-    private val requestedContactsPermission = AtomicBoolean(false)
+    private val requestedContactsPermission =
+        (activity as? ConversationsActivity)?.contactsPermissionRequested ?: AtomicBoolean(false)
 
     override fun hidingOffline() = hideOffline
 

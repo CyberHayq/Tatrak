@@ -23,6 +23,8 @@ import eu.siacs.conversations.entities.RtpSessionStatus
 import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.utils.TimeFrameUtils
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlin.math.roundToInt
 
 /**
@@ -69,26 +71,55 @@ internal class CallList(
     private val onBack: () -> Unit,
 ) : CallsActions {
 
-    private val source = SnapshotSource(scope, cache ?: CallsState()) { service, publish -> build(service, publish) }
+    private data class ScopedCalls(val accountUuid: String?, val state: CallsState)
+
+    private val source = SnapshotSource(scope, CallsState()) { service, publish -> build(service, publish) }
+    private var scopeInitialized = false
+    private var accountUuid: String? = null
 
     val state = source.state
 
     fun invalidate() {
-        source.invalidate(activity.xmppConnectionService ?: return)
+        val service = activity.xmppConnectionService ?: return
+        val selected = AccountFilter.selected(service)?.uuid
+        if (!scopeInitialized || accountUuid != selected) {
+            scopeInitialized = true
+            accountUuid = selected
+            source.reset(cache?.takeIf { it.accountUuid == selected }?.state ?: CallsState())
+        }
+        source.invalidate(service)
     }
 
     override fun back() = onBack()
 
     override fun openChat(chat: String) {
-        activity.switchToConversation(activity.xmppConnectionService?.findConversationByUuid(chat) ?: return)
+        activity.switchToConversation(conversationInScope(chat) ?: return)
     }
 
     override fun call(chat: String, video: Boolean) {
-        calls.call(activity.xmppConnectionService?.findConversationByUuid(chat) ?: return, video)
+        val conversation = conversationInScope(chat) ?: return
+        calls.call(conversation, video) { conversationInScope(chat) === conversation }
     }
 
-    private fun build(service: XmppConnectionService, publish: (CallsState) -> Unit) {
+    private fun conversationInScope(uuid: String): Conversation? {
+        val service = activity.xmppConnectionService ?: return null
+        val conversation = service.findConversationByUuid(uuid) ?: return null
+        return conversation.takeIf { AccountFilter.shows(AccountFilter.selected(service), it.account) }
+    }
+
+    private suspend fun build(service: XmppConnectionService, publish: (CallsState) -> Unit) {
         val only = AccountFilter.selected(service)
+        suspend fun publishForAccount(value: CallsState) = withContext(Dispatchers.Main.immediate) {
+            if (activity.xmppConnectionService !== service || accountUuid != only?.uuid ||
+                AccountFilter.selected(service)?.uuid != only?.uuid
+            ) {
+                false
+            } else {
+                publish(value)
+                cache = ScopedCalls(only?.uuid, value)
+                true
+            }
+        }
         val chats = callChats(service, only)
         // a call with a chat that was closed since has no conversation to open or call back from
         val groups = CallLog.group(query(service, only).filter { it.chat in chats })
@@ -109,12 +140,12 @@ internal class CallList(
                     avatar = previous[r.chat],
                 )
             }
-        publish(CallsState(entries, loaded = true).also { cache = it })
+        if (!publishForAccount(CallsState(entries, loaded = true))) return
         // avatars after the list: the service caches them, so usually this is quick too
         val size = (AVATAR_SIZE * activity.resources.displayMetrics.density).roundToInt()
         val avatars = entries.map { it.chat }.distinct().associateWith { service.avatarService.get(chats.getValue(it), size, false) }
         val withAvatars = CallsState(entries.map { it.copy(avatar = avatars[it.chat]) }, loaded = true)
-        if (withAvatars != source.state.value) publish(withAvatars.also { cache = it })
+        if (withAvatars != source.state.value) publishForAccount(withAvatars)
     }
 
     /**
@@ -158,6 +189,6 @@ internal class CallList(
         private const val LIMIT = 300
 
         /** The last list shown, so reopening the screen does not start empty. */
-        @Volatile private var cache: CallsState? = null
+        @Volatile private var cache: ScopedCalls? = null
     }
 }

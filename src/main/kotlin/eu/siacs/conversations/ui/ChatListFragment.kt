@@ -13,6 +13,11 @@ import am.cyberhayq.chat.ui.theme.LocalBarBlur
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.ui.Alignment
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.blur
@@ -23,6 +28,7 @@ import am.cyberhayq.chat.ui.chatlist.MainTab
 import am.cyberhayq.chat.ui.chatlist.MainTabs
 import am.cyberhayq.chat.ui.chatlist.TabDock
 import am.cyberhayq.chat.ui.chatlist.mainTabOrder
+import am.cyberhayq.chat.ui.chatlist.showArchiveUndo
 import am.cyberhayq.chat.ui.newchat.NewChatScreen
 import am.cyberhayq.chat.ui.settings.AccountHeader
 import am.cyberhayq.chat.ui.settings.ProfileTab
@@ -70,8 +76,6 @@ import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.ui.activity.SettingsActivity
 import eu.siacs.conversations.ui.interfaces.OnConversationArchived
 import eu.siacs.conversations.ui.interfaces.OnConversationSelected
-import eu.siacs.conversations.ui.interfaces.OnSearchResultsAvailable
-import eu.siacs.conversations.ui.util.ChangeWatcher
 import eu.siacs.conversations.ui.widget.AccountPickerDialog
 import eu.siacs.conversations.utils.FtsUtils
 import eu.siacs.conversations.utils.AccountUtils
@@ -83,7 +87,7 @@ import java.time.Instant
  *
  * Lives in this package because [XmppFragment.refresh] is package-private.
  */
-class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailable {
+class ChatListFragment : XmppFragment(), ChatListActions {
 
     private val viewModel by lazy { ViewModelProvider(this)[ChatListViewModel::class.java] }
 
@@ -91,12 +95,15 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     private val messageResults by lazy {
         MessageSearchResults(requireContext().applicationContext, lifecycleScope, { xmppConnectionService }, true)
     }
-    private val currentSearch = ChangeWatcher<List<String>>()
+    private data class SearchRequest(
+        val service: XmppConnectionService,
+        val terms: List<String>,
+        val accountUuid: String?,
+    )
+    private var searchTerms = emptyList<String>()
+    private var currentSearch: SearchRequest? = null
     private var canInvite by mutableStateOf(false)
-    /** Typed before the service was bound. */
-    private var pendingSearch: List<String>? = null
-    /** A chat archived from its own menu ([ChatFragment.archive]); the list archives it and offers Undo. */
-    private var archiveFromChat by mutableStateOf<String?>(null)
+    private val snackbar = SnackbarHostState()
 
     /** The chat shown by [ChatPreview]; its model only reads, it never marks anything read. */
     private val previewModel by lazy { ViewModelProvider(this)["preview", ChatViewModel::class.java].also { it.preview = true } }
@@ -132,9 +139,13 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         callList = CallList(activity, calls, lifecycleScope) { selectTab(MainTab.CHATS) }
         contactsTab = ContactsTab(activity, calls)
         savedInstanceState?.getString(STATE_TAB)?.let { tab = MainTab.valueOf(it) }
-        // delivered once this list is started again, after the chat has gone back to it
+        // The chat applies the write before closing. The tab host offers Undo as soon as it is visible.
         parentFragmentManager.setFragmentResultListener(ARCHIVE_FROM_CHAT, this) { _, result ->
-            archiveFromChat = result.getString(ARCHIVE_FROM_CHAT)
+            val uuid = result.getString(ARCHIVE_FROM_CHAT) ?: return@setFragmentResultListener
+            val context = requireContext().applicationContext
+            lifecycleScope.launch {
+                showArchiveUndo(context, snackbar, this@ChatListFragment, listOf(uuid), showHint = tab == MainTab.CHATS)
+            }
         }
     }
 
@@ -179,8 +190,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                                                 this@ChatListFragment,
                                                 messages = messages,
                                                 canInvite = canInvite,
-                                                archiveRequest = archiveFromChat,
-                                                onArchiveRequestDone = { archiveFromChat = null },
+                                                snackbar = snackbar,
                                                 onTab = ::selectTab,
                                             )
                                         MainTab.CONTACTS -> {
@@ -196,6 +206,12 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                                             ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop)
                                         }
                                     }
+                                }
+                                if (docked && tab != MainTab.CHATS) {
+                                    SnackbarHost(
+                                        snackbar,
+                                        Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(bottom = 72.dp),
+                                    )
                                 }
                             }
                             AccountSwitcher(
@@ -232,13 +248,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     override fun onCreateAnimator(transit: Int, enter: Boolean, nextAnim: Int): Animator? =
         slideAnimator(this, nextAnim, R.animator.tatrak_list_pop_enter, R.animator.tatrak_list_exit, -0.25f)
 
-    override fun onBackendConnected() {
-        refresh()
-        pendingSearch?.let { term ->
-            pendingSearch = null
-            xmppConnectionService?.search(term, null, this)
-        }
-    }
+    override fun onBackendConnected() = refresh()
 
     // the activity only refreshes visible fragments; coming back from the chat the snapshot is stale
     // a chat opened another way (notification, share) replaces the list: its card must not come back with the view
@@ -252,13 +262,18 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         super.onStart()
         refresh()
         Updater.checkIfDue(requireContext())
-        if (tab == MainTab.CONTACTS) contactsTab.askForContactsPermissions()
+        requestContactsPermissionIfVisible()
+    }
+
+    fun requestContactsPermissionIfVisible() {
+        if (tab == MainTab.CONTACTS && isAdded) contactsTab.askForContactsPermissions()
     }
 
     override fun refresh() {
         val service = xmppConnectionService ?: return
         // ConversationsOverviewFragment.onCreateMenu's condition for "Invite to server"
         canInvite = AccountPickerDialog.EasyInvite(requireXmppActivity()).hasAnyAccounts()
+        refreshMessageSearch(service)
         unarchiveOnNewMessage(service)
         viewModel.invalidate(service)
         // a chat closed meanwhile (e.g. a bookmark changed on another client) closes its preview, as ChatFragment.refresh does
@@ -279,6 +294,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     /** A dock tap: another tab slides in ([MainTabs]); the current one scrolls to the top. */
     private fun selectTab(selected: MainTab) {
         if (selected == tab) {
+            requestContactsPermissionIfVisible()
             scrollToTop++
             return
         }
@@ -290,6 +306,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     /** The account switcher's choice: every tab shows that account (null: all) from now on, also after a restart. */
     private fun selectAccount(uuid: String?) {
         AccountFilter.select(requireContext(), uuid)
+        (activity as? ConversationsActivity)?.reconcileSecondaryAccount()
         refresh()
         // the tabs not shown come in with it
         contactsTab.filter()
@@ -360,29 +377,33 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     // --- message search ------------------------------------------------------------------
 
     override fun searchMessages(text: String) {
-        val term = FtsUtils.parse(text)
-        if (!currentSearch.watch(term)) return
-        if (term.isEmpty()) {
-            pendingSearch = null
+        val terms = FtsUtils.parse(text)
+        if (terms == searchTerms) return
+        searchTerms = terms
+        if (terms.isEmpty()) {
+            currentSearch = null
             MessageSearchTask.cancelRunningTasks()
             messageResults.clear()
-            return
-        }
-        messageResults.pending()
-        val service = xmppConnectionService
-        if (service == null) {
-            pendingSearch = term
         } else {
-            service.search(term, null, this)
+            xmppConnectionService?.let(::refreshMessageSearch)
         }
     }
 
-    /** Called on the search thread. */
-    override fun onSearchResultsAvailable(term: List<String>, messages: List<Message>) {
-        val copy = ArrayList(messages)
-        activity?.runOnUiThread {
-            // an answer for a text the user has typed past (or closed) is dropped
-            if (term == currentSearch.get() && isAdded) messageResults.publish(term, copy)
+    private fun refreshMessageSearch(service: XmppConnectionService) {
+        if (searchTerms.isEmpty()) return
+        val request = SearchRequest(service, searchTerms, AccountFilter.selected(service)?.uuid)
+        if (request == currentSearch) return
+        currentSearch = request
+        messageResults.clear()
+        MessageSearchTask.search(service, request.terms, null, request.accountUuid) { terms, messages ->
+            val copy = ArrayList(messages)
+            activity?.runOnUiThread {
+                if (isAdded && currentSearch === request && xmppConnectionService === service &&
+                    AccountFilter.selected(service)?.uuid == request.accountUuid
+                ) {
+                    messageResults.publish(terms, copy)
+                }
+            }
         }
     }
 
@@ -433,8 +454,10 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
 
     override fun openCalls() = startActivity(Intent(requireContext(), CallsActivity::class.java))
 
-    override fun setArchived(uuids: List<String>, archived: Boolean) =
-        update(uuids) { it.tatrakArchivedAt = if (archived) System.currentTimeMillis() else null }
+    override fun setArchived(uuids: List<String>, archived: Boolean) {
+        val service = xmppConnectionService ?: return
+        updateArchive(service, conversations(uuids), archived)
+    }
 
     override fun setPinned(uuids: List<String>, pinned: Boolean) =
         update(uuids) { it.isPinnedOnTop = pinned }
@@ -478,6 +501,16 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
 }
 
 private const val STATE_TAB = "tatrak_main_tab"
+
+/** Local archive shared by the chat's menu and the list's selection actions. */
+internal fun updateArchive(service: XmppConnectionService, conversations: List<Conversation>, archived: Boolean) {
+    val time = if (archived) System.currentTimeMillis() else null
+    for (conversation in conversations) {
+        conversation.tatrakArchivedAt = time
+        service.updateConversation(conversation)
+    }
+    service.updateConversationUi()
+}
 
 /** Walks back from the newest message, so a reply sent after it doesn't hide the new message. */
 internal fun hasReceivedSince(messages: List<Message>, since: Long): Boolean {

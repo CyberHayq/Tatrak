@@ -77,7 +77,10 @@ public class EnterJidDialog extends DialogFragment implements OnBackendConnected
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         super.onActivityCreated(savedInstanceState);
-        setRetainInstance(true);
+        // Tatrak: Add contact restores its handler from arguments and the current host.
+        if (!ContactFlows.isCreateContactDialog(this)) {
+            setRetainInstance(true);
+        }
     }
 
     @Override
@@ -93,6 +96,10 @@ public class EnterJidDialog extends DialogFragment implements OnBackendConnected
     @NonNull
     @Override
     public Dialog onCreateDialog(final Bundle savedInstanceState) {
+        // Tatrak: bind the shared Add contact flow to the activity creating this dialog.
+        if (requireActivity() instanceof XmppActivity xmppActivity) {
+            ContactFlows.attachCreateContactHandler(this, xmppActivity);
+        }
         final var arguments = getArguments();
         final MaterialAlertDialogBuilder builder =
                 new MaterialAlertDialogBuilder(requireActivity());

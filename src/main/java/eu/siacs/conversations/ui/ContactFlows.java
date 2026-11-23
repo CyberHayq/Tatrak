@@ -6,6 +6,7 @@ import android.annotation.SuppressLint;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.os.Build;
+import android.os.Bundle;
 import android.preference.PreferenceManager;
 import android.text.Html;
 import android.text.method.LinkMovementMethod;
@@ -44,6 +45,9 @@ final class ContactFlows {
     static final String PREF_KEY_CONTACT_INTEGRATION_CONSENT = "contact_list_integration_consent";
 
     static final int REQUEST_SYNC_CONTACTS = 0x28cf;
+
+    private static final String CREATE_CONTACT = "tatrak_create_contact";
+    private static final String INVITE_URI = "tatrak_contact_invite_uri";
 
     private ContactFlows() {}
 
@@ -115,7 +119,9 @@ final class ContactFlows {
         if (prev != null) {
             ft.remove(prev);
         }
-        ft.addToBackStack(null);
+        if (!(activity instanceof ConversationsActivity)) {
+            ft.addToBackStack(null);
+        }
         EnterJidDialog dialog =
                 EnterJidDialog.newInstance(
                         activatedAccounts,
@@ -126,6 +132,24 @@ final class ContactFlows {
                         invite == null || !invite.uri().hasOmemoFingerprints(),
                         true);
 
+        final Bundle arguments = dialog.requireArguments();
+        arguments.putBoolean(CREATE_CONTACT, true);
+        if (invite != null) {
+            arguments.putString(INVITE_URI, invite.uri().getRaw());
+        }
+        dialog.show(ft, XmppActivity.FRAGMENT_TAG_DIALOG);
+    }
+
+    static boolean isCreateContactDialog(final EnterJidDialog dialog) {
+        return dialog.requireArguments().getBoolean(CREATE_CONTACT);
+    }
+
+    static void attachCreateContactHandler(final EnterJidDialog dialog, final XmppActivity activity) {
+        if (!isCreateContactDialog(dialog)) {
+            return;
+        }
+        final String uri = dialog.requireArguments().getString(INVITE_URI);
+        final MiniUri.Xmpp invite = uri == null ? null : new MiniUri.Xmpp(uri);
         dialog.setOnEnterJidDialogPositiveListener(
                 (accountJid, contactJid) -> {
                     if (!activity.xmppConnectionServiceBound) {
@@ -139,8 +163,8 @@ final class ContactFlows {
                     }
 
                     final Contact contact = account.getRoster().getContact(contactJid);
-                    if (invite != null && invite.uri().getName() != null) {
-                        contact.setServerName(invite.uri().getName());
+                    if (invite != null && invite.getName() != null) {
+                        contact.setServerName(invite.getName());
                     }
                     if (contact.isSelf()) {
                         switchToConversation(activity, contact);
@@ -152,19 +176,17 @@ final class ContactFlows {
                         final String preAuth =
                                 invite == null
                                         ? null
-                                        : invite.uri()
-                                                .getParameter(MiniUri.Xmpp.PARAMETER_PRE_AUTH);
+                                        : invite.getParameter(MiniUri.Xmpp.PARAMETER_PRE_AUTH);
                         activity.xmppConnectionService.createContact(contact, preAuth);
-                        if (invite != null && invite.uri().hasOmemoFingerprints()) {
+                        if (invite != null && invite.hasOmemoFingerprints()) {
                             activity.xmppConnectionService.verifyFingerprints(
-                                    contact, invite.uri().getOmemoFingerprints());
+                                    contact, invite.getOmemoFingerprints());
                         }
                         switchToConversationDoNotAppend(
-                                activity, contact, invite == null ? null : invite.uri().getBody());
+                                activity, contact, invite == null ? null : invite.getBody());
                         return true;
                     }
                 });
-        dialog.show(ft, XmppActivity.FRAGMENT_TAG_DIALOG);
     }
 
     static void switchToConversation(final XmppActivity activity, Contact contact) {
@@ -194,7 +216,9 @@ final class ContactFlows {
         if (requestedContactsPermission.compareAndSet(false, true)) {
             final ImmutableList.Builder<String> permissionBuilder = new ImmutableList.Builder<>();
             permissionBuilder.add(Manifest.permission.READ_CONTACTS);
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                    && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
+                            != PackageManager.PERMISSION_GRANTED) {
                 permissionBuilder.add(Manifest.permission.POST_NOTIFICATIONS);
             }
             final String[] permission = permissionBuilder.build().toArray(new String[0]);
@@ -246,7 +270,8 @@ final class ContactFlows {
                                         .apply();
                             }
                             if (requestPermission.compareAndSet(false, true)) {
-                                activity.requestPermissions(permission, REQUEST_SYNC_CONTACTS);
+                                requestContactsPermissions(
+                                        activity, permission, requestedContactsPermission);
                             }
                         });
                 if (requiresConsent) {
@@ -264,7 +289,8 @@ final class ContactFlows {
                     builder.setOnDismissListener(
                             dialog -> {
                                 if (requestPermission.compareAndSet(false, true)) {
-                                    activity.requestPermissions(permission, REQUEST_SYNC_CONTACTS);
+                                    requestContactsPermissions(
+                                            activity, permission, requestedContactsPermission);
                                 }
                             });
                 }
@@ -280,10 +306,21 @@ final class ContactFlows {
                         });
                 dialog.show();
             } else {
-                activity.requestPermissions(permission, REQUEST_SYNC_CONTACTS);
+                requestContactsPermissions(activity, permission, requestedContactsPermission);
             }
         }
         return true;
+    }
+
+    private static void requestContactsPermissions(
+            final XmppActivity activity, final String[] permissions, final AtomicBoolean requested) {
+        if (activity instanceof ConversationsActivity host) {
+            if (!host.requestMainPermissions(permissions, REQUEST_SYNC_CONTACTS)) {
+                requested.set(false);
+            }
+        } else {
+            activity.requestPermissions(permissions, REQUEST_SYNC_CONTACTS);
+        }
     }
 
     /**

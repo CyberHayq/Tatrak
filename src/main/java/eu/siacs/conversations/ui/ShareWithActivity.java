@@ -194,6 +194,12 @@ public class ShareWithActivity extends XmppActivity
     void startNewChat() {
         final Intent intent = new Intent(getApplicationContext(), ChooseContactActivity.class);
         intent.putExtra("direct_search", true);
+        // Tatrak: continue the share picker's account scope in the contact chooser.
+        final var only = xmppConnectionService == null ? null
+                : am.cyberhayq.chat.ui.accounts.AccountFilter.selected(xmppConnectionService);
+        if (only != null) {
+            intent.putExtra(ChooseContactActivity.EXTRA_SHARE_ACCOUNT, only.getJid().asBareJid().toString());
+        }
         startActivityForResult(intent, REQUEST_START_NEW_CONVERSATION);
     }
 

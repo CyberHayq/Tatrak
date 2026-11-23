@@ -11,6 +11,7 @@ import android.os.Environment;
 import android.os.SystemClock;
 import android.util.Base64;
 import android.util.Log;
+import android.util.Pair;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Strings;
 import com.google.common.collect.Collections2;
@@ -1490,7 +1491,20 @@ public class DatabaseBackend extends SQLiteOpenHelper {
     }
 
     public Cursor getMessageSearchCursor(final List<String> term, final String uuid) {
-        final SQLiteDatabase db = this.getReadableDatabase();
+        return getMessageSearchCursor(term, uuid, null);
+    }
+
+    // Tatrak: limit global searches within the selected account.
+    public Cursor getMessageSearchCursor(
+            final List<String> term, final String uuid, final String accountUuid) {
+        final var query = messageSearchQuery(term, uuid, accountUuid);
+        Log.d(Config.LOGTAG, "search term: " + query.second[0]);
+        return this.getReadableDatabase().rawQuery(query.first, query.second);
+    }
+
+    // Tatrak: exercise the same SQL on Robolectric's platform SQLite.
+    static Pair<String, String[]> messageSearchQuery(
+            final List<String> term, final String uuid, final String accountUuid) {
         final StringBuilder SQL = new StringBuilder();
         final String[] selectionArgs;
         SQL.append(
@@ -1540,15 +1554,17 @@ public class DatabaseBackend extends SQLiteOpenHelper {
                         + ","
                         + Message.TYPE_PRIVATE
                         + ") AND messages_index.body MATCH ?");
-        if (uuid == null) {
-            selectionArgs = new String[] {FtsUtils.toMatchString(term)};
-        } else {
+        if (uuid != null) {
             selectionArgs = new String[] {FtsUtils.toMatchString(term), uuid};
             SQL.append(" AND " + Conversation.TABLENAME + '.' + Conversation.UUID + "=?");
+        } else if (accountUuid != null) {
+            selectionArgs = new String[] {FtsUtils.toMatchString(term), accountUuid};
+            SQL.append(" AND " + Conversation.TABLENAME + '.' + Conversation.ACCOUNT + "=?");
+        } else {
+            selectionArgs = new String[] {FtsUtils.toMatchString(term)};
         }
         SQL.append(" ORDER BY " + Message.TIME_SENT + " DESC limit " + Config.MAX_SEARCH_RESULTS);
-        Log.d(Config.LOGTAG, "search term: " + FtsUtils.toMatchString(term));
-        return db.rawQuery(SQL.toString(), selectionArgs);
+        return Pair.create(SQL.toString(), selectionArgs);
     }
 
     public List<String> markFileAsDeleted(final File file) {

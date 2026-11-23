@@ -42,6 +42,8 @@ public class ChooseContactActivity extends AbstractSearchableListItemActivity
     public static final String EXTRA_SELECT_MULTIPLE = "extra_select_multiple";
     public static final String EXTRA_SHOW_ENTER_JID = "extra_show_enter_jid";
     public static final String EXTRA_CONVERSATION = "extra_conversation";
+    // Tatrak: the share picker captures its account for this chooser request only.
+    static final String EXTRA_SHARE_ACCOUNT = "tatrak_share_account";
     private static final String EXTRA_FILTERED_CONTACTS = "extra_filtered_contacts";
     private final ArrayList<String> mActivatedAccounts = new ArrayList<>();
     private final Set<String> selected = new HashSet<>();
@@ -268,7 +270,7 @@ public class ChooseContactActivity extends AbstractSearchableListItemActivity
             return;
         }
         for (final Account account : xmppConnectionService.getAccounts()) {
-            if (account.isEnabled()) {
+            if (isEligibleAccount(account)) {
                 for (final Contact contact : account.getRoster().getContacts()) {
                     if (contact.showInContactList()
                             && !filterContacts.contains(contact.getAddress().asBareJid().toString())
@@ -280,6 +282,13 @@ public class ChooseContactActivity extends AbstractSearchableListItemActivity
         }
         Collections.sort(getListItems());
         getListItemAdapter().notifyDataSetChanged();
+    }
+
+    // Tatrak: keep the request's scope even if app-wide preferences change in the meantime.
+    private boolean isEligibleAccount(final Account account) {
+        final String shareAccount = getIntent().getStringExtra(EXTRA_SHARE_ACCOUNT);
+        return account.isEnabled()
+                && (shareAccount == null || shareAccount.equals(account.getJid().asBareJid().toString()));
     }
 
     private String[] getSelectedContactJids() {
@@ -329,7 +338,7 @@ public class ChooseContactActivity extends AbstractSearchableListItemActivity
         filterContacts();
         this.mActivatedAccounts.clear();
         for (final Account account : xmppConnectionService.getAccounts()) {
-            if (account.isEnabled()) {
+            if (isEligibleAccount(account)) {
                 this.mActivatedAccounts.add(account.getJid().asBareJid().toString());
             }
         }

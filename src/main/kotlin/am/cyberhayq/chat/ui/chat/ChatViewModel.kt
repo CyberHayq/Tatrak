@@ -48,6 +48,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
             fun publishIfCurrent(state: ChatState) {
                 synchronized(switchLock) { if (binding.generation == generation) publish(state) }
             }
+            val replyUuid = reply?.uuid
             fun params(cachedOnly: Boolean) =
                 SnapshotParams(
                     palette = palette,
@@ -58,6 +59,7 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     showLastSeen = binding.showLastSeen,
                     mentions = binding.mentions,
                     preview = preview,
+                    replyUuid = replyUuid,
                 )
             val fast =
                 ChatSnapshot.build(application, service, binding.conversation, params(true), textCache)

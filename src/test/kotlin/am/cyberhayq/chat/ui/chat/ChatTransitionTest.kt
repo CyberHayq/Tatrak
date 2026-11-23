@@ -19,6 +19,8 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertSame
+import org.junit.After
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -27,6 +29,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
+import org.robolectric.android.controller.ActivityController
 import org.robolectric.shadows.ShadowChoreographer
 
 /**
@@ -53,7 +56,15 @@ class ChatTransitionTest {
             slideAnimator(this, nextAnim, R.animator.tatrak_chat_enter, R.animator.tatrak_chat_pop_exit, 1f)
     }
 
-    private lateinit var activity: FragmentActivity
+    class Host : FragmentActivity() {
+        override fun onCreate(savedInstanceState: Bundle?) {
+            super.onCreate(savedInstanceState)
+            setContentView(FragmentContainerView(this).apply { id = CONTAINER_ID })
+        }
+    }
+
+    private lateinit var controller: ActivityController<Host>
+    private lateinit var activity: Host
     private val list = ListPage()
     private val chat = ChatPage()
     private val fm get() = activity.supportFragmentManager
@@ -69,10 +80,9 @@ class ChatTransitionTest {
         // frames only on the test clock, 16 ms apart; otherwise every animator ends on its first frame
         ShadowChoreographer.setPaused(true)
         ShadowChoreographer.setFrameDelay(Duration.ofMillis(16))
-        activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
-        val container = FragmentContainerView(activity).apply { id = View.generateViewId() }
-        activity.setContentView(container)
-        fm.beginTransaction().add(container.id, list).commitNow()
+        controller = Robolectric.buildActivity(Host::class.java).setup()
+        activity = controller.get()
+        fm.beginTransaction().add(CONTAINER_ID, list).commitNow()
         idle(100)
         fm.beginTransaction()
             .setReorderingAllowed(true)
@@ -82,10 +92,60 @@ class ChatTransitionTest {
                 R.animator.tatrak_list_pop_enter,
                 R.animator.tatrak_chat_pop_exit,
             )
-            .replace(container.id, chat)
+            .replace(CONTAINER_ID, chat)
             .addToBackStack(null)
             .commit()
         fm.executePendingTransactions()
+    }
+
+    @After
+    fun destroyHost() {
+        controller.pause().stop().destroy()
+    }
+
+    @Test
+    fun cancellationInTheSameLoopTurnClearsThePendingPop() {
+        val original = activity.window.callback
+        val width = startSwipe(advanceClock = false)
+        activity.window.callback.dispatchTouchEvent(event(MotionEvent.ACTION_CANCEL, width * 0.1f))
+        assertTrue(SwipeBackLayout.isDragging(activity.window))
+        idle(1000)
+        assertSame(original, activity.window.callback)
+        assertFalse(SwipeBackLayout.isDragging(activity.window))
+        assertTrue(chat.isAdded)
+        assertEquals(1, fm.backStackEntryCount)
+        assertEquals(0f, chatView.translationX, 0f)
+        activity.onBackPressedDispatcher.onBackPressed()
+        idle(300)
+        assertEquals(0, fm.backStackEntryCount)
+    }
+
+    @Test
+    fun recreatingHostDuringSwipeReleasesTheOldWindow() {
+        val oldWindow = activity.window
+        val original = oldWindow.callback
+        startSwipe()
+        val state = Bundle()
+        controller.pause().saveInstanceState(state).stop().destroy()
+        controller = Robolectric.buildActivity(Host::class.java).create(state).start().resume().visible()
+        activity = controller.get()
+        idle(400)
+        assertSame(original, oldWindow.callback)
+        assertFalse(SwipeBackLayout.isDragging(oldWindow))
+        assertFalse(SwipeBackLayout.isDragging(activity.window))
+        assertTrue(fm.findFragmentById(CONTAINER_ID) is ChatPage)
+        assertEquals(1, fm.backStackEntryCount)
+        val newChat = ChatPage()
+        fm.beginTransaction()
+            .setReorderingAllowed(true)
+            .setCustomAnimations(R.animator.tatrak_chat_enter, R.animator.tatrak_list_exit)
+            .replace(CONTAINER_ID, newChat)
+            .addToBackStack(null)
+            .commit()
+        fm.executePendingTransactions()
+        idle(64)
+        val view = newChat.requireView()
+        assertMidPush(view.alpha, view.translationX)
     }
 
     @Test
@@ -133,7 +193,7 @@ class ChatTransitionTest {
         drag(width * 0.2f)
         release(width * 0.2f)
         idle(1000)
-        assertFalse(SwipeBackLayout.dragging)
+        assertFalse(SwipeBackLayout.isDragging(activity.window))
         assertTrue(chat.isAdded)
         assertEquals(1, fm.backStackEntryCount)
         assertEquals(0f, chatView.translationX, 0f)
@@ -145,23 +205,23 @@ class ChatTransitionTest {
         drag(width * 0.6f)
         release(width * 0.6f)
         idle(1000)
-        assertFalse(SwipeBackLayout.dragging)
+        assertFalse(SwipeBackLayout.isDragging(activity.window))
         assertEquals(0, fm.backStackEntryCount)
         assertFalse(chat.isAdded)
         assertEquals(0f, list.requireView().translationX, 0f)
     }
 
     /** Starts a swipe back on the opened chat; returns the chat's width. */
-    private fun startSwipe(): Float {
+    private fun startSwipe(advanceClock: Boolean = true): Float {
         idle(500)
         val layout = chatView as SwipeBackLayout
         val width = layout.width.toFloat()
         assertTrue(width > 0)
         layout.onInterceptTouchEvent(event(MotionEvent.ACTION_DOWN, 0f))
         assertTrue(layout.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, width * 0.1f)))
-        assertTrue(SwipeBackLayout.dragging)
+        assertTrue(SwipeBackLayout.isDragging(activity.window))
         // the FragmentManager prepares the pop on the next message, as the next MOVE would come
-        idle(32)
+        if (advanceClock) idle(32)
         return width
     }
 
@@ -183,6 +243,10 @@ class ChatTransitionTest {
     private fun event(action: Int, dx: Float): MotionEvent {
         time += 500
         return MotionEvent.obtain(0, time, action, 10f + dx, 200f, 0)
+    }
+
+    private companion object {
+        val CONTAINER_ID = View.generateViewId()
     }
 
     /** Telegram's push a few frames in: partly shown, and 48 dp times the rest still to go. */

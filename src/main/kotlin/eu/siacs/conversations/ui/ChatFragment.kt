@@ -30,7 +30,6 @@ import am.cyberhayq.chat.ui.chat.currentTextPalette
 import am.cyberhayq.chat.ui.chat.appendToDraft
 import am.cyberhayq.chat.ui.chat.insertLinkAtCursor
 import am.cyberhayq.chat.ui.chat.replyId
-import am.cyberhayq.chat.ui.chat.hasReplyThumbnail
 import am.cyberhayq.chat.ui.chat.replyQuote
 import am.cyberhayq.chat.ui.chat.SelectedText
 import am.cyberhayq.chat.ui.chat.selectionCopyText
@@ -375,7 +374,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                                 state = state,
                                 input = viewModel.input,
                                 onInputChange = ::onInputChange,
-                                reply = viewModel.reply,
+                                reply = viewModel.reply?.let { it.copy(thumbnail = it.uuid == state.replyThumbnailUuid) },
                                 actions = this@ChatFragment,
                                 voice = voicePlayer.state,
                                 recording = voiceRecorder.state,
@@ -1085,7 +1084,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         if (quote.isEmpty()) return
         if (c.correctingMessage != null) cancelEdit()
         val name = UIHelper.getMessageDisplayName(message)
-        viewModel.reply = ReplyPreview(uuid, name, quote, UIHelper.getColorForName(name), hasReplyThumbnail(message))
+        viewModel.reply = ReplyPreview(uuid, name, quote, UIHelper.getColorForName(name), thumbnail = false)
+        xmppConnectionService?.let(viewModel::invalidate)
     }
 
     override fun cancelReply() {
@@ -1348,10 +1348,12 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     /**
      * The chat list's archive (local, with Undo), not ConversationFragment's action_archive, which
-     * closes the chat and leaves a group: the list archives it and offers Undo; back to it, as Telegram.
+     * closes the chat and leaves a group. Apply the local archive before returning to the tab host for Undo.
      */
     override fun archive() {
         val c = conversation ?: return
+        val service = xmppConnectionService ?: return
+        updateArchive(service, listOf(c), archived = true)
         parentFragmentManager.setFragmentResult(ChatListFragment.ARCHIVE_FROM_CHAT, bundleOf(ChatListFragment.ARCHIVE_FROM_CHAT to c.uuid))
         (activity as? ConversationsActivity)?.onConversationArchived(c)
     }
@@ -1424,7 +1426,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         if (message.status > Message.STATUS_RECEIVED || contact?.isSelf == true || c.mode != Conversation.MODE_MULTI) return emptyList()
         val user = c.mucOptions.getUserOrStub(message)
         val activity = requireXmppActivity()
-        return participantMenu(activity, user) { MucDetailsContextMenuHelper.onContextItemSelected(it, user, activity, fingerprint) }
+        return participantMenu(activity, user) { item, target ->
+            MucDetailsContextMenuHelper.onContextItemSelected(item, target, activity, fingerprint)
+        }
     }
 
     /** ConversationFragment.highlightInConference. */
@@ -2273,7 +2277,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 /**
  * Animators between list and chat for [enterAnim] / [exitAnim]; other transitions keep their
  * resource. A tap opens or closes with Telegram's push ([pushAnimator]); a swipe back
- * ([SwipeBackLayout.dragging]) slides the chat a full width and the list from `fraction` of it
+ * ([SwipeBackLayout.isDragging]) slides the chat a full width and the list from `fraction` of it
  * ([dragAnimator]). Width is only known at run time, which the XML animators can't express.
  */
 internal fun slideAnimator(fragment: Fragment, nextAnim: Int, enterAnim: Int, exitAnim: Int, fraction: Float): Animator? {
@@ -2284,7 +2288,8 @@ internal fun slideAnimator(fragment: Fragment, nextAnim: Int, enterAnim: Int, ex
             exitAnim -> false
             else -> return null
         }
-    if (!SwipeBackLayout.dragging) return pushAnimator(view, enter, moves = fraction > 0)
+    val window = fragment.activity?.window
+    if (window == null || !SwipeBackLayout.isDragging(window)) return pushAnimator(view, enter, moves = fraction > 0)
     val width = view.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
     return if (enter) dragAnimator(fragment, view, width * fraction, 0f) else dragAnimator(fragment, view, 0f, width * fraction)
 }

@@ -829,31 +829,6 @@ class ChatListScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
     }
 
-    /** "Archive chat" in a chat's menu: the list archives it like its own archive button and offers Undo. */
-    @Test
-    fun archiveFromChatMenuOffersUndo() {
-        val calls = mutableListOf<Pair<List<String>, Boolean>>()
-        var done = 0
-        val actions =
-            object : ChatListActions by NoListActions {
-                override fun setArchived(uuids: List<String>, archived: Boolean) {
-                    calls += uuids to archived
-                }
-            }
-        compose.setContent {
-            TatrakTheme(darkTheme = false) {
-                ChatListScreen(sampleState(), actions, archiveRequest = "chat-3", onArchiveRequestDone = { done++ })
-            }
-        }
-        compose.waitForIdle()
-        assertEquals(listOf(listOf("chat-3") to true), calls)
-        assertEquals(1, done)
-        compose.onNodeWithText("Chat archived", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("Undo").performClick()
-        compose.waitForIdle()
-        assertEquals(listOf("chat-3") to false, calls.last())
-    }
-
     /** "Delete chat" names the chat and says what happens; a group's leaves it; Cancel deletes nothing. */
     @Test
     fun deleteDialogSaysWhatHappens() {

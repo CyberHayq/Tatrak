@@ -418,6 +418,8 @@ data class ChatState(
     val wallpaper: String? = null,
     /** Received messages that mention our nick and were unread here, oldest first ([MentionTracker]). */
     val mentions: List<String> = emptyList(),
+    /** The open composer's reply target if its thumbnail is available in this snapshot. */
+    val replyThumbnailUuid: String? = null,
 )
 
 /** Inputs of [ChatSnapshot.build] that come from the UI rather than the service. */
@@ -432,6 +434,7 @@ data class SnapshotParams(
     val mentions: MentionTracker,
     /** The chat-list preview: nothing is asked of the contact or their server (entity time, last activity). */
     val preview: Boolean = false,
+    val replyUuid: String? = null,
 )
 
 /** Formatted bodies keyed by message uuid, body and colors; formatting is the costly part. */
@@ -497,6 +500,9 @@ object ChatSnapshot {
             composer = composer(context, conversation),
             wallpaper = conversation.tatrakWallpaper,
             mentions = builder.mentions(messages),
+            replyThumbnailUuid = params.replyUuid?.takeIf { uuid ->
+                messages.firstOrNull { it.uuid == uuid }?.let(::hasReplyThumbnail) == true
+            },
         )
     }
 

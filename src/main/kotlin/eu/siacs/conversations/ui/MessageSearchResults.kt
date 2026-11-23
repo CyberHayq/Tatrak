@@ -38,12 +38,15 @@ internal class MessageSearchResults(
     private var messages: Map<String, Message> = emptyMap()
     private var avatars: Job? = null
 
-    fun message(key: String): Message? = messages[key]
+    fun message(key: String): Message? {
+        val message = messages[key] ?: return null
+        val only = if (global) service()?.let(AccountFilter::selected) else null
+        return message.takeIf { AccountFilter.shows(only, it.conversation.account) }
+    }
 
     /** Results for [terms], oldest first as the service delivers them; shown newest first. */
     fun publish(terms: List<String>, results: List<Message>) {
         val byKey = LinkedHashMap<String, Message>()
-        // the search of all chats shows only the filtered account's; shortcut: the service's result limit applies before
         val only = if (global) service()?.let(AccountFilter::selected) else null
         val entries =
             results.asReversed().filter { AccountFilter.shows(only, it.conversation.account) }.map { message ->

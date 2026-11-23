@@ -110,7 +110,9 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
     /** The classic context menu of the hidden list, as MucUsersActivity runs it. */
     override fun menu(key: String): List<MenuEntry> {
         val user = users[key] ?: return emptyList()
-        return participantMenu(activity, user) { MucDetailsContextMenuHelper.onContextItemSelected(it, user, activity) }
+        return participantMenu(activity, user) { item, target ->
+            MucDetailsContextMenuHelper.onContextItemSelected(item, target, activity)
+        }
     }
 
     override fun openPgpKey(key: String) {
@@ -136,16 +138,34 @@ internal class MucUsersCompose(private val activity: MucUsersActivity) : Partici
  * MucDetailsContextMenuHelper, its visible items ("Manage permissions" submenu flattened) as Compose
  * entries that run [onSelected]. The participants list's and the chat avatar's menu.
  */
-internal fun participantMenu(activity: XmppActivity, user: MucOptions.User, onSelected: (MenuItem) -> Unit): List<MenuEntry> {
-    val menu = PopupMenu(activity, activity.window.decorView).menu
-    activity.menuInflater.inflate(R.menu.muc_details_context, menu)
-    MucDetailsContextMenuHelper.configureMucDetailsContextMenu(activity, menu, user)
-    return visible(menu).map { item ->
+internal fun participantMenu(
+    activity: XmppActivity,
+    user: MucOptions.User,
+    onSelected: (MenuItem, MucOptions.User) -> Unit,
+): List<MenuEntry> =
+    visible(configuredMenu(activity, user)).map { item ->
         MenuEntry(item.title.toString(), enabled = item.isEnabled) {
-            if (item.itemId == R.id.remove_membership) confirmRemoveMembership(activity, user) { onSelected(item) } else onSelected(item)
+            if (item.itemId == R.id.remove_membership) {
+                confirmRemoveMembership(activity, user) {
+                    val realJid = user.realJid ?: return@confirmRemoveMembership
+                    val current = user.mucOptions.getUser(MucOptions.IdentifiableUser.realAddress(realJid))
+                        ?: return@confirmRemoveMembership
+                    val remove = visible(configuredMenu(activity, current))
+                        .firstOrNull { it.itemId == R.id.remove_membership && it.isEnabled }
+                        ?: return@confirmRemoveMembership
+                    onSelected(remove, current)
+                }
+            } else {
+                onSelected(item, user)
+            }
         }
     }
-}
+
+private fun configuredMenu(activity: XmppActivity, user: MucOptions.User): Menu =
+    PopupMenu(activity, activity.window.decorView).menu.also { menu ->
+        activity.menuInflater.inflate(R.menu.muc_details_context, menu)
+        MucDetailsContextMenuHelper.configureMucDetailsContextMenu(activity, menu, user)
+    }
 
 private fun visible(menu: Menu): List<MenuItem> =
     (0 until menu.size()).map(menu::getItem).filter { it.isVisible }.flatMap {

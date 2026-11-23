@@ -6,6 +6,8 @@ import android.animation.ValueAnimator
 import android.annotation.SuppressLint
 import android.graphics.Rect
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
@@ -27,6 +29,9 @@ import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.fragment.app.FragmentActivity
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
 import kotlin.math.abs
 
 /**
@@ -40,7 +45,7 @@ import kotlin.math.abs
  * the list with the finger itself; [dragAnimator] then carries on from where they are.
  *
  * Only this drag uses the full-width slide; a tap on back gets Telegram's short push
- * ([pushAnimator]), so the fragments' animators ask [dragging] which one to make.
+ * ([pushAnimator]), so the fragments' animators ask [isDragging] for their window.
  *
  * The system's edge back (API 34+) is taken in front of the dispatcher and passed on only on
  * release: the system shows its arrow, the chat stays put, then the normal pop plays (as in
@@ -69,6 +74,35 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
     private var swipeWidth = 0
     private var tracking = false
     private var velocity: VelocityTracker? = null
+    private val handler = Handler(Looper.getMainLooper())
+    private var originalCallback: Window.Callback? = null
+    private var gestureCallback: Window.Callback? = null
+    private var terminalEvent = false
+    private var pendingCommit = false
+    private var settle: ValueAnimator? = null
+    private val cancelPreparedPop = Runnable { complete(cancelled = true) }
+    private val commitPreparedPop = Runnable { complete(cancelled = false) }
+    private val repairTranslation = Runnable {
+        if (isAttachedToWindow && translationX != 0f) {
+            animate().translationX(0f).setDuration(160).setInterpolator(DecelerateInterpolator(1.5f)).start()
+        }
+        stopObserving()
+    }
+    private val teardown =
+        object : DefaultLifecycleObserver {
+            override fun onPause(owner: LifecycleOwner) {
+                if (activeSwipes[activity.window] !== this@SwipeBackLayout) return
+                // The fragment state is saved after the activity pauses. Resolve the pending pop
+                // first so a swipe without a terminal event leaves the chat on the saved stack.
+                val manager = (activity as? FragmentActivity)?.supportFragmentManager
+                if (manager?.isStateSaved == false) manager.executePendingTransactions()
+                complete(cancelled = !pendingCommit)
+            }
+
+            override fun onDestroy(owner: LifecycleOwner) {
+                cleanup()
+            }
+        }
 
     /** Below API 34 the drag is drawn here, see the class comment. */
     private val manual = Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE
@@ -98,6 +132,8 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
 
     override fun onDetachedFromWindow() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) activity.onBackInvokedDispatcher.unregisterOnBackInvokedCallback(systemBack!!)
+        // Preparing a FragmentManager pop temporarily detaches the chat, even if it will return.
+        if (activeSwipes[activity.window] !== this) releaseTracking()
         super.onDetachedFromWindow()
     }
 
@@ -105,6 +141,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean = alpha != 0f && super.dispatchTouchEvent(ev)
 
     override fun onInterceptTouchEvent(ev: MotionEvent): Boolean {
+        if (isDragging(activity.window)) return false
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 downX = ev.rawX
@@ -133,7 +170,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
                 if (abs(dy) > startSlop || dx < -startSlop) tracking = false
             }
             MotionEvent.ACTION_UP,
-            MotionEvent.ACTION_CANCEL -> tracking = false
+            MotionEvent.ACTION_CANCEL -> releaseTracking()
         }
         return false
     }
@@ -161,16 +198,25 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
         swipeWidth = width
         parent?.requestDisallowInterceptTouchEvent(true)
         val window = activity.window
+        handler.removeCallbacks(repairTranslation)
+        animate().cancel()
         val original = window.callback
-        window.callback =
+        originalCallback = original
+        val callback =
             object : Window.Callback by original {
                 override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-                    if (!follow(event)) window.callback = original
+                    if (terminalEvent) return original.dispatchTouchEvent(event)
+                    follow(event)
                     return true
                 }
             }
+        gestureCallback = callback
+        window.callback = callback
         container = parent as? ViewGroup
-        dragging = true
+        terminalEvent = false
+        pendingCommit = false
+        activeSwipes[window] = this
+        activity.lifecycle.addObserver(teardown)
         dispatcher.dispatchOnBackStarted(event(ev))
     }
 
@@ -185,18 +231,14 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
 
     /** Below API 34: slides back to the start, then lets the FragmentManager put the chat back. */
     private fun settleBack() {
-        ValueAnimator.ofFloat(translationX, 0f).apply {
+        settle = ValueAnimator.ofFloat(translationX, 0f).apply {
             duration = 200
             interpolator = DecelerateInterpolator(1.5f)
             addUpdateListener { drag(it.animatedValue as Float) }
             addListener(
                 object : AnimatorListenerAdapter() {
                     override fun onAnimationEnd(animation: Animator) {
-                        below()?.translationX = 0f
-                        translationX = 0f
-                        container = null
-                        dispatcher.dispatchOnBackCancelled()
-                        dragging = false
+                        complete(cancelled = true)
                     }
                 }
             )
@@ -204,8 +246,7 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
         }
     }
 
-    /** False once the gesture is over. */
-    private fun follow(ev: MotionEvent): Boolean {
+    private fun follow(ev: MotionEvent) {
         velocity?.addMovement(ev)
         when (ev.actionMasked) {
             MotionEvent.ACTION_MOVE -> {
@@ -214,35 +255,75 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
             }
             MotionEvent.ACTION_UP -> {
                 val vx = velocity?.run { computeCurrentVelocity(1000); xVelocity } ?: 0f
-                if (shouldFinish(ev.rawX - downX, vx, swipeWidth)) {
-                    container = null
-                    dispatcher.onBackPressed()
-                    dragging = false
-                } else cancel()
-                return false
+                finish(shouldFinish(ev.rawX - downX, vx, swipeWidth))
             }
-            MotionEvent.ACTION_CANCEL -> {
-                cancel()
-                return false
-            }
+            MotionEvent.ACTION_CANCEL -> finish(false)
         }
-        return true
     }
 
-    private fun cancel() {
-        if (manual) return settleBack()
-        dispatcher.dispatchOnBackCancelled()
-        dragging = false
-        // API 34+: after a quick cancel the FragmentManager may leave the reversed animator short
-        // of its start, so the chat would stay shifted; slide it home once it is back in place
-        postDelayed(
-            {
-                if (parent != null && translationX != 0f) {
-                    animate().translationX(0f).setDuration(160).setInterpolator(DecelerateInterpolator(1.5f)).start()
+    private fun finish(commit: Boolean) {
+        terminalEvent = true
+        pendingCommit = commit
+        releaseTracking()
+        // FragmentManager posts prepareBackStackTransition. Dispatch the terminal event after it,
+        // with the gesture still owning the pop animators.
+        if (commit) handler.post(commitPreparedPop)
+        else if (manual) settleBack()
+        else handler.post(cancelPreparedPop)
+    }
+
+    private fun complete(cancelled: Boolean) {
+        if (activeSwipes[activity.window] !== this) return
+        try {
+            if (cancelled) {
+                if (manual) {
+                    below()?.translationX = 0f
+                    translationX = 0f
                 }
-            },
-            400, // longer than the 300 ms transition, or both animators pull the chat at once
-        )
+                dispatcher.dispatchOnBackCancelled()
+            } else {
+                dispatcher.onBackPressed()
+            }
+        } finally {
+            cleanup(repair = cancelled && !manual)
+        }
+    }
+
+    private fun releaseTracking() {
+        tracking = false
+        velocity?.recycle()
+        velocity = null
+    }
+
+    private fun stopObserving() = activity.lifecycle.removeObserver(teardown)
+
+    private fun cleanup(repair: Boolean = false) {
+        handler.removeCallbacks(commitPreparedPop)
+        handler.removeCallbacks(cancelPreparedPop)
+        handler.removeCallbacks(repairTranslation)
+        settle?.run {
+            removeAllListeners()
+            removeAllUpdateListeners()
+            cancel()
+        }
+        settle = null
+        releaseTracking()
+        container = null
+        val window = activity.window
+        if (activeSwipes[window] === this) {
+            activeSwipes.remove(window)
+            if (window.callback === gestureCallback) {
+                window.callback = originalCallback
+            }
+        }
+        gestureCallback = null
+        originalCallback = null
+        if (repair) {
+            // A reversed API 34+ animator can stop short. Let it settle before moving the view.
+            handler.postDelayed(repairTranslation, 400)
+        } else {
+            stopObserving()
+        }
     }
 
     /**
@@ -256,13 +337,9 @@ class SwipeBackLayout(private val activity: ComponentActivity) : FrameLayout(act
     companion object {
         private const val FLING_VELOCITY = 3500f
 
-        /**
-         * True from the start of a swipe-back until its finish or cancel is dispatched, when the
-         * FragmentManager makes (and on API 34+ seeks) the pop animators.
-         * shortcut: one flag for the process, fine while a single finger can swipe one chat at a time
-         */
-        var dragging = false
-            private set
+        private val activeSwipes = mutableMapOf<Window, SwipeBackLayout>()
+
+        fun isDragging(window: Window): Boolean = window in activeSwipes
 
         fun progress(dx: Float, width: Int): Float = if (width <= 0) 0f else (dx / width).coerceIn(0f, 1f)
 

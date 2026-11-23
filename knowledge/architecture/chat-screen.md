@@ -113,11 +113,11 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   `previewIsFileDescription` and `hasThumbnail`, stickers excluded as in Telegram) adds a square
   thumbnail left of the name, in the bubble header (33 dp, 4 dp corners, Telegram's
   `ChatMessageCell` formula with our 13 sp text) and in the reply panel above the composer
-  (34 dp, 2 dp corners, Telegram's `ChatReplyContainer`). The flag is set when the model is built
-  (`ReplyHeader.thumbnail`, `ReplyPreview.thumbnail`); the picture comes from
-  `ChatActions.loadThumbnail` at the photo bubble's size, because `FileBackend`'s bitmap cache is
-  keyed by message uuid only and a smaller first load would blur the bubble. A parent not found
-  locally gets none. The thumbnail has no content description, so TalkBack reads the same text.
+  (34 dp, 2 dp corners, Telegram's `ChatReplyContainer`). Each snapshot checks the current
+  parent, including for an open composer. A finished download can add its thumbnail and a
+  retraction or missing parent clears it. Switching targets clears the previous bitmap while
+  the new one loads. `ChatActions.loadThumbnail` requests the photo bubble's size so both views
+  can share the bitmap cache keyed by message UUID.
 - Delete for everyone (XEP-0424): menu entry with a confirmation for our own sent messages
   (channels need occupant-ids and a stanza-id). `ModerationManager.retract` sends the retraction
   with a fallback body and deletes the local copy like a moderation; incoming retractions are
@@ -295,12 +295,14 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   menu, built as the group branch of `onContactPictureLongClicked` (`getUserOrStub`, the message's
   fingerprint or `"pgp"`, `muc_details_context` configured by `MucDetailsContextMenuHelper` and
   dispatched to its `onContextItemSelected`): contact details, start a chat, a private message in an
-  anonymous room, remove from the room for admins; what is unavailable is hidden as in the classic
-  popup. `ChatActions.senderMenu` returns its visible items as `MenuEntry`s through
+  anonymous room and remove from the room for admins. The PM action opens the classic composer
+  inside the current activity and aims it at the selected occupant. `ChatActions.senderMenu` returns its visible items as `MenuEntry`s through
   `participantMenu` (`MucUsersCompose.kt`), the participants list's own conversion; the dropdown is
   `EntryMenuBox` (`TatrakList.kt`), the one `AvatarRow` draws. The participants list
   (`ParticipantsScreen`, `MucUsersActivity`) swaps the same way: a tap opens that menu, a long press
-  is the classic row click (`highlightInMuc`, a mention back in the chat). TalkBack: "show actions"
+  is the classic row click (`highlightInMuc`, a mention back in the chat). On confirmation,
+  Remove membership looks up the current participant by real JID and checks whether the
+  legacy menu still allows the action. TalkBack: "show actions"
   on the tap, "Mention" on the long press. Upstream Conversations and monocles keep the tap as the
   mention and the menu on the long press, on the avatar and on the participants row alike; monocles
   also opens the private chat on a tap of a private message's avatar.
@@ -352,10 +354,9 @@ the unchanged `ContactDetailsActivity` / `ConferenceDetailsActivity`.
 feeds predictive back (`dispatchOnBackStarted / Progressed / Cancelled`, `onBackPressed`) to the
 activity's dispatcher; finishing past a third of the width or on a fling. The slide itself is
 the fragments' `onCreateAnimator`: `slideAnimator` in `ChatFragment.kt` asks
-`SwipeBackLayout.dragging` (true from the drag's back-started until its finish or cancel is
-dispatched, when the FragmentManager makes the pop animators) and makes `dragAnimator` (chat slides
-out, the list comes in from −25 %; 300 ms, `DecelerateInterpolator(1.5f)` = 1 − (1 − x)³, Telegram's
-chat curve) for a drag, `pushAnimator` (the tap push above) otherwise. The flag is one per process.
+`SwipeBackLayout.isDragging(window)` and makes `dragAnimator` for a swipe. The chat slides out
+and the list comes in from −25 % over 300 ms using Telegram's `DecelerateInterpolator(1.5f)`.
+A tap uses `pushAnimator`.
 
 - **API 34+**: the FragmentManager seeks those animators with the back progress. They use a
   `DecelerateInterpolator(1.5f)`, so the layout sends `seekProgress(p) = 1 − ∛(1 − p)`, its inverse,
@@ -364,6 +365,11 @@ chat curve) for a drag, `pushAnimator` (the tap push above) otherwise. The flag 
   The layout moves the chat (`translationX = dx`) and the list below it (parallax) by hand.
   On finish `dragAnimator` starts from the current `translationX`; on cancel the layout
   animates both back to 0 and then dispatches back-cancelled.
+
+The gesture owns the pop animators for its window until completion or cancellation. The
+terminal event runs after FragmentManager's queued preparation. The activity resolves an
+interrupted swipe before saving state. Teardown releases the window callback and velocity
+tracker and cancels pending settling work.
 
 **System edge back.** With gesture navigation the left system back zone (`systemGestures` inset)
 is left to the system: our drag does not start there, so both gestures never run at once.
