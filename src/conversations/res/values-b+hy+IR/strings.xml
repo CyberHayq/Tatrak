@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="pick_a_server">Ընտրէք ձեր XMPP մատակարարին</string>
+    <string name="use_conversations.im">Օգտագործել conversations.im-ը</string>
+    <string name="create_new_account">Ստեղծել նոր հաշիւ</string>
+    <string name="do_you_have_an_account">Արդէն ունե՞ք XMPP հաշիւ։ Հնարաւոր է՝ այն ունէք, եթէ արդէն օգտագործում էք XMPP-ի մէկ այլ յաճախորդ կամ նախկինում օգտուել էք Conversations-ից։ Եթէ չունէք, կարող էք հենց հիմա ստեղծել XMPP հաշիւ։\nՀուշում․ որոշ էլփոստի ծառայութիւններ նույնպես տրամադրում են XMPP հաշիւներ։</string>
+    <string name="server_select_text">XMPP-ն ակնթարթային հաղորդագրութիւնների ցանց է, որը կախուած չէ որեւէ մատակարարից։ Կարող էք օգտագործել այս յաւելուածը ձեր ընտրած ցանկացած XMPP սերվերով։\nՀարմարութեան համար պարզեցրել ենք հաշիւ ստեղծելը conversations.im-ում՝ մատակարար, որը հատուկ հարմարեցուած է Conversations-ի հետ օգտագործման համար։</string>
+    <string name="magic_create_text_on_x">Դուք հրավիրուել էք %1$s։ Մենք կուղեկցենք ձեզ հաշիւ ստեղծելու ընթացքում։\nԵթէ որպես մատակարար ընտրէք %1$s-ը, կկարողանաք կապուել այլ մատակարարների օգտատերերի հետ՝ տրամադրելով նրանց ձեր ամբողջական XMPP հասցեն։</string>
+    <string name="magic_create_text_fixed">Դուք հրավիրուել էք %1$s։ Ձեր օգտանունն արդէն ընտրուած է։ Մենք կուղեկցենք ձեզ հաշիւ ստեղծելու ընթացքում։\nԿկարողանաք կապուել այլ մատակարարների օգտատերերի հետ՝ տրամադրելով նրանց ձեր ամբողջական XMPP հասցեն։</string>
+    <string name="your_server_invitation">Ձեր սերվերի հրաւէրը</string>
+    <string name="improperly_formatted_provisioning">Կարգաւորման կոդի ձեւաչափը սխալ է</string>
+    <string name="tap_share_button_send_invite">Սեղմէք կիսուելու կոճակը՝ ձեր կոնտակտին %1$s-ի հրաւէրն ուղարկելու համար։</string>
+    <string name="if_contact_is_nearby_use_qr">Եթէ ձեր կոնտակտը մոտակայքում է, նա կարող է նաեւ սկանաւորել ստորեւի կոդը՝ հրաւէրն ընդունելու համար։</string>
+    <string name="share_invite_with">Կիսուել հրաւէրով…</string>
+</resources>

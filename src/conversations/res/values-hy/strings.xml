@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="pick_a_server">Ընտրեք ձեր XMPP մատակարարին</string>
+    <string name="use_conversations.im">Օգտագործել conversations.im-ը</string>
+    <string name="create_new_account">Ստեղծել նոր հաշիվ</string>
+    <string name="do_you_have_an_account">Արդեն ունե՞ք XMPP հաշիվ։ Հնարավոր է՝ այն ունեք, եթե արդեն օգտագործում եք XMPP-ի մեկ այլ հաճախորդ կամ նախկինում օգտվել եք Conversations-ից։ Եթե չունեք, կարող եք հենց հիմա ստեղծել XMPP հաշիվ։\nՀուշում․ որոշ էլփոստի ծառայություններ նույնպես տրամադրում են XMPP հաշիվներ։</string>
+    <string name="server_select_text">XMPP-ն ակնթարթային հաղորդագրությունների ցանց է, որը կախված չէ որևէ մատակարարից։ Կարող եք օգտագործել այս հավելվածը ձեր ընտրած ցանկացած XMPP սերվերով։\nՀարմարության համար պարզեցրել ենք հաշիվ ստեղծելը conversations.im-ում՝ մատակարար, որը հատուկ հարմարեցված է Conversations-ի հետ օգտագործման համար։</string>
+    <string name="magic_create_text_on_x">Դուք հրավիրվել եք %1$s։ Մենք կուղեկցենք ձեզ հաշիվ ստեղծելու ընթացքում։\nԵթե որպես մատակարար ընտրեք %1$s-ը, կկարողանաք կապվել այլ մատակարարների օգտատերերի հետ՝ տրամադրելով նրանց ձեր ամբողջական XMPP հասցեն։</string>
+    <string name="magic_create_text_fixed">Դուք հրավիրվել եք %1$s։ Ձեր օգտանունն արդեն ընտրված է։ Մենք կուղեկցենք ձեզ հաշիվ ստեղծելու ընթացքում։\nԿկարողանաք կապվել այլ մատակարարների օգտատերերի հետ՝ տրամադրելով նրանց ձեր ամբողջական XMPP հասցեն։</string>
+    <string name="your_server_invitation">Ձեր սերվերի հրավերը</string>
+    <string name="improperly_formatted_provisioning">Կարգավորման կոդի ձևաչափը սխալ է</string>
+    <string name="tap_share_button_send_invite">Սեղմեք կիսվելու կոճակը՝ ձեր կոնտակտին %1$s-ի հրավերն ուղարկելու համար։</string>
+    <string name="if_contact_is_nearby_use_qr">Եթե ձեր կոնտակտը մոտակայքում է, նա կարող է նաև սկանավորել ստորևի կոդը՝ հրավերն ընդունելու համար։</string>
+    <string name="share_invite_with">Կիսվել հրավերով…</string>
+</resources>

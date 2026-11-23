@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_archive_pull">Սահեցրեք ներքև՝ արխիվը տեսնելու համար</string>
+    <string name="tatrak_archive_release">Բաց թողեք՝ արխիվը տեսնելու համար</string>
+    <string name="tatrak_archive_hide">Թաքցնել ցանկի վերևում</string>
+    <string name="tatrak_archive_pin">Ամրացնել զրույցների ցանկում</string>
+    <string name="tatrak_drawer_close">Փակել ընտրացանկը</string>
+    <string name="tatrak_archive_hint">Արխիվը տեսնելու համար ցանկը վերևից սահեցրեք ներքև։</string>
+</resources>

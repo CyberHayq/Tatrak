@@ -1,0 +1,5 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_hide_notification_text">Թաքցնել հաղորդագրության տեքստը ծանուցումներում</string>
+    <string name="tatrak_hide_notification_text_summary">Ծանուցումներում ցուցադրվում են միայն զրույցի անունը և նոր հաղորդագրությունների թիվը։ Պատասխանելու և կարդացված նշելու կոճակները չեն ցուցադրվում։</string>
+</resources>

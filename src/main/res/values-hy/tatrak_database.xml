@@ -1,0 +1,37 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_storage_title">Տեղային տվյալների պաշտպանություն</string>
+    <string name="tatrak_storage_action">Բացեք Tatrak-ը՝ կարգավորումն ավարտելու կամ տեղային տվյալները վերականգնելու համար։</string>
+    <string name="tatrak_storage_working">Պատրաստվում է գաղտնագրված պահոցը։ Հաղորդագրությունների աշխատանքը դադարեցված է մինչև այն պատրաստ լինի։ Խնդրում ենք սպասել։</string>
+    <string name="tatrak_storage_failed">Չհաջողվեց բացել տեղային պահոցը։ Սկզբնական ֆայլերը պահպանվել են։ Կրկին փորձեք, վերականգնեք գաղտնագրված պահուստավորումը կամ հստակ ընտրեք սկսել զրոյից՝ պահելով հին ֆայլերը։</string>
+    <string name="tatrak_storage_cleanup">Գաղտնագրված պահոցն ակտիվ է, սակայն հին ֆայլերի մի մասը դեռ պետք է մաքրվի։</string>
+    <string name="tatrak_storage_retry">Կրկին փորձել</string>
+    <string name="tatrak_storage_fresh">Սկսել զրոյից</string>
+    <string name="tatrak_storage_fresh_warning">Սկսե՞լ դատարկ, գաղտնագրված տվյալների բազաներով։ Հին ֆայլերն ու դրանց բանալիների տվյալները կպահպանվեն, սակայն առանց սկզբնական բանալու կամ պահուստավորման՝ անընթեռնելի տվյալները հնարավոր չի լինի վերականգնել։</string>
+    <string name="tatrak_backup_preview_title">Ստուգել պահուստավորման ներմուծումը</string>
+    <string name="tatrak_backup_preview_clean">Պահուստավորումը ստուգված է։ Ներմուծե՞լ այս հաշիվն ու դրա պատմությունը։</string>
+    <string name="tatrak_backup_preview_omissions">Որոշ տվյալներ հնարավոր չէ ներմուծել։ Ստորև ստուգեք բաց թողնվածները։ Շարունակեք միայն եթե ընդունում եք կորուստները։\n\n%1$s</string>
+    <string name="tatrak_backup_accept">Ընդունել և ներմուծել</string>
+    <string name="tatrak_backup_pq_history">Ներմուծված հետքվանտային OMEMO2 պատմություն</string>
+    <string name="tatrak_backup_pq_unavailable">Այս ներմուծված հետքվանտային OMEMO2 հաղորդագրությունը սկզբնական հավելվածում չի ապագաղտնագրվել։</string>
+    <string name="tatrak_backup_compatible_pq">Ներմուծված հետքվանտային OMEMO2 պատմությունը հնարավոր չէ արտահանել Conversations ձևաչափով՝ առանց գաղտնագրման ծագման տվյալները կորցնելու։ Ամբողջական Tatrak պահուստավորում պահելու համար ընտրեք այլ ձևաչափ։</string>
+    <string name="tatrak_backup_omit_table">Չաջակցվող աղյուսակ / %1$s</string>
+    <string name="tatrak_backup_omit_field">Չաջակցվող դաշտ / %1$s.%2$s</string>
+    <string name="tatrak_backup_omit_pending_pq">Չուղարկված ներմուծված հետքվանտային հաղորդագրությունը պահվել է միայն որպես պատմության տեքստ</string>
+    <string name="tatrak_backup_omit_pq_sessions">Հետքվանտային աշխատաշրջանները չեն աջակցվում․ ընթեռնելի պատմությունը պահպանվել է</string>
+    <string name="tatrak_backup_omit_encryption">Հաղորդագրության գաղտնագրման տեսակը չի աջակցվում</string>
+    <string name="tatrak_backup_omit_outgoing">Ելքային գաղտնագրման չաջակցվող նախընտրությունը զրոյացվել է</string>
+    <string name="tatrak_backup_omit_pq_keys">Հետքվանտային OMEMO2 բանալին, աշխատաշրջանը կամ վստահության գրառումը (monocles-ից) չի ներմուծվել</string>
+    <string name="tatrak_backup_omit_contact_trust">Կոնտակտի OMEMO բանալին ու վստահությունը չեն ներմուծվել (կրկին ստուգեք)</string>
+    <string name="tatrak_backup_omit_unproven_contact">monocles-ի կոնտակտի OMEMO բանալին, որի համար պահուստավորումում հին OMEMO հաղորդագրություն չկա, չի ներմուծվել (կրկին ստուգեք)</string>
+    <string name="tatrak_backup_omit_bad_identity">Չընթեռնելի տվյալներով կամ վստահությամբ OMEMO բանալին չի ներմուծվել</string>
+    <string name="tatrak_backup_omit_private">Սեփական OMEMO բանալին, սարքի ID-ն, աշխատաշրջանը կամ նախնական բանալին չի ներմուծվել (այս սարքը նոր բանալի կստանա)</string>
+    <string name="tatrak_backup_omit_disappearing">Անհետացող հաղորդագրությունը չի ներմուծվել (Tatrak-ը չի կարող այն ժամանակին ջնջել)</string>
+    <string name="tatrak_backup_omit_caption">Կցորդի նկարագրությունը բաց է թողնվել (ֆայլը պահպանվել է)</string>
+    <string name="tatrak_backup_unsafe_omemo_keys">Այս պահուստավորման սեփական OMEMO բանալին հնարավոր չէ անվտանգ վերականգնել։ OMEMO-ի համար ընտրեք «Միայն կոնտակտների վստահությունը» կամ «Ոչինչ»։</string>
+    <string name="tatrak_backup_omit_type">Tatrak-ին անհայտ տեսակի հաղորդագրությունը (%1$d, օրինակ՝ monocles-ի պատմություն) չի ներմուծվել</string>
+    <string name="tatrak_backup_omit_conflict">Իրար հակասող տողեր / %1$s</string>
+    <string name="tatrak_backup_status_reading">Կարդացվում է պահուստավորումը…</string>
+    <string name="tatrak_backup_status_reading_percent">Կարդացվում է պահուստավորումը… %1$d%%</string>
+    <string name="tatrak_backup_status_saving">Զրույցները պահվում են հավելվածում։ Սա կարող է մի քանի րոպե տևել։</string>
+</resources>

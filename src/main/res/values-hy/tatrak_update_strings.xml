@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_updates">Թարմացումներ</string>
+    <string name="tatrak_update_auto">Ինքնաշխատ ստուգել թարմացումները</string>
+    <string name="tatrak_update_auto_summary">Օրը մեկ անգամ՝ հավելվածի GitHub թողարկումներից։ GitHub-ը տեսնում է ձեր IP հասցեն և հավելվածի տարբերակը։ Tor-ի միացված լինելու դեպքում՝ երբեք։</string>
+    <string name="tatrak_update_check_now">Ստուգել հիմա</string>
+    <string name="tatrak_update_current_version">Տեղադրված տարբերակը՝ %s</string>
+    <string name="tatrak_update_available">Հասանելի է %s տարբերակը</string>
+    <string name="tatrak_update_action">Թարմացնել</string>
+    <string name="tatrak_update_later">Ավելի ուշ</string>
+    <string name="tatrak_update_close">Փակել</string>
+    <string name="tatrak_update_cancel">Չեղարկել</string>
+    <string name="tatrak_update_checking">Ստուգվում են թարմացումները…</string>
+    <string name="tatrak_update_up_to_date">Դուք ունեք վերջին տարբերակը (%s)։</string>
+    <string name="tatrak_update_downloading">Ներբեռնվում է %s տարբերակը…</string>
+    <string name="tatrak_update_installing">Սպասում ենք համակարգի տեղադրիչին…</string>
+    <string name="tatrak_update_failed">Թարմացումը ձախողվեց</string>
+    <string name="tatrak_update_test_build">Այս պատճենը փորձնական հավաքում է և ստորագրված չէ թողարկման բանալիով․ թարմացումը կարելի է ներբեռնել ու ստուգել, բայց այն չի տեղադրվի։</string>
+    <string name="tatrak_update_allow_installs">Թույլ տվեք Tatrak-ին տեղադրել հավելվածներ, ապա կրկին սեղմեք «Թարմացնել»։</string>
+    <string name="tatrak_update_error_tor">Tor-ի միացված լինելու դեպքում թարմացումները չեն ստուգվում․ GitHub-ին հարցումն Tor-ով չի անցնի։</string>
+    <string name="tatrak_update_error_network">Չհաջողվեց կապ հաստատել GitHub-ի հետ։ Ստուգեք կապը և կրկին փորձեք։</string>
+    <string name="tatrak_update_error_release">GitHub-ի թողարկումը այս սարքի համար հավելվածի ֆայլ չունի։</string>
+    <string name="tatrak_update_error_size">Ներբեռնված ֆայլի չափը սխալ է․ այն ջնջվել է։</string>
+    <string name="tatrak_update_error_package">Ներբեռնված ֆայլը Tatrak-ը չէ․ այն ջնջվել է։</string>
+    <string name="tatrak_update_error_signature">Ներբեռնված ֆայլը ստորագրված չէ Tatrak-ի թողարկման բանալիով․ այն ջնջվել է։</string>
+    <string name="tatrak_update_error_not_release_build">Այս պատճենը փորձնական հավաքում է և ստորագրված չէ թողարկման բանալիով, ուստի չի կարող տեղադրել թարմացումներ։ Ներբեռնված ֆայլը ջնջվել է։</string>
+    <string name="tatrak_update_error_version">Ներբեռնված ֆայլն ավելի նոր չէ, քան տեղադրված հավելվածը․ այն ջնջվել է։</string>
+    <string name="tatrak_update_error_install">Համակարգի տեղադրիչը մերժեց թարմացումը․ %s</string>
+</resources>

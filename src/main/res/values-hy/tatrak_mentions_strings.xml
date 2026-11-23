@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_chat_mention_sender">Նշել</string>
+    <string name="tatrak_chat_next_mention">Հաջորդ նշումը</string>
+    <string name="tatrak_format_bold">Թավ</string>
+    <string name="tatrak_format_italic">Շեղ</string>
+    <string name="tatrak_format_monospace">Մոնոսփեյս</string>
+    <string name="tatrak_format_strikethrough">Գծանշված</string>
+</resources>

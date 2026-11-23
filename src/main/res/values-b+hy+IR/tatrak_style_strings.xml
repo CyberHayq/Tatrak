@@ -1,0 +1,22 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_dock_chats">Զրոյցներ</string>
+    <string name="tatrak_search_chats">Որոնել զրոյցներ</string>
+    <string name="tatrak_topic_unread">Չկարդացուած՝ %1$d</string>
+    <string name="tatrak_style_glass">Ապակի</string>
+    <string name="tatrak_style_glass_summary">Չեզոք մոխրագույն երանգներ, սպիտակ վահանակներ</string>
+    <string name="tatrak_style_warm">Տաք ապակի</string>
+    <string name="tatrak_style_warm_summary">Տաք երանգով մոխրագույններ</string>
+    <string name="tatrak_style_tinted">Գունաւոր ապակի</string>
+    <string name="tatrak_style_tinted_summary">Շեշտադրման գոյնով երանգաւորուած մակերեսներ</string>
+    <string name="tatrak_floating_bars">Լողացող վահանակներ</string>
+    <string name="tatrak_floating_bars_summary">Վահանակները լողում են զրոյցների ցանկի վրա, որը դրանց տակ խամրում է։</string>
+    <string name="tatrak_tab_profile">Պրոֆիլ</string>
+    <string name="tatrak_bar_blur">Մշուշ՝ վահանակների տակ</string>
+    <string name="tatrak_bar_blur_off">Անջատուած</string>
+    <string name="tatrak_bar_blur_frosted">Մշուշապատ</string>
+    <string name="tatrak_bar_blur_frosted_summary">Տեքստը մնում է ընթեռնելի ոճի գոյների վրա</string>
+    <string name="tatrak_bar_blur_clear">Թափանցիկ, ինչպես Telegram-ում</string>
+    <string name="tatrak_all_accounts">Բոլոր հաշիւները</string>
+    <string name="tatrak_switch_account">Փոխել հաշիւը</string>
+</resources>

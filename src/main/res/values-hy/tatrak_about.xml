@@ -1,0 +1,4 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_about_header">Տատրակ • Անվտանգությունն ի սկզբանե։\nOMEMO-ի ծայրից ծայր գաղտնագրում, սարքի վրա գաղտնագրված տվյալների բազա և մեդիա՝ բաց XMPP-ի միջոցով։\n\nՀեղինակային իրավունք © 2026 CyberHayq\nՍկզբնական կոդը՝ https://github.com/CyberHayq/Tatrak\n\nՀիմքում Conversations-ն է, հեղինակային իրավունք © 2014-2026 Daniel Gultsch\nhttps://codeberg.org/iNPUTmice/Conversations\n\nԶրույցների ցանկի անիմացիաների մասերը տեղափոխվել են Android-ի համար նախատեսված Telegram-ից՝ GNU GPL v2 կամ ավելի ուշ լիցենզիայով\nhttps://github.com/DrKLO/Telegram</string>
+</resources>

@@ -1,0 +1,8 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_swipe_method">Սահեցրէք՝ պատասխանելու համար</string>
+    <string-array name="tatrak_swipe_method_entries">
+        <item>Telegram․ սահեցրէք ձախ՝ պատասխանելու, աջ՝ զրոյցը փակելու համար</item>
+        <item>Signal․ սահեցրէք աջ՝ պատասխանելու համար, զրոյցը փակւում է միայն համակարգի հետադարձ ժեստով</item>
+    </string-array>
+</resources>

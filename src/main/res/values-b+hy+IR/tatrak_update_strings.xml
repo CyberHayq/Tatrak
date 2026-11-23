@@ -1,0 +1,29 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_updates">Թարմացումներ</string>
+    <string name="tatrak_update_auto">Ինքնաշխատ ստուգել թարմացումները</string>
+    <string name="tatrak_update_auto_summary">Օրը մէկ անգամ՝ յաւելուածի GitHub թողարկումներից։ GitHub-ը տեսնում է ձեր IP հասցեն եւ յաւելուածի տարբերակը։ Tor-ի միացուած լինելու դեպքում՝ երբէք։</string>
+    <string name="tatrak_update_check_now">Ստուգել հիմա</string>
+    <string name="tatrak_update_current_version">Տեղադրուած տարբերակը՝ %s</string>
+    <string name="tatrak_update_available">Հասանելի է %s տարբերակը</string>
+    <string name="tatrak_update_action">Թարմացնել</string>
+    <string name="tatrak_update_later">Աւելի ուշ</string>
+    <string name="tatrak_update_close">Փակել</string>
+    <string name="tatrak_update_cancel">Չեղարկել</string>
+    <string name="tatrak_update_checking">Ստուգւում են թարմացումները…</string>
+    <string name="tatrak_update_up_to_date">Դուք ունէք վերջին տարբերակը (%s)։</string>
+    <string name="tatrak_update_downloading">Ներբեռնւում է %s տարբերակը…</string>
+    <string name="tatrak_update_installing">Սպասում ենք համակարգի տեղադրիչին…</string>
+    <string name="tatrak_update_failed">Թարմացումը ձախողվեց</string>
+    <string name="tatrak_update_test_build">Այս պատճենը փորձնական հաւաքում է եւ ստորագրուած չէ թողարկման բանալիով․ թարմացումը կարելի է ներբեռնել ու ստուգել, բայց այն չի տեղադրվի։</string>
+    <string name="tatrak_update_allow_installs">Թոյլ տուէք Tatrak-ին տեղադրել յաւելուածներ, ապա կրկին սեղմէք «Թարմացնել»։</string>
+    <string name="tatrak_update_error_tor">Tor-ի միացուած լինելու դեպքում թարմացումները չեն ստուգւում․ GitHub-ին հարցումն Tor-ով չի անցնի։</string>
+    <string name="tatrak_update_error_network">Չհաջողվեց կապ հաստատել GitHub-ի հետ։ Ստուգէք կապը եւ կրկին փորձէք։</string>
+    <string name="tatrak_update_error_release">GitHub-ի թողարկումը այս սարքի համար յաւելուածի ֆայլ չունի։</string>
+    <string name="tatrak_update_error_size">Ներբեռնուած ֆայլի չափը սխալ է․ այն ջնջուել է։</string>
+    <string name="tatrak_update_error_package">Ներբեռնուած ֆայլը Tatrak-ը չէ․ այն ջնջուել է։</string>
+    <string name="tatrak_update_error_signature">Ներբեռնուած ֆայլը ստորագրուած չէ Tatrak-ի թողարկման բանալիով․ այն ջնջուել է։</string>
+    <string name="tatrak_update_error_not_release_build">Այս պատճենը փորձնական հաւաքում է եւ ստորագրուած չէ թողարկման բանալիով, ուստի չի կարող տեղադրել թարմացումներ։ Ներբեռնուած ֆայլը ջնջուել է։</string>
+    <string name="tatrak_update_error_version">Ներբեռնուած ֆայլն աւելի նոր չէ, քան տեղադրուած յաւելուածը․ այն ջնջուել է։</string>
+    <string name="tatrak_update_error_install">Համակարգի տեղադրիչը մերժեց թարմացումը․ %s</string>
+</resources>

@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_avatar_shape">Ավատարի ձևը</string>
+    <string name="tatrak_avatar_shape_round">Կլոր</string>
+    <string name="tatrak_avatar_shape_square">Կլորացված քառակուսի</string>
+</resources>

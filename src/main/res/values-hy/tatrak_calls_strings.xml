@@ -1,0 +1,16 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_calls">Զանգեր</string>
+    <string name="tatrak_calls_missed">Բաց թողնված</string>
+    <string name="tatrak_calls_empty">Դեռ զանգեր չկան</string>
+    <string name="tatrak_calls_no_missed">Բաց թողնված զանգեր չկան</string>
+    <string name="tatrak_calls_incoming">Մուտքային</string>
+    <string name="tatrak_calls_no_incoming">Մուտքային զանգեր չկան</string>
+    <string name="tatrak_calls_outgoing">Ելքային</string>
+    <string name="tatrak_calls_no_outgoing">Ելքային զանգեր չկան</string>
+    <string name="tatrak_calls_open_chat">Բացել զրույցը</string>
+    <string name="tatrak_call_confirm_audio">Զանգահարե՞լ %1$s-ին։</string>
+    <string name="tatrak_call_confirm_video">Տեսազանգ կատարե՞լ %1$s-ի հետ։</string>
+    <string name="tatrak_call_confirm_yes">Զանգահարել</string>
+    <string name="tatrak_saved_messages">Պահված հաղորդագրություններ</string>
+</resources>

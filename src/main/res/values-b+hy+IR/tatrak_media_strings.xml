@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_save_warning">Պահուած պատճենը գաղտնագրուած չէ․ այլ յաւելուածներն ու ամպային պահուստաւորումը կարող են կարդալ այն։</string>
+    <string name="tatrak_voice_plain_warning">Այս սարքում ձայնային հաղորդագրութիւնը ձայնագրման ընթացքում մնում է չգաղտնագրուած եւ գաղտնագրւում է անմիջապես յետոյ։</string>
+    <string name="tatrak_voice_record">Ձայնագրել</string>
+    <string name="tatrak_voice_plain_mark">Ձայնագրութիւնը դեռ գաղտնագրուած չէ</string>
+</resources>

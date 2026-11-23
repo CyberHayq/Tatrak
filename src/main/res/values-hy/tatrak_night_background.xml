@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="tatrak_night_background">Գիշերային ֆոն</string>
+    <string name="tatrak_night_background_blue_grey">Կապտամոխրագույն</string>
+    <string name="tatrak_night_background_graphite">Գրաֆիտ</string>
+    <string name="tatrak_night_background_amoled">AMOLED սև</string>
+</resources>

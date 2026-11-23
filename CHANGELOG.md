@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+### Translations
+- Added Eastern Armenian in Soviet and traditional orthographies.
+
 ### Interface
 - Chats, Contacts, Calls and Profile are tabs under the bottom bar: a tap slides to the tab, the
   bar stays in place, Back returns to Chats (as in Telegram).

@@ -18,6 +18,9 @@
     <locale android:name="hi-IN" />
     <locale android:name="hr" />
     <locale android:name="hu" />
+    <!-- Tatrak: Armenian in Soviet and traditional orthographies. -->
+    <locale android:name="hy" />
+    <locale android:name="hy-IR" />
     <locale android:name="id" />
     <locale android:name="it" />
     <locale android:name="iw" />
