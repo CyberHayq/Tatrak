@@ -35,6 +35,7 @@ import eu.siacs.conversations.entities.Roster
 import eu.siacs.conversations.entities.Transferable
 import eu.siacs.conversations.entities.TransferablePlaceholder
 import eu.siacs.conversations.services.MessageSearchTask
+import eu.siacs.conversations.services.UnifiedPushBroker
 import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.ui.interfaces.OnSearchResultsAvailable
 import eu.siacs.conversations.xmpp.Jid
@@ -70,7 +71,8 @@ import org.robolectric.util.ReflectionHelpers.ClassParameter
     application = ReviewFlowsTest.TestApp::class,
     sdk = [35],
     qualifiers = "w411dp-h891dp",
-    shadows = [ReviewFlowsTest.NoAxolotlStore::class],
+    // Keep the same instrumentation configuration for every test in this class.
+    shadows = [ReviewFlowsTest.NoAxolotlStore::class, ReviewFlowsTest.NoPushRenewal::class, ReviewFlowsTest.SearchTaskShadow::class],
 )
 class ReviewFlowsTest {
     class TestApp : Conversations() {
@@ -84,9 +86,16 @@ class ReviewFlowsTest {
         fun __constructor__(account: Account, service: XmppConnectionService) = Unit
     }
 
+    /** The unstarted service does not need a periodic push renewal that outlives the fixture. */
+    @Implements(value = UnifiedPushBroker::class, isInAndroidSdk = false)
+    class NoPushRenewal {
+        @Implementation
+        fun __constructor__(service: XmppConnectionService) = Unit
+    }
+
     class Host : ConversationsActivity() {
         override fun connectToBackend() {
-            xmppConnectionService = service
+            xmppConnectionService = checkNotNull(service)
             xmppConnectionServiceBound = true
         }
 
@@ -101,7 +110,7 @@ class ReviewFlowsTest {
         }
 
         companion object {
-            lateinit var service: TestService
+            var service: TestService? = null
         }
     }
 
@@ -169,7 +178,7 @@ class ReviewFlowsTest {
     private lateinit var controller: ActivityController<Host>
     private val activity get() = controller.get()
     private val fm get() = activity.supportFragmentManager
-    private val service get() = Host.service
+    private val service get() = checkNotNull(Host.service)
     private val main get() = fm.findFragmentById(R.id.main_fragment)
     private val secondary get() = fm.findFragmentById(R.id.secondary_fragment)
     private val peer = Jid.of("friend@example.com")
@@ -181,13 +190,23 @@ class ReviewFlowsTest {
         FloatingBars.set(app, true)
         PreferenceManager.getDefaultSharedPreferences(app).edit().putBoolean(AppSettings.SEND_CHAT_STATES, false).apply()
         Host.service = TestService(app)
-        controller = Robolectric.buildActivity(Host::class.java).setup()
+        controller = Robolectric.buildActivity(Host::class.java)
+        controller.setup()
         fm.executePendingTransactions()
     }
 
     @After
     fun stop() {
-        if (::controller.isInitialized) controller.pause().stop().destroy()
+        try {
+            if (::controller.isInitialized) {
+                controller.close()
+                // Let the window recomposer finish cancellation before Robolectric resets the looper.
+                shadowOf(Looper.getMainLooper()).idle()
+            }
+        } finally {
+            SearchTaskShadow.requests.clear()
+            Host.service = null
+        }
     }
 
     @Test
@@ -331,13 +350,12 @@ class ReviewFlowsTest {
     }
 
     @Test
-    @Config(qualifiers = "w1100dp-h760dp", shadows = [SearchTaskShadow::class])
+    @Config(qualifiers = "w1100dp-h760dp")
     fun unchangedInlineQueryFollowsANotificationToAnotherAccount() {
         val a = service.chat(service.a, peer)
         val b = service.chat(service.b, Jid.of("other@example.com"))
         val list = main as ChatListFragment
         AccountFilter.select(activity, service.a.uuid)
-        SearchTaskShadow.requests.clear()
         list.searchMessages("needle")
         val first = SearchTaskShadow.requests.single()
         assertEquals(service.a.uuid, first.accountUuid)
@@ -456,8 +474,8 @@ class ReviewFlowsTest {
 
     @Test
     fun membershipConfirmationRechecksTheCurrentParticipant() {
-        val users = Robolectric.buildActivity(MucUsersActivity::class.java).create().get()
-        try {
+        Robolectric.buildActivity(MucUsersActivity::class.java).use { controller ->
+            val users = controller.create().get()
             val room = service.chat(service.a, Jid.of("room@conference.example.com"), muc = true)
             room.setMucAffiliation(Affiliation.OWNER)
             val options = room.mucOptions
@@ -482,8 +500,6 @@ class ReviewFlowsTest {
             stale.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
             shadowOf(Looper.getMainLooper()).idle()
             assertEquals(listOf(member), selected)
-        } finally {
-            users.finish()
         }
     }
 
