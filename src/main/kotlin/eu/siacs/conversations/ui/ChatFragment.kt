@@ -3,6 +3,7 @@ package eu.siacs.conversations.ui
 import am.cyberhayq.chat.storage.media.TemporaryMedia
 import am.cyberhayq.chat.ui.common.MenuEntry
 import am.cyberhayq.chat.ui.media.mediaDecodeDispatcher
+import am.cyberhayq.chat.ui.settings.appLanguageContext
 import am.cyberhayq.chat.ui.storage.MediaPrompts
 import am.cyberhayq.chat.ui.chat.ChatSnapshot
 import am.cyberhayq.chat.ui.common.confirmAction
@@ -288,7 +289,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private val wallpaperPicker =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri == null) return@registerForActivityResult
-            val context = requireContext().applicationContext
+            val context = appLanguageContext(requireContext())
             lifecycleScope.launch {
                 val spec = Wallpapers.importPhoto(context, uri)
                 if (spec == null) {
@@ -1730,7 +1731,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val message = message(uuid) ?: return
         val file = xmppConnectionService?.fileBackend?.getFile(message) ?: return
         if (!file.exists()) return
-        val context = requireContext().applicationContext
+        val context = appLanguageContext(requireContext())
         lifecycleScope.launch {
             // the attachment is encrypted: the store reads it through MediaProvider
             if (StickerStore.import(context, listOf(FileBackend.getUriForFile(context, file))) > 0) {
@@ -1745,7 +1746,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val manager = c.account.xmppConnection?.getManager(HttpUploadManager::class.java) ?: return
         val files = StickerStore.stickers.value.firstOrNull()?.files.orEmpty().take(StickerStore.MAX_PACK_SIZE)
         if (files.isEmpty()) return
-        val context = requireContext().applicationContext
+        val context = appLanguageContext(requireContext())
         val name = getString(R.string.tatrak_stickers_my_pack, c.account.displayName ?: c.account.jid.local)
         Toast.makeText(context, R.string.tatrak_stickers_sharing, Toast.LENGTH_SHORT).show()
         val service = xmppConnectionService
@@ -1785,7 +1786,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private fun importStickerPack(url: HttpUrl) {
         val account = conversation?.account ?: return
         val service = xmppConnectionService ?: return
-        val context = requireContext().applicationContext
+        val context = appLanguageContext(requireContext())
         lifecycleScope.launch {
             val pack =
                 withContext(Dispatchers.IO) {

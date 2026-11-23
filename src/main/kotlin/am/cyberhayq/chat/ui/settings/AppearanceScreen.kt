@@ -157,7 +157,7 @@ private fun SwitchRow(@StringRes title: Int, @StringRes summary: Int, checked: B
 }
 
 @Composable
-private fun RadioRow(label: String, selected: Boolean, summary: String? = null, onClick: () -> Unit) {
+internal fun RadioRow(label: String, selected: Boolean, summary: String? = null, onClick: () -> Unit) {
     Row(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().selectable(selected = selected, role = Role.RadioButton, onClick = onClick).padding(horizontal = 8.dp),

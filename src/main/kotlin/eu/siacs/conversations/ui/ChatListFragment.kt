@@ -32,6 +32,8 @@ import am.cyberhayq.chat.ui.chatlist.showArchiveUndo
 import am.cyberhayq.chat.ui.newchat.NewChatScreen
 import am.cyberhayq.chat.ui.settings.AccountHeader
 import am.cyberhayq.chat.ui.settings.ProfileTab
+import am.cyberhayq.chat.ui.settings.appLanguageContext
+import am.cyberhayq.chat.ui.settings.appLanguageSummary
 import am.cyberhayq.chat.ui.theme.BarBackdrop
 import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.theme.LocalTatrakStyle
@@ -93,7 +95,7 @@ class ChatListFragment : XmppFragment(), ChatListActions {
 
     /** Message results of the inline search, in the shape of [SearchActivity]'s global search. */
     private val messageResults by lazy {
-        MessageSearchResults(requireContext().applicationContext, lifecycleScope, { xmppConnectionService }, true)
+        MessageSearchResults(appLanguageContext(requireContext()), lifecycleScope, { xmppConnectionService }, true)
     }
     private data class SearchRequest(
         val service: XmppConnectionService,
@@ -129,6 +131,9 @@ class ChatListFragment : XmppFragment(), ChatListActions {
     private lateinit var callList: CallList
     private lateinit var contactsTab: ContactsTab
     private var profile by mutableStateOf<AccountHeader?>(null)
+
+    /** The Profile tab's language summary, re-read on resume (the settings page may not recreate this activity). */
+    private var language by mutableStateOf("")
     /** The dock's Profile item while its account switcher is open. */
     private var switcher by mutableStateOf<Rect?>(null)
 
@@ -142,7 +147,7 @@ class ChatListFragment : XmppFragment(), ChatListActions {
         // The chat applies the write before closing. The tab host offers Undo as soon as it is visible.
         parentFragmentManager.setFragmentResultListener(ARCHIVE_FROM_CHAT, this) { _, result ->
             val uuid = result.getString(ARCHIVE_FROM_CHAT) ?: return@setFragmentResultListener
-            val context = requireContext().applicationContext
+            val context = appLanguageContext(requireContext())
             lifecycleScope.launch {
                 showArchiveUndo(context, snackbar, this@ChatListFragment, listOf(uuid), showHint = tab == MainTab.CHATS)
             }
@@ -202,7 +207,7 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                                             CallsScreen(calls, callList, dock = dock(page), scrollToTop = scrollToTop)
                                         }
                                         MainTab.PROFILE -> {
-                                            val sections = remember { settingsSections(requireContext(), ::openSettingsPage) }
+                                            val sections = remember(language) { settingsSections(requireContext(), ::openSettingsPage) }
                                             ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop)
                                         }
                                     }
@@ -263,6 +268,11 @@ class ChatListFragment : XmppFragment(), ChatListActions {
         refresh()
         Updater.checkIfDue(requireContext())
         requestContactsPermissionIfVisible()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        language = appLanguageSummary(requireContext())
     }
 
     fun requestContactsPermissionIfVisible() {

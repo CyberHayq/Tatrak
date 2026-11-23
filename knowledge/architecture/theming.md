@@ -58,6 +58,54 @@ sources:
   header + grouped rows into the unchanged preference pages; `MainSettingsFragment` is no
   longer used but kept for upstream merges). `AppearanceFragment`: theme mode (existing
   `theme` setting and arrays), dynamic colours, accent, app-wide wallpaper with a live preview.
+- Language (2026-11-23; `am.cyberhayq.chat.ui.settings.LanguageSettings.kt`): a "Language" row after
+  Interface, its summary the chosen language or "System default". `LanguageFragment` lists "System
+  default" and every locale of `res/xml/locales_config.xml` (parsed with `getXml`; `LocaleConfig`
+  is API 33+), each in its own language with its name in the current one below, sorted by the
+  own name (`Collator` of `Locale.ROOT`), as `RadioRow`s of the Appearance page. Armenian (`hy`,
+  `hy-IR` for the traditional orthography) gets fixed names from `tatrak_language_strings.xml`;
+  `hy` and `hy-IR` are not in this branch's `locales_config` yet: the Armenian translation branch
+  adds them, and the labels are tested through `languageLabel` directly.
+  The checked row (`chosenTag`) is the stored locale itself, else the entry with the same
+  language and script (Android 13's picker may store `de-DE` for our `de`); a stored tag no longer
+  in the list (AppCompat keeps it on 8-12 after an update removed it) becomes an extra checked
+  row under "System default", so one row is always checked. The settings home and the Profile
+  tab re-read the summary in `onResume` and key their rows by it (choosing the language already
+  in effect recreates nothing).
+  A choice calls `AppCompatDelegate.setApplicationLocales` on every Android version: on 13+ that
+  is the system per-app language (kept in sync with the system setting); below 13 AppCompat
+  stores it (`AppLocalesMetadataHolderService` with `autoStoreLocales` in the manifest) and
+  applies it to the AppCompat activities, which are all of the app's activities. Below 13 the
+  service and application context keep the system language: `NotificationService` (the XMPP
+  service's notifications only) builds its texts from `tatrakLanguage()`, a context made by
+  `languageContext` (what `ContextCompat.getContextForLanguage` does, chosen locales first and
+  the system ones after them as AppCompat does, but for a given list, since AppCompat writes its
+  file asynchronously after a choice). Service start (`initializeChannels`) reads the stored
+  choice, cleans up the legacy channels and registers every channel as upstream does, then
+  re-labels the existing ones (`relabelChannels`). A choice in the Language list (when the
+  activity holds the service) and every activity's bind (`XmppActivity.registerListeners`, run
+  on both bind paths, so a choice made while unbound arrives even after the Language page was
+  left) call `setLanguage`, which only
+  re-labels the existing channels and groups (names, descriptions) and does nothing when the
+  list is unchanged; NotificationManager lookups and ringtone settings go through the service.
+  On 13+ the context is the service itself, and the re-label right after a choice may still read
+  the old resources (the system's configuration change reaches the service on its own schedule);
+  the binds after it carry an unchanged list and do nothing. `XmppConnectionService` has no
+  `onConfigurationChanged`, so on 13+ channel labels follow a language change (in the app or in
+  Android's settings) at the next service start, and below 13 a change of the system language
+  with "System default" does too (risks).
+  Tatrak's UI code that builds text away from an activity (the chat list and chat view models'
+  snapshots, the inline message search, toasts and the archive snackbar shown after a background
+  step) takes `appLanguageContext(context)`: the application context through `languageContext`
+  with AppCompat's current locales, no activity reference, cached until the chosen or the system
+  locales change; on 13+ it is the application context itself, returned before AppCompat is
+  asked (its lookup walks the activity delegates, not safe off the main thread). `languageContext`
+  overrides only the locales (a `Configuration` carrying just the locale list), so font scale,
+  night mode and the other qualifiers follow the application's own configuration. The view models
+  outlive the recreation after a choice and get the new context at their next build (the
+  recreated fragment's refresh); the chat's text cache key holds the resolved private-message
+  marker, so a cached text changes with the language. `applicationContext` used only for files, players, services and
+  preferences stays as it was.
 - Night background (owner, 2026-11-15; `NightBackground.kt`, preference `tatrak_night_background`:
   `blue_grey` default, `graphite`, `amoled`; unset or unknown = blue-grey). A plain preference read by
   key like `TatrakStyle`, `AppSettings` untouched. It replaces the old opt-in "elegant dark" switch

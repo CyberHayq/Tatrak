@@ -1,6 +1,7 @@
 package eu.siacs.conversations.ui
 
 import am.cyberhayq.chat.storage.media.EncryptedMediaStore
+import am.cyberhayq.chat.ui.settings.appLanguageContext
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.ui.media.SaveResult
 import am.cyberhayq.chat.ui.media.mediaDecodeDispatcher
@@ -156,13 +157,14 @@ class MediaViewerActivity : XmppActivity(), ViewerActions {
             fileBackend.saveInternalToExternal(locations),
             object : FutureCallback<List<File?>> {
                 override fun onSuccess(result: List<File?>) {
-                    Toast.makeText(applicationContext, SaveResult.message(applicationContext, result), Toast.LENGTH_LONG)
+                    val context = appLanguageContext(this@MediaViewerActivity)
+                    Toast.makeText(context, SaveResult.message(context, result), Toast.LENGTH_LONG)
                         .show()
                 }
 
                 override fun onFailure(t: Throwable) {
                     Log.e(Config.LOGTAG, "could not save attachment", t)
-                    Toast.makeText(applicationContext, R.string.could_not_save_files, Toast.LENGTH_LONG).show()
+                    Toast.makeText(appLanguageContext(this@MediaViewerActivity), R.string.could_not_save_files, Toast.LENGTH_LONG).show()
                 }
             },
             ContextCompat.getMainExecutor(this),

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tatrak_language">Language</string>
+    <string name="tatrak_language_system">System default</string>
+    <!-- Armenian: fixed endonyms; ICU would name hy-IR after Iran, which here only marks the traditional orthography -->
+    <string name="tatrak_language_hy" translatable="false">Հայերեն (խորհրդային ուղղագրություն)</string>
+    <string name="tatrak_language_hy_IR" translatable="false">Հայերեն (աւանդական ուղղագրութիւն)</string>
+    <string name="tatrak_language_hy_name">Armenian (Soviet orthography)</string>
+    <string name="tatrak_language_hy_IR_name">Armenian (traditional orthography)</string>
+</resources>

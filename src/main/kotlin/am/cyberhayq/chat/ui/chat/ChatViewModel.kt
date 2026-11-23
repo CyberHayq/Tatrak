@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.chat
 
+import am.cyberhayq.chat.ui.settings.appLanguageContext
 import am.cyberhayq.chat.ui.state.SnapshotSource
 import android.app.Application
 import androidx.compose.runtime.getValue
@@ -62,11 +63,11 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
                     replyUuid = replyUuid,
                 )
             val fast =
-                ChatSnapshot.build(application, service, binding.conversation, params(true), textCache)
+                ChatSnapshot.build(appLanguageContext(application), service, binding.conversation, params(true), textCache)
             publishIfCurrent(fast)
             if (missingAvatar(fast)) {
                 publishIfCurrent(
-                    ChatSnapshot.build(application, service, binding.conversation, params(false), textCache)
+                    ChatSnapshot.build(appLanguageContext(application), service, binding.conversation, params(false), textCache)
                 )
             }
         }

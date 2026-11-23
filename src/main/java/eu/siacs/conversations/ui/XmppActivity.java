@@ -482,6 +482,10 @@ public abstract class XmppActivity extends ActionBarActivity {
     protected abstract void onBackendConnected();
 
     protected void registerListeners() {
+        // Tatrak: every bind hands the in-app language to the notifications (a no-op when unchanged)
+        this.xmppConnectionService
+                .getNotificationService()
+                .setLanguage(AppCompatDelegate.getApplicationLocales());
         if (this instanceof XmppConnectionService.OnConversationUpdate) {
             this.xmppConnectionService.setOnConversationListChangedListener(
                     (XmppConnectionService.OnConversationUpdate) this);

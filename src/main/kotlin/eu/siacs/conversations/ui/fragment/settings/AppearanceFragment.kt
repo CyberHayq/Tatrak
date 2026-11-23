@@ -2,6 +2,7 @@ package eu.siacs.conversations.ui.fragment.settings
 
 import am.cyberhayq.chat.ui.chat.Wallpapers
 import am.cyberhayq.chat.ui.settings.AppearanceScreen
+import am.cyberhayq.chat.ui.settings.appLanguageContext
 import am.cyberhayq.chat.ui.theme.AvatarShape
 import am.cyberhayq.chat.ui.theme.BarBlur
 import am.cyberhayq.chat.ui.theme.FloatingBars
@@ -39,7 +40,7 @@ class AppearanceFragment : Fragment() {
     private val photoPicker =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
             if (uri == null) return@registerForActivityResult
-            val context = requireContext().applicationContext
+            val context = appLanguageContext(requireContext())
             lifecycleScope.launch {
                 val spec = Wallpapers.importPhoto(context, uri)
                 if (spec == null) {

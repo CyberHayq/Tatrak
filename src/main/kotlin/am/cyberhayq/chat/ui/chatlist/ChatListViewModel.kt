@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.chatlist
 
+import am.cyberhayq.chat.ui.settings.appLanguageContext
 import am.cyberhayq.chat.ui.state.SnapshotSource
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
@@ -22,14 +23,16 @@ class ChatListViewModel(application: Application) : AndroidViewModel(application
             // cached avatars and thumbnails only first, so the list shows up without waiting for
             // the disk; those not cached yet keep the previous snapshot's bitmap
             val previous = state.value
-            val fast = ChatListSnapshot.build(application, service, avatarSize, true, thumbnailSize = thumbnailSize)
+            // this model outlives the recreation after a language choice
+            val context = appLanguageContext(application)
+            val fast = ChatListSnapshot.build(context, service, avatarSize, true, thumbnailSize = thumbnailSize)
             publish(fast.keepAvatars(previous))
             if (fast.missingBitmaps()) {
                 // the rows on screen first, then the rest
-                val top = ChatListSnapshot.build(application, service, avatarSize, false, TOP_ROWS, thumbnailSize)
+                val top = ChatListSnapshot.build(context, service, avatarSize, false, TOP_ROWS, thumbnailSize)
                 publish(top.keepAvatars(previous))
                 if (top.missingBitmaps()) {
-                    publish(ChatListSnapshot.build(application, service, avatarSize, false, thumbnailSize = thumbnailSize))
+                    publish(ChatListSnapshot.build(context, service, avatarSize, false, thumbnailSize = thumbnailSize))
                 }
             }
         }

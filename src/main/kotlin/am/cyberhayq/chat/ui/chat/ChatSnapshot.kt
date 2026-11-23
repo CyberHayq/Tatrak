@@ -1199,19 +1199,20 @@ object ChatSnapshot {
             val meNick =
                 if (message.hasMeCommand()) UIHelper.getMessageDisplayName(message) else null
             val privateTo = if (isPrivate && outgoing) message.counterpart?.resource else null
+            // resolved before the lookup: the key follows the language it is in
+            val privateMarker =
+                if (!isPrivate) {
+                    null
+                } else if (!outgoing) {
+                    context.getString(R.string.private_message)
+                } else {
+                    context.getString(R.string.private_message_to, privateTo ?: "")
+                }
             val key =
                 // the whole body, not its hash: an edit to a colliding text must not show the old one
-                "${message.uuid}|$outgoing|${palette.hashCode()}|$isPrivate|" +
-                    "${highlight?.pattern()}|$meNick|$privateTo|$body"
+                "${message.uuid}|$outgoing|${palette.hashCode()}|$privateMarker|" +
+                    "${highlight?.pattern()}|$meNick|$body"
             return textCache.getOrPut(key) {
-                val privateMarker =
-                    if (!isPrivate) {
-                        null
-                    } else if (!outgoing) {
-                        context.getString(R.string.private_message)
-                    } else {
-                        context.getString(R.string.private_message_to, privateTo ?: "")
-                    }
                 MessageFormatter.format(
                         body,
                         if (outgoing) palette.textOutgoing else palette.textIncoming,

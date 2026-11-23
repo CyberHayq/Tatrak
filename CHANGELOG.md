@@ -6,6 +6,12 @@
 - Added Eastern Armenian in Soviet and traditional orthographies.
 
 ### Interface
+- Settings > Language chooses the app language apart from the system one, on every Android
+  version (Android 13+ keeps it in sync with the system's per-app language). The XMPP service's
+  notifications (messages, calls, failed deliveries, the foreground notification) follow it too;
+  their channel names change at once on Android 8-12 and at the next start of the service on
+  Android 13+ or after a change of the system language. On Android 8-12 a few other texts (backup import progress, storage
+  recovery, toasts from background work) stay in the system language.
 - Chats, Contacts, Calls and Profile are tabs under the bottom bar: a tap slides to the tab, the
   bar stays in place, Back returns to Chats (as in Telegram).
 - A chat opens and closes as in Telegram: a short fade with a small shift; the list stays still.

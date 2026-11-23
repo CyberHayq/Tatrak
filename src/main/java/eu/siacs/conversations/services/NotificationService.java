@@ -2,6 +2,7 @@ package eu.siacs.conversations.services;
 
 import static eu.siacs.conversations.utils.Compatibility.s;
 
+import am.cyberhayq.chat.ui.settings.LanguageSettingsKt;
 import android.Manifest;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -30,6 +31,7 @@ import android.util.Log;
 import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 import androidx.core.app.ActivityCompat;
+import androidx.core.app.LocaleManagerCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationCompat.BigPictureStyle;
 import androidx.core.app.NotificationCompat.Builder;
@@ -39,6 +41,7 @@ import androidx.core.app.RemoteInput;
 import androidx.core.content.ContextCompat;
 import androidx.core.content.pm.ShortcutInfoCompat;
 import androidx.core.graphics.drawable.IconCompat;
+import androidx.core.os.LocaleListCompat;
 import com.google.common.base.Joiner;
 import com.google.common.base.Optional;
 import com.google.common.base.Splitter;
@@ -123,8 +126,19 @@ public class NotificationService {
             "incoming_calls_channel#";
     public static final String MESSAGES_NOTIFICATION_CHANNEL = "messages";
 
+    // Tatrak: the context every notification text and channel name comes from (see tatrakLanguage())
+    private volatile Context tatrakLanguage;
+    // Tatrak: the in-app language tatrakLanguage was made for (empty: the system's)
+    private LocaleListCompat tatrakLocales = LocaleListCompat.getEmptyLocaleList();
+
     NotificationService(final XmppConnectionService service) {
         this.mXmppConnectionService = service;
+    }
+
+    // Tatrak: below API 33 the service keeps the system language; texts follow the in-app one
+    private Context tatrakLanguage() {
+        final Context language = tatrakLanguage;
+        return language == null ? mXmppConnectionService : language;
     }
 
     private static boolean displaySnoozeAction(List<Message> messages) {
@@ -153,9 +167,12 @@ public class NotificationService {
 
     @RequiresApi(api = Build.VERSION_CODES.O)
     void initializeChannels() {
-        final Context c = mXmppConnectionService;
+        // Tatrak: texts in the stored in-app language; lookups and settings through the service
+        tatrakLocales = LocaleManagerCompat.getApplicationLocales(mXmppConnectionService);
+        tatrakLanguage = LanguageSettingsKt.languageContext(mXmppConnectionService, tatrakLocales);
+        final Context c = tatrakLanguage;
         final NotificationManager notificationManager =
-                c.getSystemService(NotificationManager.class);
+                mXmppConnectionService.getSystemService(NotificationManager.class);
         if (notificationManager == null) {
             return;
         }
@@ -213,7 +230,7 @@ public class NotificationService {
         exportChannel.setGroup("status");
         notificationManager.createNotificationChannel(exportChannel);
 
-        createInitialIncomingCallChannelIfNecessary(c);
+        createInitialIncomingCallChannelIfNecessary(mXmppConnectionService); // Tatrak: service
 
         final NotificationChannel ongoingCallsChannel =
                 new NotificationChannel(
@@ -237,7 +254,7 @@ public class NotificationService {
         notificationManager.createNotificationChannel(missedCallsChannel);
 
         final var messagesChannel =
-                prepareMessagesChannel(mXmppConnectionService, MESSAGES_NOTIFICATION_CHANNEL);
+                prepareMessagesChannel(c, MESSAGES_NOTIFICATION_CHANNEL); // Tatrak: c
         notificationManager.createNotificationChannel(messagesChannel);
         final NotificationChannel silentMessagesChannel =
                 new NotificationChannel(
@@ -266,6 +283,89 @@ public class NotificationService {
                         .build());
         deliveryFailedChannel.setGroup("chats");
         notificationManager.createNotificationChannel(deliveryFailedChannel);
+        relabelChannels(); // Tatrak: the existing incoming-call channel too
+    }
+
+    /**
+     * Tatrak: a choice in the Language list (just made, or before the service was bound; AppCompat
+     * stores it asynchronously, so it is passed): texts and the existing channels' labels.
+     */
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    public void setLanguage(final LocaleListCompat locales) {
+        if (locales.equals(tatrakLocales)) {
+            return;
+        }
+        tatrakLocales = locales;
+        tatrakLanguage = LanguageSettingsKt.languageContext(mXmppConnectionService, locales);
+        relabelChannels();
+    }
+
+    /**
+     * Tatrak: names and descriptions of the existing channels and groups, by the ids
+     * initializeChannels registers; re-creating an existing id changes only its labels, so the
+     * user's channel settings stay.
+     */
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private void relabelChannels() {
+        final Context c = tatrakLanguage();
+        final NotificationManager notificationManager =
+                mXmppConnectionService.getSystemService(NotificationManager.class);
+        if (notificationManager == null) {
+            return;
+        }
+        final Map<String, Integer> groups =
+                ImmutableMap.of(
+                        "status", R.string.notification_group_status_information,
+                        "chats", R.string.notification_group_messages,
+                        "calls", R.string.notification_group_calls);
+        for (final NotificationChannelGroup group :
+                notificationManager.getNotificationChannelGroups()) {
+            final Integer name = groups.get(group.getId());
+            if (name != null) {
+                notificationManager.createNotificationChannelGroup(
+                        new NotificationChannelGroup(group.getId(), c.getString(name)));
+            }
+        }
+        for (final NotificationChannel channel : notificationManager.getNotificationChannels()) {
+            final String id = channel.getId();
+            switch (id.startsWith(INCOMING_CALLS_NOTIFICATION_CHANNEL_PREFIX)
+                    ? INCOMING_CALLS_NOTIFICATION_CHANNEL_PREFIX
+                    : id) {
+                case "foreground" -> {
+                    channel.setName(c.getString(R.string.foreground_service_channel_name));
+                    channel.setDescription(
+                            c.getString(
+                                    R.string.foreground_service_channel_description,
+                                    c.getString(R.string.app_name)));
+                }
+                case "error" -> {
+                    channel.setName(c.getString(R.string.error_channel_name));
+                    channel.setDescription(c.getString(R.string.error_channel_description));
+                }
+                case "compression" ->
+                        channel.setName(c.getString(R.string.video_compression_channel_name));
+                case "backup" -> channel.setName(c.getString(R.string.backup_channel_name));
+                case INCOMING_CALLS_NOTIFICATION_CHANNEL_PREFIX ->
+                        channel.setName(c.getString(R.string.incoming_calls_channel_name));
+                case "ongoing_calls" ->
+                        channel.setName(c.getString(R.string.ongoing_calls_channel_name));
+                case "missed_calls" ->
+                        channel.setName(c.getString(R.string.missed_calls_channel_name));
+                case MESSAGES_NOTIFICATION_CHANNEL ->
+                        channel.setName(c.getString(R.string.messages_channel_name));
+                case "silent_messages" -> {
+                    channel.setName(c.getString(R.string.silent_messages_channel_name));
+                    channel.setDescription(
+                            c.getString(R.string.silent_messages_channel_description));
+                }
+                case "delivery_failed" ->
+                        channel.setName(c.getString(R.string.delivery_failed_channel_name));
+                default -> {
+                    continue;
+                }
+            }
+            notificationManager.createNotificationChannel(channel);
+        }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.R)
@@ -533,7 +633,7 @@ public class NotificationService {
                         .setAutoCancel(true)
                         .setSmallIcon(R.drawable.ic_error_24dp)
                         .setContentText(
-                                mXmppConnectionService
+                                tatrakLanguage()
                                         .getResources()
                                         .getQuantityText(
                                                 R.plurals.some_messages_could_not_be_delivered,
@@ -544,9 +644,9 @@ public class NotificationService {
         final Notification summaryNotification =
                 new Builder(mXmppConnectionService, "delivery_failed")
                         .setContentTitle(
-                                mXmppConnectionService.getString(R.string.failed_deliveries))
+                                tatrakLanguage().getString(R.string.failed_deliveries))
                         .setContentText(
-                                mXmppConnectionService
+                                tatrakLanguage()
                                         .getResources()
                                         .getQuantityText(
                                                 R.plurals.some_messages_could_not_be_delivered,
@@ -601,11 +701,11 @@ public class NotificationService {
         if (media.contains(Media.VIDEO)) {
             builder.setSmallIcon(R.drawable.ic_videocam_24dp);
             builder.setContentTitle(
-                    mXmppConnectionService.getString(R.string.rtp_state_incoming_video_call));
+                    tatrakLanguage().getString(R.string.rtp_state_incoming_video_call));
         } else {
             builder.setSmallIcon(R.drawable.ic_call_24dp);
             builder.setContentTitle(
-                    mXmppConnectionService.getString(R.string.rtp_state_incoming_call));
+                    tatrakLanguage().getString(R.string.rtp_state_incoming_call));
         }
         final Contact contact = id.getContact();
         builder.setLargeIcon(
@@ -636,7 +736,7 @@ public class NotificationService {
         builder.addAction(
                 new NotificationCompat.Action.Builder(
                                 R.drawable.ic_call_end_24dp,
-                                mXmppConnectionService.getString(R.string.dismiss_call),
+                                tatrakLanguage().getString(R.string.dismiss_call),
                                 createCallAction(
                                         id.sessionId,
                                         XmppConnectionService.ACTION_DISMISS_CALL,
@@ -645,7 +745,7 @@ public class NotificationService {
         builder.addAction(
                 new NotificationCompat.Action.Builder(
                                 R.drawable.ic_call_24dp,
-                                mXmppConnectionService.getString(R.string.answer_call),
+                                tatrakLanguage().getString(R.string.answer_call),
                                 createPendingRtpSession(
                                         id, RtpSessionActivity.ACTION_ACCEPT_CALL, 103))
                         .build());
@@ -669,18 +769,18 @@ public class NotificationService {
             builder.setSmallIcon(R.drawable.ic_videocam_24dp);
             if (ongoingCall.reconnecting) {
                 builder.setContentTitle(
-                        mXmppConnectionService.getString(R.string.reconnecting_video_call));
+                        tatrakLanguage().getString(R.string.reconnecting_video_call));
             } else {
                 builder.setContentTitle(
-                        mXmppConnectionService.getString(R.string.ongoing_video_call));
+                        tatrakLanguage().getString(R.string.ongoing_video_call));
             }
         } else {
             builder.setSmallIcon(R.drawable.ic_call_24dp);
             if (ongoingCall.reconnecting) {
                 builder.setContentTitle(
-                        mXmppConnectionService.getString(R.string.reconnecting_call));
+                        tatrakLanguage().getString(R.string.reconnecting_call));
             } else {
-                builder.setContentTitle(mXmppConnectionService.getString(R.string.ongoing_call));
+                builder.setContentTitle(tatrakLanguage().getString(R.string.ongoing_call));
             }
         }
         builder.setContentText(id.account.getRoster().getContact(id.with).getDisplayName());
@@ -692,7 +792,7 @@ public class NotificationService {
         builder.addAction(
                 new NotificationCompat.Action.Builder(
                                 R.drawable.ic_call_end_24dp,
-                                mXmppConnectionService.getString(R.string.hang_up),
+                                tatrakLanguage().getString(R.string.hang_up),
                                 createCallAction(
                                         id.sessionId, XmppConnectionService.ACTION_END_CALL, 104))
                         .build());
@@ -1091,13 +1191,13 @@ public class NotificationService {
         }
         final String title =
                 (totalCalls == 1)
-                        ? mXmppConnectionService.getString(R.string.missed_call)
+                        ? tatrakLanguage().getString(R.string.missed_call)
                         : (mMissedCalls.size() == 1)
-                                ? mXmppConnectionService
+                                ? tatrakLanguage()
                                         .getResources()
                                         .getQuantityString(
                                                 R.plurals.n_missed_calls, totalCalls, totalCalls)
-                                : mXmppConnectionService
+                                : tatrakLanguage()
                                         .getResources()
                                         .getQuantityString(
                                                 R.plurals.n_missed_calls_from_m_contacts,
@@ -1137,8 +1237,8 @@ public class NotificationService {
                 new NotificationCompat.Builder(mXmppConnectionService, "missed_calls");
         final String title =
                 (info.getNumberOfCalls() == 1)
-                        ? mXmppConnectionService.getString(R.string.missed_call)
-                        : mXmppConnectionService
+                        ? tatrakLanguage().getString(R.string.missed_call)
+                        : tatrakLanguage()
                                 .getResources()
                                 .getQuantityString(
                                         R.plurals.n_missed_calls,
@@ -1150,7 +1250,7 @@ public class NotificationService {
             builder.setTicker(title);
         } else {
             builder.setTicker(
-                    mXmppConnectionService
+                    tatrakLanguage()
                             .getResources()
                             .getQuantityString(
                                     R.plurals.n_missed_calls_from_x,
@@ -1203,7 +1303,7 @@ public class NotificationService {
                         notify ? MESSAGES_NOTIFICATION_CHANNEL : "silent_messages");
         final NotificationCompat.InboxStyle style = new NotificationCompat.InboxStyle();
         style.setBigContentTitle(
-                mXmppConnectionService
+                tatrakLanguage()
                         .getResources()
                         .getQuantityString(
                                 R.plurals.x_unread_conversations,
@@ -1224,7 +1324,7 @@ public class NotificationService {
                         new SpannableString(
                                 name
                                         + ": "
-                                        + mXmppConnectionService
+                                        + tatrakLanguage()
                                                 .getResources()
                                                 .getQuantityString(
                                                         R.plurals.x_messages, count, count));
@@ -1236,7 +1336,7 @@ public class NotificationService {
                                 name
                                         + ": "
                                         + UIHelper.getMessagePreview(
-                                                        mXmppConnectionService, messages.get(0))
+                                                        tatrakLanguage(), messages.get(0))
                                                 .first);
                 styledString.setSpan(new StyleSpan(Typeface.BOLD), 0, name.length(), 0);
                 style.addLine(styledString);
@@ -1244,7 +1344,7 @@ public class NotificationService {
             names.add(name);
         }
         final String contentTitle =
-                mXmppConnectionService
+                tatrakLanguage()
                         .getResources()
                         .getQuantityString(
                                 R.plurals.x_unread_conversations,
@@ -1283,7 +1383,7 @@ public class NotificationService {
         if (hideMessageText()) {
             int count = messages.size();
             notificationBuilder.setContentText(
-                    mXmppConnectionService
+                    tatrakLanguage()
                             .getResources()
                             .getQuantityString(R.plurals.x_messages, count, count));
         } else {
@@ -1296,19 +1396,19 @@ public class NotificationService {
             }
             RemoteInput remoteInput =
                     new RemoteInput.Builder("text_reply")
-                            .setLabel(UIHelper.getMessageHint(mXmppConnectionService, conversation))
+                            .setLabel(UIHelper.getMessageHint(tatrakLanguage(), conversation))
                             .build();
             PendingIntent markAsReadPendingIntent = createReadPendingIntent(conversation);
             NotificationCompat.Action markReadAction =
                     new NotificationCompat.Action.Builder(
                                     R.drawable.ic_mark_chat_read_24dp,
-                                    mXmppConnectionService.getString(R.string.mark_as_read),
+                                    tatrakLanguage().getString(R.string.mark_as_read),
                                     markAsReadPendingIntent)
                             .setSemanticAction(
                                     NotificationCompat.Action.SEMANTIC_ACTION_MARK_AS_READ)
                             .setShowsUserInterface(false)
                             .build();
-            final String replyLabel = mXmppConnectionService.getString(R.string.reply);
+            final String replyLabel = tatrakLanguage().getString(R.string.reply);
             final String lastMessageUuid = Iterables.getLast(messages).getUuid();
             final NotificationCompat.Action replyAction =
                     new NotificationCompat.Action.Builder(
@@ -1336,7 +1436,7 @@ public class NotificationService {
             }
 
             if (displaySnoozeAction(messages)) {
-                String label = mXmppConnectionService.getString(R.string.snooze);
+                String label = tatrakLanguage().getString(R.string.snooze);
                 PendingIntent pendingSnoozeIntent = createSnoozeIntent(conversation);
                 NotificationCompat.Action snoozeAction =
                         new NotificationCompat.Action.Builder(
@@ -1354,7 +1454,7 @@ public class NotificationService {
                             createShowLocationIntent(firstLocationMessage);
                     if (pendingShowLocationIntent != null) {
                         final String label =
-                                mXmppConnectionService
+                                tatrakLanguage()
                                         .getResources()
                                         .getString(R.string.show_location);
                         NotificationCompat.Action locationAction =
@@ -1372,12 +1472,12 @@ public class NotificationService {
                 Message firstDownloadableMessage = getFirstDownloadableMessage(messages);
                 if (firstDownloadableMessage != null) {
                     String label =
-                            mXmppConnectionService
+                            tatrakLanguage()
                                     .getResources()
                                     .getString(
                                             R.string.download_x_file,
                                             UIHelper.getFileDescriptionString(
-                                                    mXmppConnectionService,
+                                                    tatrakLanguage(),
                                                     firstDownloadableMessage));
                     PendingIntent pendingDownloadIntent =
                             createDownloadIntent(firstDownloadableMessage);
@@ -1447,7 +1547,7 @@ public class NotificationService {
             bigPictureStyle.bigPicture(bitmap);
             if (tmp.isEmpty()) {
                 final String description =
-                        UIHelper.getFileDescriptionString(mXmppConnectionService, message);
+                        UIHelper.getFileDescriptionString(tatrakLanguage(), message);
                 builder.setContentText(description);
                 builder.setTicker(description);
             } else {
@@ -1492,7 +1592,7 @@ public class NotificationService {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
             final Conversation conversation = (Conversation) messages.get(0).getConversation();
             final Person.Builder meBuilder =
-                    new Person.Builder().setName(mXmppConnectionService.getString(R.string.me));
+                    new Person.Builder().setName(tatrakLanguage().getString(R.string.me));
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
                 meBuilder.setIcon(
                         IconCompat.createWithBitmap(
@@ -1520,7 +1620,7 @@ public class NotificationService {
                                     mXmppConnectionService.getFileBackend().getFile(message));
                     NotificationCompat.MessagingStyle.Message imageMessage =
                             new NotificationCompat.MessagingStyle.Message(
-                                    UIHelper.getMessagePreview(mXmppConnectionService, message)
+                                    UIHelper.getMessagePreview(tatrakLanguage(), message)
                                             .first,
                                     message.getTimeSent(),
                                     sender);
@@ -1528,7 +1628,7 @@ public class NotificationService {
                     messagingStyle.addMessage(imageMessage);
                 } else {
                     messagingStyle.addMessage(
-                            UIHelper.getMessagePreview(mXmppConnectionService, message, '\n').first,
+                            UIHelper.getMessagePreview(tatrakLanguage(), message, '\n').first,
                             message.getTimeSent(),
                             sender);
                 }
@@ -1541,7 +1641,7 @@ public class NotificationService {
                         new NotificationCompat.BigTextStyle().bigText(getMergedBodies(messages)));
                 final CharSequence preview =
                         UIHelper.getMessagePreview(
-                                        mXmppConnectionService, Iterables.getLast(messages))
+                                        tatrakLanguage(), Iterables.getLast(messages))
                                 .first;
                 builder.setContentText(preview);
                 builder.setTicker(preview);
@@ -1565,7 +1665,7 @@ public class NotificationService {
                     builder.setTicker(styledString);
                 } else {
                     final String text =
-                            mXmppConnectionService
+                            tatrakLanguage()
                                     .getResources()
                                     .getQuantityString(R.plurals.x_messages, count, count);
                     builder.setContentText(text);
@@ -1613,7 +1713,7 @@ public class NotificationService {
                         Collections2.transform(
                                 messages,
                                 m ->
-                                        UIHelper.getMessagePreview(mXmppConnectionService, m, '\n')
+                                        UIHelper.getMessagePreview(tatrakLanguage(), m, '\n')
                                                 .first));
     }
 
@@ -1823,7 +1923,7 @@ public class NotificationService {
 
     Notification createForegroundNotification() {
         final Notification.Builder mBuilder = new Notification.Builder(mXmppConnectionService);
-        mBuilder.setContentTitle(mXmppConnectionService.getString(R.string.app_name));
+        mBuilder.setContentTitle(tatrakLanguage().getString(R.string.app_name));
         final List<Account> accounts = mXmppConnectionService.getAccounts();
         final int enabled;
         final int connected;
@@ -1835,7 +1935,7 @@ public class NotificationService {
             connected = Iterables.size(Iterables.filter(accounts, Account::isOnlineAndConnected));
         }
         mBuilder.setContentText(
-                mXmppConnectionService.getString(R.string.connected_accounts, connected, enabled));
+                tatrakLanguage().getString(R.string.connected_accounts, connected, enabled));
         final PendingIntent openIntent = createOpenConversationsIntent();
         if (openIntent != null) {
             mBuilder.setContentIntent(openIntent);
@@ -1851,14 +1951,14 @@ public class NotificationService {
             mBuilder.setChannelId("foreground");
             mBuilder.addAction(
                     R.drawable.ic_logout_24dp,
-                    mXmppConnectionService.getString(R.string.log_out),
+                    tatrakLanguage().getString(R.string.log_out),
                     pendingServiceIntent(
                             mXmppConnectionService,
                             XmppConnectionService.ACTION_TEMPORARILY_DISABLE,
                             87));
             mBuilder.addAction(
                     R.drawable.ic_notifications_off_24dp,
-                    mXmppConnectionService.getString(R.string.hide_notification),
+                    tatrakLanguage().getString(R.string.hide_notification),
                     pendingNotificationSettingsIntent(mXmppConnectionService));
         }
 
@@ -1929,18 +2029,18 @@ public class NotificationService {
             return;
         } else if (errors.size() == 1) {
             mBuilder.setContentTitle(
-                    mXmppConnectionService.getString(R.string.problem_connecting_to_account));
+                    tatrakLanguage().getString(R.string.problem_connecting_to_account));
             mBuilder.setContentText(
                     Iterables.getOnlyElement(errors).getJid().asBareJid().toString());
         } else {
             mBuilder.setContentTitle(
-                    mXmppConnectionService.getString(R.string.problem_connecting_to_accounts));
-            mBuilder.setContentText(mXmppConnectionService.getString(R.string.touch_to_fix));
+                    tatrakLanguage().getString(R.string.problem_connecting_to_accounts));
+            mBuilder.setContentText(tatrakLanguage().getString(R.string.touch_to_fix));
         }
         try {
             mBuilder.addAction(
                     R.drawable.ic_autorenew_24dp,
-                    mXmppConnectionService.getString(R.string.try_again),
+                    tatrakLanguage().getString(R.string.try_again),
                     pendingServiceIntent(
                             mXmppConnectionService, XmppConnectionService.ACTION_TRY_AGAIN, 45));
             mBuilder.setDeleteIntent(
@@ -1958,7 +2058,7 @@ public class NotificationService {
             if (TorServiceUtils.isOrbotInstalled(mXmppConnectionService)) {
                 mBuilder.addAction(
                         R.drawable.ic_play_circle_24dp,
-                        mXmppConnectionService.getString(R.string.start_orbot),
+                        tatrakLanguage().getString(R.string.start_orbot),
                         PendingIntent.getActivity(
                                 mXmppConnectionService,
                                 147,
@@ -1970,7 +2070,7 @@ public class NotificationService {
             } else {
                 mBuilder.addAction(
                         R.drawable.ic_download_24dp,
-                        mXmppConnectionService.getString(R.string.install_orbot),
+                        tatrakLanguage().getString(R.string.install_orbot),
                         PendingIntent.getActivity(
                                 mXmppConnectionService,
                                 146,
@@ -2020,7 +2120,7 @@ public class NotificationService {
 
     private Notification videoTranscoding(final int current, @Nullable final Message message) {
         final Notification.Builder builder = new Notification.Builder(mXmppConnectionService);
-        builder.setContentTitle(mXmppConnectionService.getString(R.string.transcoding_video));
+        builder.setContentTitle(tatrakLanguage().getString(R.string.transcoding_video));
         if (current >= 0) {
             builder.setProgress(100, current, false);
         } else {

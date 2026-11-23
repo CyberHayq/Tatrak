@@ -172,6 +172,7 @@ is still pending. Planned features have no committed release dates.
 | Frequently used reactions in the message menu | 🧪 In testing |
 | Updates from GitHub releases inside the app (beta versions optional), release signature checked | 🧪 In testing |
 | Private messages to a group participant from the chat (text and replies) | 🧪 In testing |
+| App language chosen in the settings, on every Android version | 🧪 In testing |
 
 ### 🗺️ Roadmap
 

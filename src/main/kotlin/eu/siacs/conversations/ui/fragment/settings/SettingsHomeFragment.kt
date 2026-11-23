@@ -2,8 +2,10 @@ package eu.siacs.conversations.ui.fragment.settings
 
 import am.cyberhayq.chat.ui.accounts.AccountFilter
 import am.cyberhayq.chat.ui.settings.AccountHeader
+import am.cyberhayq.chat.ui.settings.LanguageFragment
 import am.cyberhayq.chat.ui.settings.SettingsHomeScreen
 import am.cyberhayq.chat.ui.settings.SettingsRow
+import am.cyberhayq.chat.ui.settings.appLanguageSummary
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.content.Context
 import android.content.Intent
@@ -14,6 +16,7 @@ import android.view.View
 import android.view.ViewGroup
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.ComposeView
@@ -41,6 +44,9 @@ class SettingsHomeFragment : Fragment(), OnBackendConnected {
 
     private var account by mutableStateOf<AccountHeader?>(null)
 
+    /** The language row's summary, re-read on resume: choosing the language already in effect recreates nothing. */
+    private var language by mutableStateOf("")
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
@@ -50,7 +56,8 @@ class SettingsHomeFragment : Fragment(), OnBackendConnected {
             setViewCompositionStrategy(ViewCompositionStrategy.DisposeOnViewTreeLifecycleDestroyed)
             setContent {
                 TatrakTheme {
-                    SettingsHomeScreen(account, { AccountUtils.launchManageAccounts(requireActivity()) }, settingsSections(requireContext()) { open(page(it)!!) })
+                    val sections = remember(language) { settingsSections(requireContext()) { open(page(it)!!) } }
+                    SettingsHomeScreen(account, { AccountUtils.launchManageAccounts(requireActivity()) }, sections)
                 }
             }
         }
@@ -59,6 +66,11 @@ class SettingsHomeFragment : Fragment(), OnBackendConnected {
         super.onStart()
         requireActivity().setTitle(R.string.title_activity_settings)
         loadAccount()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        language = appLanguageSummary(requireContext())
     }
 
     override fun onBackendConnected() = loadAccount()
@@ -85,6 +97,7 @@ class SettingsHomeFragment : Fragment(), OnBackendConnected {
             when (title) {
                 R.string.tatrak_appearance -> AppearanceFragment()
                 R.string.pref_title_interface -> InterfaceSettingsFragment()
+                R.string.tatrak_language -> LanguageFragment()
                 R.string.notifications -> NotificationsSettingsFragment()
                 R.string.pref_privacy -> PrivacySettingsFragment()
                 R.string.pref_title_security -> SecuritySettingsFragment()
@@ -120,6 +133,9 @@ internal fun settingsSections(context: Context, open: (Int) -> Unit): List<List<
         listOf(
             row(R.drawable.ic_palette_24dp, R.string.tatrak_appearance, R.string.tatrak_appearance_summary, 0xFF3E88F7),
             row(R.drawable.ic_touch_app_24dp, R.string.pref_title_interface, R.string.pref_summary_appearance, 0xFF4AA6E0),
+            SettingsRow(R.drawable.ic_public_24dp, context.getString(R.string.tatrak_language), appLanguageSummary(context), Color(0xFFA36CD9)) {
+                open(R.string.tatrak_language)
+            },
         ),
         listOf(
             row(R.drawable.ic_notifications_24dp, R.string.notifications, R.string.pref_notifications_summary, 0xFFEB5545),
