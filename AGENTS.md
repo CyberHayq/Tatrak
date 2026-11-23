@@ -73,12 +73,15 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
   `knowledge/project/reference-sources.md`). Check the licence before copying: Tatrak is GPL-3.0, so AGPL code is not copied (see `knowledge/project/reference-sources.md`).
 - Every bug or weakness found in Tatrak (review, audit, testing) is also checked in current
   Conversations upstream and monocles (a subagent may do the check). If one of them has it too,
-  record it outside the repository in `../tatrak-private-findings/` (where, how to reproduce, our fix) so the
-  owner can file issues with their developers later.
+  record it outside this repository, one file per finding in `../tatrak-private-findings/findings/`
+  (where, how to reproduce, our fix; add it to that folder's `README.md`), so the owner can file
+  issues with their developers later. That folder is a clone of a separate private repository:
+  commit and push the finding there.
 - A defect of another project that is not public yet never goes into the repository: not in
   code comments, commit messages, `knowledge/` or `docs/`; it lives only in
-  `../tatrak-private-findings/` until it is disclosed. Older details in `docs/` sit between
-  private markers, which the public export cuts (`knowledge/ops/public-export.md`).
+  `../tatrak-private-findings/` (its own private repository) until it is disclosed. Older details
+  in `docs/` sit between private markers, which the public export cuts
+  (`knowledge/ops/public-export.md`).
 
 ## Handing work to another agent
 
