@@ -671,15 +671,10 @@ object ChatSnapshot {
         val isGroup = conversation.mode == Conversational.MODE_MULTI
         val participating = !isGroup || conversation.mucOptions.participating()
         val correcting = conversation.correctingMessage
-        val nextCounterpart = conversation.nextCounterpart
+        // a group private message's hint is the composer's (ChatViewModel.privateTo), not this background snapshot's
         val hint =
             when {
                 correcting != null -> context.getString(R.string.send_corrected_message)
-                isGroup && nextCounterpart != null ->
-                    context.getString(
-                        R.string.send_private_message_to,
-                        nextCounterpart.resource ?: "",
-                    )
                 !participating -> context.getString(R.string.you_are_not_participating)
                 else -> UIHelper.getMessageHint(context, conversation)
             }
@@ -1416,6 +1411,8 @@ object ChatSnapshot {
                 canReply =
                     !showError &&
                         !encrypted &&
+                        // a private message is answered privately (to its sender or recipient): only with that full JID
+                        !(message.isPrivateMessage && message.counterpart?.isFullJid != true) &&
                         if (isAttachment(message)) {
                             // a quote alone ("> image") would say nothing without the reference
                             replyId(message, isGroup) != null

@@ -424,6 +424,11 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     public void onConversationSelected(Conversation conversation) {
         clearPendingViewIntent();
         if (getConversationInSecondary() == conversation) {
+            // Tatrak: selecting the open chat again is an entry from the list; a private message ends
+            if (getSupportFragmentManager().findFragmentById(R.id.secondary_fragment)
+                    instanceof ChatFragment chatFragment) {
+                chatFragment.endPrivateMessage();
+            }
             Log.d(
                     Config.LOGTAG,
                     "ignore onConversationSelected() because conversation is already open");
@@ -482,6 +487,10 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         final var existing = fragmentManager.findFragmentById(container);
         final var arguments = extras == null ? new Bundle() : extras;
         final boolean classic = wantsClassic(conversation, extras);
+        if (classic && existing instanceof ChatFragment chatFragment) {
+            // Tatrak: a group private message written in ChatFragment does not go along to the classic screen
+            chatFragment.endPrivateMessage();
+        }
         if (classic && existing instanceof ConversationFragment conversationFragment) {
             conversationFragment.reInit(conversation, arguments);
             return;
@@ -530,9 +539,10 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         if (conversation.getNextEncryption() == Message.ENCRYPTION_PGP) {
             return true;
         }
+        // Tatrak: a private message is composed in ChatFragment; a nick alone (a mention) stays classic
+        final boolean pm = extras != null && extras.getBoolean(EXTRA_IS_PRIVATE_MESSAGE, false);
         return extras != null
-                && (extras.containsKey(EXTRA_NICK)
-                        || extras.getBoolean(EXTRA_IS_PRIVATE_MESSAGE, false)
+                && ((extras.containsKey(EXTRA_NICK) && !pm)
                         || extras.containsKey(EXTRA_POST_INIT_ACTION));
     }
 
@@ -720,7 +730,7 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         openConversation(conversation, extras);
     }
 
-    // Tatrak: the classic PM composer handles these extras in the current activity.
+    // Tatrak: the chat screen (ChatFragment's PM bar) handles these extras in the current activity.
     @Override
     public void privateMsgInMuc(final Conversation conversation, final String nick) {
         final Bundle extras = new Bundle();

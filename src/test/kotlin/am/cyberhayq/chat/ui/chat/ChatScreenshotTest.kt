@@ -275,6 +275,30 @@ class ChatScreenshotTest {
             privateChat(it)
         }
 
+    /** A group private message (text only): the bar names the occupant; no attach button, no mic, the classic hint. */
+    @Test fun chatPrivateMessage() {
+        capture("chat_private_message", darkTheme = false, privateTo = "Ani") { groupChat(it) }
+        compose.onNodeWithText("Send private message").assertExists()
+        compose.onNodeWithText("Send clear text message", useUnmergedTree = true).assertExists()
+        compose.onNodeWithContentDescription("Attach").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Record a voice message").assertDoesNotExist()
+        compose.onNodeWithContentDescription("Send").assertIsNotEnabled()
+    }
+
+    /** A private reply: the reply panel over the private-message bar; floating bars, so the pill composer draws them. */
+    @Test
+    @Config(qualifiers = "+night")
+    fun chatPrivateReplyDark() =
+        capture(
+            "chat_private_reply_dark",
+            darkTheme = true,
+            floating = true,
+            reply = ReplyPreview("m4", "Ani", "See you tomorrow at 10?", 0xFFE17076.toInt()),
+            privateTo = "Ani",
+        ) {
+            groupChat(it)
+        }
+
     @Test fun chatReplyPhoto() = replyPhoto("chat_reply_photo", darkTheme = false)
 
     @Test
@@ -1038,6 +1062,7 @@ class ChatScreenshotTest {
         floating: Boolean = false,
         /** "Blur under bars" in effect; off unless asked, so the floating screenshots of step 4 stay as they were. */
         blur: BarBlur = BarBlur.OFF,
+        privateTo: String? = null,
         state: @Composable (Samples) -> ChatState,
     ) {
         compose.setContent {
@@ -1056,6 +1081,7 @@ class ChatScreenshotTest {
                     recording = MutableStateFlow(recording),
                     previews = previews,
                     seenMentions = mentions?.seen.orEmpty(),
+                    privateTo = privateTo,
                 )
               }
             }

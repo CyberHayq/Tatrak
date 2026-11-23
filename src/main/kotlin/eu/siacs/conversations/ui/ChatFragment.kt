@@ -109,6 +109,7 @@ import eu.siacs.conversations.utils.NickValidityChecker
 import eu.siacs.conversations.utils.QuickLoader
 import eu.siacs.conversations.utils.TimeFrameUtils
 import eu.siacs.conversations.utils.UIHelper
+import eu.siacs.conversations.xmpp.Jid
 import eu.siacs.conversations.xmpp.manager.ChatStateManager
 import eu.siacs.conversations.xmpp.jingle.AbstractJingleConnection
 import eu.siacs.conversations.xmpp.jingle.Media
@@ -151,12 +152,14 @@ import okhttp3.Request
 class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     private sealed interface AfterTrust {
-        data object Text : AfterTrust
+        /** [to]: the group private-message target the text was written for; a changed target drops the send. */
+        data class Text(val to: Jid?) : AfterTrust
 
         data class Attachments(val attachments: List<Attachment>) : AfterTrust
     }
 
-    private val viewModel by lazy { ViewModelProvider(this)[ChatViewModel::class.java] }
+    private val viewModelLazy = lazy { ViewModelProvider(this)[ChatViewModel::class.java] }
+    private val viewModel by viewModelLazy
     private val voiceRecorder by lazy { VoiceRecorder(requireContext().applicationContext) }
     private var voiceWarning: androidx.appcompat.app.AlertDialog? = null
 
@@ -186,7 +189,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             afterTrust = null
             if (result.resultCode == Activity.RESULT_OK) {
                 when (pending) {
-                    AfterTrust.Text -> sendMessage()
+                    is AfterTrust.Text ->
+                        if (privateTarget(conversation) == pending.to) sendMessage()
+                        else Toast.makeText(requireContext(), R.string.tatrak_chat_recipient_changed, Toast.LENGTH_LONG).show()
                     is AfterTrust.Attachments -> commitAttachments(pending.attachments)
                     null -> Unit
                 }
@@ -221,8 +226,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                 val chat = conversation?.uuid
                 viewModel.viewModelScope.launch {
                     val stored = withContext(Dispatchers.IO) { uri.path?.let { TemporaryMedia.encryptCapture(context, File(it)) } }
-                    // another chat opened meanwhile: the capture was for the one left, a discarded draft
-                    if (conversation?.uuid != chat) {
+                    // another chat opened meanwhile: the capture was for the one left, a discarded draft (the composer
+                    // shown is the view model's, also when this fragment was recreated in between)
+                    if (viewModel.conversation?.uuid != chat) {
                         stored?.delete()
                         return@launch
                     }
@@ -375,6 +381,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                                 input = viewModel.input,
                                 onInputChange = ::onInputChange,
                                 reply = viewModel.reply?.let { it.copy(thumbnail = it.uuid == state.replyThumbnailUuid) },
+                                privateTo = viewModel.privateTo?.resource,
                                 actions = this@ChatFragment,
                                 voice = voicePlayer.state,
                                 recording = voiceRecorder.state,
@@ -461,6 +468,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     }
 
     override fun onDestroy() {
+        // leaving the chat ends a private message; a configuration change of the open chat keeps it
+        if (activity?.isChangingConfigurations != true) conversation?.takeIf { it.mode == Conversation.MODE_MULTI }?.nextCounterpart = null
         voicePlayer.release()
         super.onDestroy()
     }
@@ -471,11 +480,17 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     fun reInit(conversation: Conversation, extras: Bundle?) {
         QuickLoader.set(conversation.uuid)
         val previous = this.conversation
+        // a group private message lasts only while its chat stays open: every entry from outside ends it, except the
+        // private-message entry itself; a share or forward into the open chat says so
+        if (previous != null && previous !== conversation) endPrivate(previous)
+        if (extras?.getBoolean(ConversationsActivity.EXTRA_IS_PRIVATE_MESSAGE, false) != true) {
+            val content = extras != null && (extras.containsKey(Intent.EXTRA_STREAM) || extras.containsKey(Intent.EXTRA_TEXT))
+            endPrivate(conversation, notice = content && conversation === previous)
+        }
         if (previous != null && previous !== conversation) {
             saveDraft(previous)
             // ConversationFragment.saveMessageDraftStopAudioPlayer clears the media previews too
-            TemporaryMedia.deleteDrafts(viewModel.cameraDrafts, viewModel.previews)
-            viewModel.previews = emptyList()
+            dropPreviews()
             voicePlayer.release()
             voiceRecorder.stop(keep = false)
         }
@@ -518,6 +533,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             (activity as? ConversationsActivity)?.onConversationArchived(c)
             return
         }
+        syncPrivate(c)
         viewModel.invalidate(service)
     }
 
@@ -527,16 +543,16 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             return
         }
         if (viewModel.conversation !== c) {
+            // a new view model is a new entry (a configuration change keeps the old one): no private message carries over
+            if (c.mode == Conversation.MODE_MULTI) c.nextCounterpart = null
             viewModel.bind(c, service)
-            val participating =
-                c.mode == Conversational.MODE_SINGLE || c.mucOptions.participating()
-            val draft = c.draft
-            viewModel.setInput(if (participating && draft != null) draft.message() else "")
+            viewModel.setInput(roomDraft(c))
             userTyping = false
             lastVisibleUuid = null
         } else {
             viewModel.invalidate(service)
         }
+        syncPrivate(c)
         c.messagesLoaded.set(true)
         service.notificationService.setOpenConversation(c)
         extras?.let { processExtras(c, it) }
@@ -578,7 +594,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private fun saveDraft(c: Conversation) {
         if (xmppConnectionService == null) return
         val text = viewModel.input.text
-        storeNextMessage(c, text)
+        // the composer's text is a private message's while it shows the bar, even if the target was ended elsewhere
+        if (viewModel.privateTo == null) storeNextMessage(c, text)
         typingTimeout?.cancel()
         userTyping = false
         ChatStateManager.send(c, if (text.isEmpty()) Config.DEFAULT_CHAT_STATE else Paused::class.java)
@@ -591,6 +608,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         service: XmppConnectionService? = xmppConnectionService,
     ): Boolean {
         service ?: return false
+        // Tatrak: the draft is the room's; a private message's text never goes there
+        if (privateTarget(c) != null) return false
         val participating =
             c.mode == Conversational.MODE_SINGLE || c.mucOptions.participating()
         if (c.status != Conversation.STATUS_ARCHIVED && participating && c.setNextMessage(text)) {
@@ -613,6 +632,13 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         }
         val c = conversation ?: return
         val service = xmppConnectionService ?: return
+        // the composer and the send target must agree; when something ended or changed the target behind the composer
+        // (a late callback of an older fragment), nothing is sent and the composer follows the target
+        if (syncPrivate(c)) {
+            Toast.makeText(requireContext(), R.string.tatrak_chat_recipient_changed, Toast.LENGTH_LONG).show()
+            refresh()
+            return
+        }
         val typed = viewModel.input.text
         val reply = viewModel.reply
         val quote =
@@ -627,9 +653,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             openClassic()
             return
         }
-        if (trustKeysIfNeeded(c, AfterTrust.Text)) return
+        if (trustKeysIfNeeded(c, AfterTrust.Text(privateTarget(c)))) return
         val message: Message
-        val correcting = c.correctingMessage
+        // a private message is never an edit (entering PM clears it; this also covers a correction not loaded yet)
+        val correcting = if (privateTarget(c) != null) null else c.correctingMessage
         if (correcting == null) {
             message = Message(c, body, c.nextEncryption)
             Message.configurePrivateMessage(message)
@@ -702,7 +729,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     // --- attachments ------------------------------------------------------------------------
 
     override fun attachGallery() {
-        if (requireClassicForPgp()) return
+        if (requireClassicForPgp() || privateMode()) return
         pickMediaLauncher.launch(
             PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
         )
@@ -710,10 +737,12 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     /** ConversationFragment.attachFile + invokeAttachFileIntent for ATTACHMENT_CHOICE_TAKE_PHOTO. */
     override fun takePhoto() {
-        if (requireClassicForPgp()) return
+        if (requireClassicForPgp() || privateMode()) return
         withPermissions(
             listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA)
         ) {
+            // the permission screen may return after a private message started
+            if (privateMode()) return@withPermissions
             val context = requireContext()
             val file = FileBackend.Cache(context).takePicture()
             val intent =
@@ -733,10 +762,11 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     /** ConversationFragment.attachFile + invokeAttachFileIntent for ATTACHMENT_CHOICE_RECORD_VIDEO. */
     override fun recordVideo() {
-        if (requireClassicForPgp()) return
+        if (requireClassicForPgp() || privateMode()) return
         withPermissions(
             listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA)
         ) {
+            if (privateMode()) return@withPermissions
             try {
                 recordVideoLauncher.launch(Intent(MediaStore.ACTION_VIDEO_CAPTURE))
             } catch (e: ActivityNotFoundException) {
@@ -746,19 +776,20 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     }
 
     override fun attachFile() {
-        if (requireClassicForPgp()) return
+        if (requireClassicForPgp() || privateMode()) return
         openDocumentsLauncher.launch(arrayOf(ViewUtil.WILDCARD))
     }
 
     override fun attachLocation() {
-        if (requireClassicForPgp()) return
+        if (requireClassicForPgp() || privateMode()) return
         shareLocationLauncher.launch(Intent(requireContext(), ShareLocationActivity::class.java))
     }
 
     /** ConversationFragment.attachFile + invokeAttachFileIntent for ATTACHMENT_CHOICE_CONTACT. */
     override fun attachContact() {
-        if (requireClassicForPgp()) return
+        if (requireClassicForPgp() || privateMode()) return
         withPermissions(listOf(Manifest.permission.READ_CONTACTS)) {
+            if (privateMode()) return@withPermissions
             try {
                 pickContactLauncher.launch(ConversationFragment.contactPickIntent(requireContext()))
             } catch (e: ActivityNotFoundException) {
@@ -768,7 +799,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     }
 
     override fun startRecording(): Boolean {
-        if (requireClassicForPgp()) return false
+        if (requireClassicForPgp() || privateMode()) return false
         val permissions =
             listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.RECORD_AUDIO)
         if (!hasPermissions(permissions)) {
@@ -818,6 +849,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
      * no dialog is needed (key trust, choosing a device); otherwise say it was not sent.
      */
     private fun sendDetached(host: XmppActivity, c: Conversation, recordings: List<Attachment>) {
+        if (endPrivate(c)) Toast.makeText(host, R.string.tatrak_chat_private_cancelled, Toast.LENGTH_LONG).show()
         val service = host.xmppConnectionService
         val needsDialog =
             (c.nextEncryption == Message.ENCRYPTION_AXOLOTL &&
@@ -871,6 +903,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             pendingAttachments = attachments
             return
         }
+        // a private message is text only: whatever else arrives (a result, a sticker, a share, a voice note, a trust
+        // retry) is for the room, so the private message is cancelled first
+        endPrivate(c, notice = true)
         if (attachments.any { it.type != Attachment.Type.LOCATION }) {
             if (!hasPermissions(listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE))) {
                 withPermissions(listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE)) {
@@ -999,7 +1034,15 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             }
             return
         }
-        if (text != null && Patterns.URI_GEO.matcher(text).matches()) {
+        val nick = extras.getString(ConversationsActivity.EXTRA_NICK)
+        if (nick != null && extras.getBoolean(ConversationsActivity.EXTRA_IS_PRIVATE_MESSAGE, false)) {
+            // as ConversationFragment.processExtras; a plain EXTRA_NICK (a mention) still opens the classic screen
+            try {
+                privateMessageWith(c, Jid.of(c.address.local, c.address.domain, nick))
+            } catch (ignored: IllegalArgumentException) {
+                // do nothing
+            }
+        } else if (text != null && Patterns.URI_GEO.matcher(text).matches()) {
             confirmAttachments(
                 Attachment.of(requireContext(), Uri.parse(text), Attachment.Type.LOCATION)
             )
@@ -1082,6 +1125,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val message = message(uuid) ?: return
         val quote = replyQuote(requireContext(), message)
         if (quote.isEmpty()) return
+        // a private message is answered privately: received, to its sender; sent, to its recipient (the snapshot offers
+        // Reply only with that full JID)
+        if (message.isPrivateMessage) privateMessageWith(c, message.counterpart?.takeIf { it.isFullJid } ?: return)
         if (c.correctingMessage != null) cancelEdit()
         val name = UIHelper.getMessageDisplayName(message)
         viewModel.reply = ReplyPreview(uuid, name, quote, UIHelper.getColorForName(name), thumbnail = false)
@@ -1092,10 +1138,110 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         viewModel.reply = null
     }
 
-    /** ConversationFragment.correctMessage. */
+    /** The group private-message target ([Conversation.nextCounterpart]); null for the room and one-to-one chats. */
+    private fun privateTarget(c: Conversation?): Jid? = c?.takeIf { it.mode == Conversation.MODE_MULTI }?.nextCounterpart
+
+    private fun privateMode() = privateTarget(conversation) != null
+
+    /** What the room's composer holds: its stored draft, as a fresh open shows it. */
+    private fun roomDraft(c: Conversation): String {
+        val participating = c.mode == Conversational.MODE_SINGLE || c.mucOptions.participating()
+        val draft = c.draft
+        return if (participating && draft != null) draft.message() else ""
+    }
+
+    /**
+     * ConversationFragment.privateMessageWith: the composer sends text (and a reply) to [counterpart] until the bar's X.
+     * Pending content belongs to the recipient it was written for, so a new target drops the typed text, the reply, the
+     * previews and a running edit; the room's stored draft is left as it is.
+     */
+    private fun privateMessageWith(c: Conversation, counterpart: Jid) {
+        if (privateTarget(c) == counterpart) return
+        ChatStateManager.send(c, Config.DEFAULT_CHAT_STATE)
+        // a running edit ends through the legacy cancel, which brings back the room text kept aside, stored as the
+        // room's draft; the cancel clears also a correction whose message is not loaded (the attribute alone)
+        cancelEdit()
+        // the room's text typed since the last save stays its draft (a no-op when the field holds another PM's text)
+        storeNextMessage(c, viewModel.input.text)
+        dropPreviews()
+        viewModel.reply = null
+        viewModel.setInput("")
+        userTyping = false
+        // the bar and the send target change together, on the main thread
+        c.nextCounterpart = counterpart
+        viewModel.privateTo = counterpart
+        refresh()
+    }
+
+    /**
+     * Ends [c]'s private message as the bar's X does: the target, its text and the reply go, and the composer shows
+     * the room's draft again. [notice]: say so (something for the room arrived while it was on). Returns whether a
+     * private message was ended.
+     *
+     * The composer state (input, reply, bar, previews) lives in the view model the live fragment renders, which a
+     * detached older instance (a late voice or camera callback after a rotation) shares. It is changed only while the
+     * view model shows [c] (by uuid); otherwise only [c]'s own fields change, and the composer reconciles through
+     * [syncPrivate] when it next shows [c].
+     */
+    private fun endPrivate(c: Conversation, notice: Boolean = false): Boolean {
+        if (privateTarget(c) == null) return false
+        c.nextCounterpart = null
+        if (!showing(c)) return true
+        clearPrivateContent(c)
+        if (notice) context?.let { Toast.makeText(it, R.string.tatrak_chat_private_cancelled, Toast.LENGTH_LONG).show() }
+        if (isAdded) refresh()
+        return true
+    }
+
+    /** The composer's view model is bound to [c]; see [endPrivate]. */
+    private fun showing(c: Conversation): Boolean = viewModelLazy.isInitialized() && viewModel.conversation?.uuid == c.uuid
+
+    private fun clearPrivateContent(c: Conversation) {
+        viewModel.privateTo = null
+        viewModel.reply = null
+        viewModel.setInput(roomDraft(c))
+        userTyping = false
+    }
+
+    /**
+     * The composer (its bar, [ChatViewModel.privateTo]) follows [c]'s target when they disagree (the target was ended
+     * or changed behind it, e.g. by a late callback of an older fragment); what it held for the other recipient is
+     * dropped, never carried over. Returns whether it had to.
+     */
+    private fun syncPrivate(c: Conversation): Boolean {
+        val target = privateTarget(c)
+        // the full occupant JID: the same nick taken by someone else after a rejoin is another recipient
+        if (viewModel.privateTo == target) return false
+        if (target == null) {
+            clearPrivateContent(c)
+        } else {
+            viewModel.privateTo = target
+            viewModel.reply = null
+            viewModel.setInput("")
+        }
+        return true
+    }
+
+    /** The bar's X: the CANCEL send action of ConversationFragment in a group. */
+    override fun cancelPrivateMessage() {
+        conversation?.let { endPrivate(it) }
+    }
+
+    /** Called by the activity before the chat goes to the classic screen: the private message does not go along. */
+    fun endPrivateMessage() = cancelPrivateMessage()
+
+    private fun dropPreviews() {
+        TemporaryMedia.deleteDrafts(viewModel.cameraDrafts, viewModel.previews)
+        viewModel.previews = emptyList()
+    }
+
+    /** ConversationFragment.correctMessage; an edit is never private-message text, so it ends one first. */
     override fun edit(uuid: String) {
         val c = conversation ?: return
         val message = message(uuid) ?: return
+        // the text kept aside below must be the room's: reconcile a target ended behind the composer first
+        syncPrivate(c)
+        endPrivate(c)
         viewModel.reply = null
         c.setCorrectingMessage(message)
         c.setDraftMessage(viewModel.input.text)
@@ -1940,7 +2086,11 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     /** Picked files wait in the strip above the keyboard until Send, like the classic screen. */
     private fun addPreviews(attachments: List<Attachment>) {
-        if (attachments.isNotEmpty()) viewModel.previews = viewModel.previews + attachments
+        val c = conversation ?: return
+        // only into the composer of the chat they were picked in (see endPrivate)
+        if (attachments.isEmpty() || !showing(c)) return
+        endPrivate(c, notice = true)
+        viewModel.previews = viewModel.previews + attachments
     }
 
     // --- list -------------------------------------------------------------------------------

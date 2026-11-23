@@ -189,7 +189,15 @@ fun Composer(
     newest: String? = null,
     /** Floating bars with blur: the pills draw it blurred behind them. */
     backdrop: BarBackdrop? = null,
+    /**
+     * A group private message's occupant, from the main-thread state the send reads: text and a reply only (no attach,
+     * mic or stickers), the classic hint (ConversationFragment.updateChatMsgHint), writable without taking part.
+     */
+    privateTo: String? = null,
 ) {
+    val unencrypted = stringResource(R.string.send_unencrypted_message)
+    @Suppress("NAME_SHADOWING")
+    val composer = if (privateTo == null) composer else remember(composer, unencrypted) { composer.copy(hint = unencrypted, canWrite = true) }
     val colors = MaterialTheme.colorScheme
     val density = LocalDensity.current
     // floating bars, in any style: Slate's pill composer over the messages
@@ -198,6 +206,8 @@ fun Composer(
     // the keyboard was asked back in place of this panel: it stays until the keyboard is up
     var leaving by remember { mutableStateOf(KeyboardPanel.NONE) }
     BackHandler(enabled = panel != KeyboardPanel.NONE) { panel = KeyboardPanel.NONE }
+    // a private message is text only: an open attach panel closes
+    LaunchedEffect(privateTo != null) { if (privateTo != null && panel == KeyboardPanel.ATTACH) panel = KeyboardPanel.NONE }
     // NONE asks the keyboard back, except while picked attachments hide the text field
     val onPanel: (KeyboardPanel) -> Unit = { next ->
         leaving = if (next == KeyboardPanel.NONE && previews.isEmpty()) (if (panel != KeyboardPanel.NONE) panel else leaving) else KeyboardPanel.NONE
@@ -218,7 +228,8 @@ fun Composer(
     val focus = remember { FocusRequester() }
     val rec = recording.collectAsState()
     val recActive by remember { derivedStateOf { rec.value.active } }
-    val shown = if (panel != KeyboardPanel.NONE) panel else leaving
+    // a private message is text only: the attach panel is never shown, also in the frame before it is closed
+    val shown = (if (panel != KeyboardPanel.NONE) panel else leaving).takeUnless { privateTo != null && it == KeyboardPanel.ATTACH } ?: KeyboardPanel.NONE
     val panelShown = shown != KeyboardPanel.NONE && !recActive && composer.canWrite && !composer.requiresClassic
     val panelPx = if (keyboardPx > 0) keyboardPx else with(density) { 280.dp.roundToPx() }
     val panelHeight = with(density) { panelPx.toDp() }
@@ -241,7 +252,7 @@ fun Composer(
                 if (composer.contacts) picked(actions::attachContact) else null,
             )
         } else {
-            EmojiPanel(panelHeight, input, onInputChange, actions, emojiPicker, if (pills) colors.surfaceContainer else colors.surface)
+            EmojiPanel(panelHeight, input, onInputChange, actions, emojiPicker, if (pills) colors.surfaceContainer else colors.surface, stickers = privateTo == null)
         }
     }
     val mentions =
@@ -253,7 +264,7 @@ fun Composer(
         )
     if (pills) {
         val fill = if (LocalFloatingBars.current) floatingPill(backdrop?.mode ?: BarBlur.OFF) else colors.surfaceContainer
-        SlateComposer(composer, input, onInputChange, reply, actions, recording, modifier, previews, panel, onPanel, panelShown, panelContent, insets, focus, mentions, newest, fill, backdrop)
+        SlateComposer(composer, input, onInputChange, contextPanels(composer, reply, privateTo, actions), actions, recording, modifier, previews, panel, onPanel, panelShown, panelContent, insets, focus, mentions, newest, fill, backdrop, privateTo != null)
         return
     }
     Surface(color = colors.surface, shadowElevation = 3.dp, modifier = modifier.fillMaxWidth()) {
@@ -262,24 +273,7 @@ fun Composer(
                 MentionList(mentions, actions)
                 HorizontalDivider(color = colors.outlineVariant)
             }
-            val editing = composer.editing
-            when {
-                editing != null ->
-                    ContextPanel(
-                        icon = R.drawable.ic_edit_24dp,
-                        title = stringResource(R.string.tatrak_chat_editing),
-                        text = editing.text,
-                        onClose = actions::cancelEdit,
-                    )
-                reply != null ->
-                    ContextPanel(
-                        icon = R.drawable.ic_reply_24dp,
-                        title = stringResource(R.string.tatrak_chat_reply_to, reply.name),
-                        text = reply.text,
-                        onClose = actions::cancelReply,
-                        thumbnail = reply.thumbnailFor(actions),
-                    )
-            }
+            contextPanels(composer, reply, privateTo, actions)?.invoke()
             when {
                 composer.requiresClassic -> Notice(stringResource(R.string.tatrak_chat_pgp_notice), actions)
                 !composer.canWrite ->
@@ -292,7 +286,7 @@ fun Composer(
                     )
                 else -> {
                     val rec by recording.collectAsState()
-                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions, newest)
+                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions, newest, privateTo != null)
                     if (panelShown) panelContent()
                     BlockSwipeBack(panel != KeyboardPanel.NONE || rec.active)
                 }
@@ -328,7 +322,7 @@ private fun SlateComposer(
     composer: ComposerInfo,
     input: TextFieldValue,
     onInputChange: (TextFieldValue) -> Unit,
-    reply: ReplyPreview?,
+    contextPanel: (@Composable () -> Unit)?,
     actions: ChatActions,
     recording: StateFlow<VoiceRecording>,
     modifier: Modifier,
@@ -343,6 +337,7 @@ private fun SlateComposer(
     newest: String?,
     fill: Color,
     backdrop: BarBackdrop?,
+    textOnly: Boolean,
 ) {
     val colors = MaterialTheme.colorScheme
     // raised over the wallpaper (in the night style the plain surface equals it)
@@ -364,17 +359,6 @@ private fun SlateComposer(
                 MentionList(mentions, actions)
             }
         }
-        val editing = composer.editing
-        val contextPanel: (@Composable () -> Unit)? =
-            when {
-                editing != null -> {
-                    { ContextPanel(R.drawable.ic_edit_24dp, stringResource(R.string.tatrak_chat_editing), editing.text, actions::cancelEdit) }
-                }
-                reply != null -> {
-                    { ContextPanel(R.drawable.ic_reply_24dp, stringResource(R.string.tatrak_chat_reply_to, reply.name), reply.text, actions::cancelReply, reply.thumbnailFor(actions)) }
-                }
-                else -> null
-            }
         if (contextPanel != null) {
             Surface(
                 color = fill,
@@ -402,7 +386,7 @@ private fun SlateComposer(
                     )
                 else -> {
                     val rec by recording.collectAsState()
-                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions, newest)
+                    InputRow(composer, input, onInputChange, actions, rec, panel, previews, onPanel, focus, mentions, newest, textOnly)
                     BlockSwipeBack(panel != KeyboardPanel.NONE || rec.active)
                 }
             }
@@ -431,6 +415,8 @@ private fun InputRow(
     focus: FocusRequester,
     mentions: MentionSuggestions?,
     newest: String?,
+    /** A group private message: no attach button, no mic. */
+    textOnly: Boolean,
 ) {
     val context = LocalContext.current
     val currentInput by rememberUpdatedState(input)
@@ -512,12 +498,14 @@ private fun InputRow(
         } else if (previews.isNotEmpty()) {
             // as the classic screen: the strip takes the text field's place until Send
             PreviewStrip(previews, actions, Modifier.weight(1f))
-            IconButton(onClick = { toggle(KeyboardPanel.ATTACH) }, modifier = Modifier.padding(bottom = 1.dp)) {
-                Icon(
-                    painterResource(R.drawable.ic_attach_file_24dp),
-                    contentDescription = stringResource(R.string.tatrak_chat_attach),
-                    tint = colors.onSurfaceVariant,
-                )
+            if (!textOnly) {
+                IconButton(onClick = { toggle(KeyboardPanel.ATTACH) }, modifier = Modifier.padding(bottom = 1.dp)) {
+                    Icon(
+                        painterResource(R.drawable.ic_attach_file_24dp),
+                        contentDescription = stringResource(R.string.tatrak_chat_attach),
+                        tint = colors.onSurfaceVariant,
+                    )
+                }
             }
         } else {
             val emojiOpen = panel == KeyboardPanel.EMOJI
@@ -602,7 +590,7 @@ private fun InputRow(
                     },
                 )
             }
-            if (!recording.active && !editing) {
+            if (!recording.active && !editing && !textOnly) {
                 IconButton(onClick = { toggle(KeyboardPanel.ATTACH) }, modifier = Modifier.padding(bottom = 1.dp)) {
                     Icon(
                         painterResource(R.drawable.ic_attach_file_24dp),
@@ -630,8 +618,13 @@ private fun InputRow(
                         tint = colors.primary,
                     )
                 }
-            } else {
+            } else if (!textOnly || recording.active) {
                 MicButton(recording.active, actions, onSlide = { slide = it }) { locked = true }
+            } else {
+                // a private message: the classic Send button shows Cancel here, which is the bar's X
+                IconButton(onClick = {}, enabled = false) {
+                    Icon(painterResource(R.drawable.ic_send_24dp), contentDescription = stringResource(R.string.tatrak_chat_send))
+                }
             }
         }
     }
@@ -1001,15 +994,20 @@ private fun EmojiPanel(
     actions: ChatActions,
     emojiPicker: EmojiPickerSlot,
     container: Color = MaterialTheme.colorScheme.surface,
+    /** False in a group private message (text only): emoji without the stickers tab. */
+    stickers: Boolean = true,
 ) {
     val current by rememberUpdatedState(input)
-    var stickers by rememberSaveable { mutableStateOf(false) }
+    var stickerTab by rememberSaveable { mutableStateOf(false) }
+    val showStickers = stickers && stickerTab
     Column(Modifier.fillMaxWidth().height(height)) {
-        TabRow(selectedTabIndex = if (stickers) 1 else 0, containerColor = container) {
-            Tab(selected = !stickers, onClick = { stickers = false }, text = { Text(stringResource(R.string.tatrak_chat_emoji)) })
-            Tab(selected = stickers, onClick = { stickers = true }, text = { Text(stringResource(R.string.tatrak_stickers)) })
-        }
         if (stickers) {
+            TabRow(selectedTabIndex = if (stickerTab) 1 else 0, containerColor = container) {
+                Tab(selected = !stickerTab, onClick = { stickerTab = false }, text = { Text(stringResource(R.string.tatrak_chat_emoji)) })
+                Tab(selected = stickerTab, onClick = { stickerTab = true }, text = { Text(stringResource(R.string.tatrak_stickers)) })
+            }
+        }
+        if (showStickers) {
             StickerGrid(actions, Modifier.weight(1f))
         } else {
             EmojiPicker(emojiPicker, { onInputChange(current.insertAtCursor(it)) }, Modifier.fillMaxWidth().weight(1f))
@@ -1164,6 +1162,32 @@ private val RecordingRed = Color(0xFFE53935)
 
 private const val HoldMillis = 250L
 private const val MinRecordingMillis = 1000L
+
+/**
+ * The edit panel, or the reply and the private-message panels: both at once are a private reply (a PM quoting a
+ * message). Starting an edit ends a private message, so the two never meet.
+ */
+private fun contextPanels(composer: ComposerInfo, reply: ReplyPreview?, privateTo: String?, actions: ChatActions): (@Composable () -> Unit)? {
+    val editing = composer.editing
+    return when {
+        editing != null -> {
+            { ContextPanel(R.drawable.ic_edit_24dp, stringResource(R.string.tatrak_chat_editing), editing.text, actions::cancelEdit) }
+        }
+        reply == null && privateTo == null -> null
+        else -> {
+            {
+                Column {
+                    if (reply != null) {
+                        ContextPanel(R.drawable.ic_reply_24dp, stringResource(R.string.tatrak_chat_reply_to, reply.name), reply.text, actions::cancelReply, reply.thumbnailFor(actions))
+                    }
+                    if (privateTo != null) {
+                        ContextPanel(R.drawable.ic_person_24dp, stringResource(R.string.send_private_message), privateTo, actions::cancelPrivateMessage)
+                    }
+                }
+            }
+        }
+    }
+}
 
 @Composable
 private fun ContextPanel(

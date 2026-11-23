@@ -123,4 +123,8 @@
         <item quantity="one">%1$d file was not deleted: it is outside Tatrak\'s storage. Delete it yourself if you no longer need it:\n%2$s</item>
         <item quantity="other">%1$d files were not deleted: they are outside Tatrak\'s storage. Delete them yourself if you no longer need them:\n%2$s</item>
     </plurals>
+    <!-- a text waiting for the key trust screen whose group private-message target changed meanwhile -->
+    <string name="tatrak_chat_recipient_changed">Not sent: the recipient changed before it was ready</string>
+    <!-- something other than text (a file, a sticker, a share) arrived while writing a group private message -->
+    <string name="tatrak_chat_private_cancelled">Private message cancelled: this goes to the whole group</string>
 </resources>

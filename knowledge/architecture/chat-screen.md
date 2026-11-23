@@ -295,8 +295,38 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   menu, built as the group branch of `onContactPictureLongClicked` (`getUserOrStub`, the message's
   fingerprint or `"pgp"`, `muc_details_context` configured by `MucDetailsContextMenuHelper` and
   dispatched to its `onContextItemSelected`): contact details, start a chat, a private message in an
-  anonymous room and remove from the room for admins. The PM action opens the classic composer
-  inside the current activity and aims it at the selected occupant. `ChatActions.senderMenu` returns its visible items as `MenuEntry`s through
+  anonymous room and remove from the room for admins. The PM action (owner, 2026-11-23) stays in the
+  Compose chat: `privateMsgInMuc` reopens the chat with `EXTRA_NICK` + `EXTRA_IS_PRIVATE_MESSAGE`,
+  which `wantsClassic` no longer sends to the classic screen (a nick alone, the mention, still
+  does); `ChatFragment.processExtras` runs `privateMessageWith` as the classic one does (drops the
+  typed text, sets `Conversation.nextCounterpart`). A group private message in the Compose chat is
+  text only, plus a reply (owner, 2026-11-23, after the second Codex review). The target is
+  `Conversation.nextCounterpart`; `ChatFragment` changes it together with `ChatViewModel.privateTo`
+  on the main thread, and the composer draws the bar from that state. Ending a PM acts on that
+  shared view model also from a detached older fragment (a late voice or camera callback after a
+  rotation), and Send, the draft save and every refresh resync the bar with the target when they
+  disagree, dropping the composer's content for the other side instead of sending it. Entering PM
+  clears any correction, also one whose message is not loaded, and a PM send never edits; the
+  permission continuations of the camera and contact pickers recheck PM mode; selecting the open
+  chat again in the two-pane list ends PM mode. The bar sits over the field ("Send private message" / nick, the reply
+  panel's look); its X is `setNextCounterpart(null)`. In PM mode there is no attach button, attach
+  panel, mic or stickers tab (a disabled Send stands where the classic button shows Cancel), the
+  hint is the classic `send_unencrypted_message`, and the attach, camera, location, contact and
+  recording actions refuse. Anything that is not text and still arrives (a picker or camera result,
+  a sticker, a share or forward, an attachment after the key-trust screen, a voice note) is for the
+  room: the private message ends as with the X, with a toast, and the item goes to the room. A text
+  waiting for the key-trust screen keeps its target and is not sent if the target changed.
+  Pending content belongs to its recipient: a new target drops the typed text, the reply, the
+  previews and a running edit; ending a private message (the X, an edit, an outside entry, content
+  for the room) drops its text and reply and puts the room's stored draft back in the field. A
+  private message's text is never stored as the room's draft. The target lasts only while the chat
+  stays open: a configuration change (rotation, the same `Conversation` and view model) keeps it;
+  every entry from outside ends it (opening the chat again from the list, a notification, an intent,
+  a share or forward, switching chats in the two-pane layout, leaving the chat, process death, and a
+  handoff to the classic screen, where `ConversationsActivity.showConversation` asks the outgoing
+  `ChatFragment` to end it). Reply on a private message answers it privately (a received one to its
+  sender, a sent one to its recipient), offered only with that full JID; Reply on a room message in
+  PM mode is a private reply. Starting an edit ends the private message. `ChatActions.senderMenu` returns its visible items as `MenuEntry`s through
   `participantMenu` (`MucUsersCompose.kt`), the participants list's own conversion; the dropdown is
   `EntryMenuBox` (`TatrakList.kt`), the one `AvatarRow` draws. The participants list
   (`ParticipantsScreen`, `MucUsersActivity`) swaps the same way: a tap opens that menu, a long press

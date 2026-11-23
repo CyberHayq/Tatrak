@@ -271,6 +271,8 @@ android {
             all {
                 systemProperty 'roborazzi.test.record', 'true'
                 systemProperty 'robolectric.pixelCopyRenderMode', 'hardware'
+                // Tatrak: the whole suite runs in one JVM; Gradle's default heap ran out (BackupFileHeaderTest's Argon2)
+                maxHeapSize = '2g'
             }
         }
     }

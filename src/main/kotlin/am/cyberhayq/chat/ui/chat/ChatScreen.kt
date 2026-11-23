@@ -305,6 +305,9 @@ interface ChatActions {
     /** Group avatar tap: the classic onContactPictureLongClicked participant menu's visible entries; none outside a group. */
     fun senderMenu(uuid: String): List<MenuEntry> = emptyList()
 
+    /** The private-message bar's X: the classic composer's cancel, setNextCounterpart(null). */
+    fun cancelPrivateMessage() {}
+
     /** The group's participants for the "@" list, own nick left out; called off the main thread. */
     suspend fun mentionCandidates(): List<MentionCandidate> = emptyList()
 
@@ -400,6 +403,8 @@ fun ChatScreen(
     onNoticeShown: () -> Unit = {},
     /** Mentions already shown or jumped to; dropped from the "@" button. */
     seenMentions: Set<String> = emptySet(),
+    /** A group private message's occupant (text only); null when writing to the room. */
+    privateTo: String? = null,
     /** Read-only, for [ChatPreview]: no composer, no banner, no header buttons, no message menu or selection. */
     preview: Boolean = false,
     /** The message list's scroll state, when the caller must see it ([ChatPreview]: a touch that stops a fling). */
@@ -492,6 +497,7 @@ fun ChatScreen(
                         input = input,
                         onInputChange = onInputChange,
                         reply = reply,
+                        privateTo = privateTo,
                         actions = actions,
                         recording = recording,
                         modifier = composerModifier,

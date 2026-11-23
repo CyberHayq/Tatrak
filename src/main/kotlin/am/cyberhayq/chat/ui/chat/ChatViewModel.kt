@@ -76,6 +76,9 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     var input by mutableStateOf(TextFieldValue())
     var reply by mutableStateOf<ReplyPreview?>(null)
 
+    /** The group private message's occupant (full JID); set by the fragment together with Conversation.nextCounterpart. */
+    var privateTo by mutableStateOf<eu.siacs.conversations.xmpp.Jid?>(null)
+
     /** Picked attachments waiting for Send, like ConversationFragment's media preview strip. */
     var previews by mutableStateOf<List<Attachment>>(emptyList())
 

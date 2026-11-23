@@ -128,4 +128,8 @@
         <item quantity="many">Файлов не удалено: %1$d. Они лежат вне хранилища Tatrak. Если они больше не нужны, удалите их сами:\n%2$s</item>
         <item quantity="other">Файлов не удалено: %1$d. Они лежат вне хранилища Tatrak. Если они больше не нужны, удалите их сами:\n%2$s</item>
     </plurals>
+    <!-- a text waiting for the key trust screen whose group private-message target changed meanwhile -->
+    <string name="tatrak_chat_recipient_changed">Не отправлено: получатель сменился, пока оно готовилось</string>
+    <!-- something other than text (a file, a sticker, a share) arrived while writing a group private message -->
+    <string name="tatrak_chat_private_cancelled">Личное сообщение отменено: это уйдёт всей группе</string>
 </resources>

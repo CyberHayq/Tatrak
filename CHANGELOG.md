@@ -18,6 +18,11 @@
   text field.
 - A tap on a participant's avatar in a group, or on a row of the participants list, opens the
   participant menu (profile, write to them); a long press mentions them.
+- "Send private message" from the participant menu stays in the chat: a bar over the text field
+  names the participant; its X goes back to writing to the group and discards what was written for
+  the participant. A private message is text only (with a reply); files, stickers and voice
+  messages go to the group. Replying to a private message answers it privately. Leaving the chat
+  ends the private message.
 
 ### Updates
 - "Beta versions" in Settings → Updates (off by default): the update check also offers GitHub
