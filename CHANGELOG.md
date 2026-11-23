@@ -10,6 +10,8 @@
 - Account switcher: a long press on Profile in the floating bar shows the accounts with their
   unread chats; choosing one shows only that account's chats, contacts, calls and profile, until
   "All accounts" is chosen. Notifications still come from every account.
+- A tap inside the chat preview (long press on a chat's avatar) opens the chat without the list
+  flashing between the two.
 
 ### Chat
 - A reply to a photo or video shows its thumbnail, in the quote and in the reply bar above the

@@ -38,6 +38,7 @@ import androidx.compose.runtime.setValue
 import eu.siacs.conversations.ui.fragment.settings.SettingsHomeFragment
 import eu.siacs.conversations.ui.fragment.settings.settingsAccount
 import eu.siacs.conversations.ui.fragment.settings.settingsSections
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import am.cyberhayq.chat.ui.chatlist.ChatListScreen
 import am.cyberhayq.chat.ui.chatlist.ChatListViewModel
@@ -100,6 +101,8 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     /** The chat shown by [ChatPreview]; its model only reads, it never marks anything read. */
     private val previewModel by lazy { ViewModelProvider(this)["preview", ChatViewModel::class.java].also { it.preview = true } }
     private var previewing by mutableStateOf<Conversation?>(null)
+    /** A tap in the preview is opening its chat; a second tap must not open it again. */
+    private var opening = false
     private val previewActions =
         object : NoChatActions() {
             override suspend fun loadThumbnail(uuid: String, sizePx: Int): Bitmap? {
@@ -216,10 +219,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
                             ChatPreview(
                                 preview,
                                 previewActions,
-                                onOpen = {
-                                    previewing = null
-                                    openChat(c.uuid)
-                                },
+                                onOpen = { openFromPreview(c) },
                                 onDismiss = { previewing = null },
                             )
                         }
@@ -244,6 +244,7 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
     // a chat opened another way (notification, share) replaces the list: its card must not come back with the view
     override fun onDestroyView() {
         previewing = null
+        opening = false
         super.onDestroyView()
     }
 
@@ -332,6 +333,23 @@ class ChatListFragment : XmppFragment(), ChatListActions, OnSearchResultsAvailab
         val c = service.findConversationByUuid(uuid) ?: return
         previewModel.bind(c, service, fresh = true)
         previewing = c
+    }
+
+    /**
+     * The preview stays over the chat while it opens underneath (public issue #2: closing it first showed
+     * the bare list for up to the postponed enter plus the push); onDestroyView clears it once the list
+     * has left. shortcut: a fixed 600 ms ends it where the list stays (two panes), past the 300 ms wait
+     * and the 150 ms push; replace with the chat's own "shown" signal when the card morphs (backlog).
+     */
+    private fun openFromPreview(c: Conversation) {
+        if (opening) return
+        opening = true
+        openChat(c.uuid)
+        lifecycleScope.launch {
+            delay(600)
+            previewing = null
+            opening = false
+        }
     }
 
     override fun openChat(uuid: String) {
