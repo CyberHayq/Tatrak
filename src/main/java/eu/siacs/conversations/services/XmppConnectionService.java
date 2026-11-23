@@ -430,7 +430,10 @@ public class XmppConnectionService extends Service {
                         imageCopyFuture,
                         FileBackend.ImageCompressionException.class,
                         ex -> {
-                            message.setType(Message.TYPE_FILE);
+                            // Tatrak: a private (PM) picture stays private when it cannot be compressed
+                            if (message.getType() != Message.TYPE_PRIVATE_FILE) {
+                                message.setType(Message.TYPE_FILE);
+                            }
                             return submitAttachToConversation(uri, type, message);
                         },
                         MoreExecutors.directExecutor());
