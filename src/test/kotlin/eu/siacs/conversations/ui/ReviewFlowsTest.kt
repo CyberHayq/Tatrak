@@ -230,6 +230,8 @@ class ReviewFlowsTest {
     fun stop() {
         try {
             if (::controller.isInitialized) {
+                // Posts of the screens (the classic composer's postEditUiModification) run while they are attached.
+                shadowOf(Looper.getMainLooper()).idle()
                 controller.close()
                 // Let the window recomposer finish cancellation before Robolectric resets the looper.
                 shadowOf(Looper.getMainLooper()).idle()
