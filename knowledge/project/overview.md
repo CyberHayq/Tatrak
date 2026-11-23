@@ -35,11 +35,19 @@ sources:
 
 # Goal
 
-- Telegram-like UI/UX and scrolling smoothness for the owner's circle of users.
-- Remain a standard XMPP client usable with **any** XMPP server; no proprietary
-  server components.
-- Keep the end-to-end encryption and the rest of the security logic exactly as
-  audited upstream. See [security stays untouched](../decisions/security-untouched.md).
+Project goals (owner, 2026-11-23; the same four points open the README):
+
+- **XMPP for everyone.** Messaging on the open XMPP network should feel as simple as any popular
+  messenger: no jargon and no manual setup to get started, with Telegram-like UI and smoothness.
+- **Nothing taken from advanced users.** Power features stay (progressive disclosure: advanced
+  options move out of the way, not out of the app), and it becomes easy to invite and convince
+  friends.
+- **Secure by default.** End-to-end encryption and encrypted local storage are on from the start;
+  the security logic stays as audited upstream (see
+  [security stays untouched](../decisions/security-untouched.md)).
+- **Compatible.** A standard XMPP client usable with **any** XMPP server and with other clients, as
+  far as the protocol allows; only standard XEPs, and Tatrak-only features (archive, styles) stay
+  invisible to the other side; no proprietary server components.
 
 # Key decisions
 

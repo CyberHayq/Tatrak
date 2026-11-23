@@ -2,14 +2,17 @@
 
 **An Android messenger for the open XMPP network, with encrypted local storage and a modern interface.**
 
-Tatrak combines a familiar, Telegram-style experience with the messaging foundation of
-[Conversations](https://codeberg.org/iNPUTmice/Conversations). Your message history and media are
-stored encrypted on your phone, while Conversations' OMEMO and OpenPGP end-to-end encryption
-remains unchanged.
+[![Latest release](https://img.shields.io/github/v/release/CyberHayq/Tatrak?include_prereleases&label=release)](https://github.com/CyberHayq/Tatrak/releases)
+[![Licence: GPLv3](https://img.shields.io/badge/licence-GPLv3-blue)](LICENSE)
+[![Reproducible build](https://img.shields.io/badge/build-reproducible-brightgreen)](knowledge/build/build-setup.md)
+
+Tatrak brings a familiar, Telegram-style experience to the open XMPP network. Your message history
+and media are stored encrypted on your phone, and your chats are protected by established OMEMO
+and OpenPGP end-to-end encryption.
 
 [Download](https://github.com/CyberHayq/Tatrak/releases) ·
-[Features](#features) · [Security](#security) · [Build](#building-from-source) ·
-[Report an issue](https://github.com/CyberHayq/Tatrak/issues)
+[Get started](#-get-started) · [Features](#-features) · [Security](#-security) ·
+[Build](#-building-from-source) · [Report an issue](https://github.com/CyberHayq/Tatrak/issues)
 
 <p align="center">
   <img src="docs/images/01-organised-chats.png" width="200" alt="Keep your chats organised: Tatrak chat folders and conversation list" />
@@ -18,27 +21,76 @@ remains unchanged.
   <img src="docs/images/04-personalisation.png" width="200" alt="Your chats, your colours: Tatrak with a custom accent palette" />
 </p>
 
-## Features
+## 🎯 Our goals
 
-- **Encrypted local storage.** Message history is stored in a SQLCipher database. Attachments,
+- 🙂 **XMPP for everyone.** Messaging on the open XMPP network should feel as simple as any
+  popular messenger: no jargon and no manual setup to get started.
+- 🧰 **Nothing taken from advanced users.** Power features stay, and it becomes easy to bring
+  friends and family over.
+- 🔐 **Secure by default.** End-to-end encryption and encrypted local storage are on from the
+  start, not options to find.
+- 🤝 **Compatible.** Standard XMPP, any server, and conversations with people on other clients,
+  as far as the protocol allows.
+
+These are the directions we work in; the [development status](#-development-status) shows how far
+each one has come.
+
+## 🤔 Why XMPP
+
+XMPP is an open standard for messaging, run by many independent providers that talk to each other,
+much like email. No single company owns the network, and you can move to another provider or run
+your own server.
+
+|  | **Tatrak (XMPP)** | **Telegram** | **WhatsApp** | **Signal** |
+|---|:---:|:---:|:---:|:---:|
+| Sign up without a phone number | ✅ | ❌ | ❌ | ❌ |
+| Not run by a single company | ✅ | ❌ | ❌ | ❌ |
+| Run your own server or pick a provider | ✅ | ❌ | ❌ | ❌ |
+| End-to-end encryption by default | ✅ ¹ | ❌ ² | ✅ | ✅ |
+| Open-source app | ✅ | ✅ | ❌ | ✅ |
+
+¹ For one-to-one chats and private groups when the other person's app supports OMEMO; public group
+chats are not end-to-end encrypted.
+² Only "secret chats", which are one-to-one and not the default.
+
+## ✨ Features
+
+- 🔒 **Encrypted local storage.** Message history is stored in a SQLCipher database. Attachments,
   voice messages, camera captures, avatars, wallpapers and sticker packs are stored encrypted.
-- **End-to-end encryption.** OMEMO and OpenPGP support inherited from Conversations.
-- **Organised conversations.** Built-in All, Personal, Groups and Unread folders, with archive,
+- 🛡️ **End-to-end encryption.** OMEMO and OpenPGP.
+- 💬 **Organised conversations.** Built-in All, Personal, Groups and Unread folders, with archive,
   pin, mute and actions for several chats at once.
-- **Voice and media.** Hold-to-record voice messages, an attachment sheet and an emoji panel.
+- 🎙️ **Voice and media.** Hold-to-record voice messages, an attachment sheet and an emoji panel.
   On Android 10 and newer, voice messages are encrypted during recording without being written
   to disk in plaintext.
-- **Personalisation.** Light and dark themes, accent colours and chat wallpapers.
-- **Multiple accounts and group chats.** Connect to a standard XMPP provider or host your own
+- 🎨 **Personalisation.** Light and dark themes, accent colours and chat wallpapers.
+- 🌐 **Multiple accounts and group chats.** Connect to a standard XMPP provider or host your own
   server, and communicate with people on other servers.
-- **UnifiedPush notifications.** Push notification support without a Google account.
+- 🔔 **UnifiedPush notifications.** Push notification support without a Google account.
 
 Replies, reactions, message editing, delete for everyone, sticker packs, conversation search,
 audio and video calls, and backups are implemented with validation still in progress. See the
-[development status](#development-status) below for details. Feature availability also depends
+[development status](#-development-status) below for details. Feature availability also depends
 on your XMPP server and the clients used by other participants.
 
-## Download
+## 🚀 Get started
+
+1. **Install Tatrak.** Download the APK from [GitHub Releases](#-download).
+2. **Get an XMPP address.** Sign in with an address you already have, or create one at a public
+   provider: [providers.xmpp.net](https://providers.xmpp.net) lists providers and rates how well
+   they suit new users. You can also run your own server.
+3. **Add your friends.** Share your address (it looks like an email address, `name@provider`) or an
+   invite link, see below.
+
+## 👋 Bring your friends
+
+- **Invite links.** If your provider supports invitations, the side menu offers "Invite to
+  server": your friend gets a link that sets up an account and adds you as a contact.
+- **Any XMPP app works.** Your friends do not need Tatrak: other platforms have their own XMPP
+  apps, for example Monal on iPhone, and Gajim or Dino on the desktop.
+- **No phone number to share.** People reach you by your XMPP address only.
+
+## 📥 Download
 
 Download release APKs from [GitHub Releases](https://github.com/CyberHayq/Tatrak/releases).
 Tatrak requires **Android 8.0 or newer**. If you are unsure which APK to take, `arm64-v8a` fits
@@ -65,26 +117,41 @@ Compare the reported certificate SHA-256 digest with the fingerprint above. Rele
 reproducible and signed with one key; the build process is documented in the
 [build setup](knowledge/build/build-setup.md). Tatrak is not on F-Droid yet.
 
-## Security
+## 🔐 Security
 
 ### Messages in transit
 
-Tatrak inherits Conversations' OMEMO and OpenPGP end-to-end encryption, along with its TLS,
-SASL and DNSSEC support. The interface uses the existing protocol and encryption APIs.
+End-to-end encryption uses OMEMO and OpenPGP; connections use TLS, SASL and DNSSEC. This
+protocol and encryption code is taken unchanged from a long-established XMPP client; Tatrak's
+interface only calls it.
 
 ### Data on your phone
 
 The message database is encrypted with SQLCipher, and local media is stored encrypted.
 Encryption keys are randomly generated and protected by the Android Keystore.
 
-There is no app passcode yet. Local encryption protects stored data; it does not prevent access
-through the app when someone has your unlocked phone. The encryption has not been independently
-audited.
+### 🛡️ What Tatrak protects, and what it does not
+
+| Protected | Not protected |
+|---|---|
+| Message content from your provider and the network, in end-to-end encrypted chats | Your contact list, who you talk to and when: your provider sees this metadata |
+| Your history and media at rest, if someone gets the phone's storage | Anyone who uses your unlocked phone: there is no app lock yet |
+| Connections to your provider (TLS) | Public group chats and contacts whose apps do not support OMEMO |
+
+### Audits and supply chain
+
+- The encryption code Tatrak builds on was audited by Radically Open Security: an OMEMO analysis
+  in [2016](https://conversations.im/omemo/audit.pdf) and a penetration test of the app it comes
+  from in [2025](https://conversations.im/2025_audit_conversations.pdf). Tatrak's own code (local
+  encryption, the new interface) has not been independently audited.
+- No Google Play services and no known proprietary or tracking libraries: the source and the APK
+  pass F-Droid's scanner.
+- Release APKs build reproducibly from the public source.
 
 Read more about [database encryption](knowledge/build/local-db-encryption.md) and
 [attachment encryption](knowledge/protocol/attachment-encryption.md).
 
-## Development status
+## 📊 Development status
 
 Tatrak is under active development. **Verified** means implemented and checked on emulators;
 **In testing** means implemented with validation still open. Broad testing on physical devices
@@ -92,33 +159,38 @@ is still pending. Planned features have no committed release dates.
 
 | Feature | Status |
 |---|---|
-| Encrypted message database on the device (SQLCipher) | Verified |
-| Encrypted storage for attachments, voice messages, avatars, wallpapers and sticker packs | Verified |
-| Voice messages encrypted while you record, never written to disk in the clear (Android 10+) | Verified |
-| Chat folders (All, Personal, Groups, Unread), archive, pin, mute, select several chats | Verified |
-| Chat screen, light and dark themes, accent colours and chat wallpapers | Verified |
-| Hold-to-record voice messages, attachment sheet, emoji panel | Verified |
-| Replies, reactions, editing, delete for everyone, sticker packs, search across conversations | In testing |
-| Encrypted audio and video calls, call list | In testing |
-| Backups, including import of monocles chat backups | In testing |
-| Select several messages in a chat; chat preview on a long press of its avatar | In testing |
-| Frequently used reactions in the message menu | In testing |
-| Updates from GitHub releases inside the app (beta versions optional), release signature checked | In testing |
+| Encrypted message database on the device (SQLCipher) | ✅ Verified |
+| Encrypted storage for attachments, voice messages, avatars, wallpapers and sticker packs | ✅ Verified |
+| Voice messages encrypted while you record, never written to disk in the clear (Android 10+) | ✅ Verified |
+| Chat folders (All, Personal, Groups, Unread), archive, pin, mute, select several chats | ✅ Verified |
+| Chat screen, light and dark themes, accent colours and chat wallpapers | ✅ Verified |
+| Hold-to-record voice messages, attachment sheet, emoji panel | ✅ Verified |
+| Replies, reactions, editing, delete for everyone, sticker packs, search across conversations | 🧪 In testing |
+| Encrypted audio and video calls, call list | 🧪 In testing |
+| Backups, including import of monocles chat backups | 🧪 In testing |
+| Select several messages in a chat; chat preview on a long press of its avatar | 🧪 In testing |
+| Frequently used reactions in the message menu | 🧪 In testing |
+| Updates from GitHub releases inside the app (beta versions optional), release signature checked | 🧪 In testing |
+| Private messages to a group participant from the chat (text and replies) | 🧪 In testing |
 
-### Roadmap
+### 🗺️ Roadmap
 
 | Feature | Status |
 |---|---|
-| App lock (PIN or biometric) | Planned |
-| Password mode for local encryption | Planned |
-| Camera button during a voice call | Planned |
-| OMEMO 2 | Planned |
-| Group calls | Under assessment |
-| Post-quantum OMEMO | Under assessment |
+| Simple sign-up: a provider suggested for you, no jargon on the way | 🗓️ Planned |
+| "Invite a friend" where people look for it: contacts and profile, not only the side menu | 🗓️ Planned |
+| Plain words on the main screens ("address" instead of "JID") | 🗓️ Planned |
+| A clear warning before a message goes out without end-to-end encryption | 🗓️ Planned |
+| App lock (PIN or biometric) | 🗓️ Planned |
+| Password mode for local encryption | 🗓️ Planned |
+| Camera button during a voice call | 🗓️ Planned |
+| OMEMO 2 | 🗓️ Planned |
+| Group calls | ❓ Under assessment |
+| Post-quantum OMEMO | ❓ Under assessment |
 
 For implementation notes and planned work, see the [roadmap](knowledge/project/roadmap.md).
 
-## Building from source
+## 🔧 Building from source
 
 ### Requirements
 
@@ -145,7 +217,7 @@ and are not shipped.
 
 See the [build setup](knowledge/build/build-setup.md) for signing and reproducible release builds.
 
-## Support and contributions
+## 💬 Support and contributions
 
 Report bugs and suggest improvements through the
 [issue tracker](https://github.com/CyberHayq/Tatrak/issues). For bug reports, include your Tatrak
@@ -157,7 +229,10 @@ architecture and development guidance live in [`knowledge/`](knowledge/), starti
 [project overview](knowledge/project/overview.md).
 A source-based [comparison with other messengers](docs/messenger-comparison.md) is also available.
 
-## Credits and licence
+Tatrak is available in English, Russian and Armenian (Soviet and traditional orthography); more
+languages are welcome.
+
+## 🙏 Credits and licence
 
 Tatrak is built on [Conversations](https://codeberg.org/iNPUTmice/Conversations) by Daniel Gultsch
 and contributors. Parts of the chat list animations are ported from

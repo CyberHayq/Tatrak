@@ -58,6 +58,14 @@ Current priorities:
 - Complete end-to-end checks on both available emulators, including XMPP flows and two-client cases.
 - Measure performance on real hardware with the benchmark build.
 
+Planned for the project goals (owner, 2026-11-23; listed as "Planned" in the README, no dates):
+
+- Simple sign-up: a provider suggested for the user, no jargon on the way.
+- "Invite a friend" where people look for it (contacts and profile); today "Invite to server" is
+  only in the side menu and only when the provider supports XEP-0401 invitations.
+- Plain words on the main screens ("address" instead of "JID").
+- A clear warning before a message goes out without end-to-end encryption.
+
 Exploratory ideas, not accepted implementation commitments:
 
 - Next encryption step: the password mode (phase 2), which must also wrap the media keys carried in Tatrak backups.
