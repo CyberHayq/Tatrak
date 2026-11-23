@@ -111,8 +111,10 @@ class LanguageSettingsTest {
         assertEquals("zh-TW", chosenTag(tags, Locale.forLanguageTag("zh-Hant-HK")))
         assertEquals("zh-CN", chosenTag(tags, Locale.forLanguageTag("zh-SG")))
         assertEquals("hy-IR", chosenTag(tags, Locale.forLanguageTag("hy-IR")))
-        val rows = appLanguages(context, tags, "hy-IR")
-        assertEquals(listOf(null, "hy-IR"), rows.take(2).map { it.tag })
+        // a stored tag no translation has (Frisian): its own row right under System default
+        assertEquals("fy-NL", chosenTag(tags, Locale.forLanguageTag("fy-NL")))
+        val rows = appLanguages(context, tags, "fy-NL")
+        assertEquals(listOf(null, "fy-NL"), rows.take(2).map { it.tag })
         assertEquals(tags.size + 2, rows.size)
         setAppLanguage("de-DE")
         assertEquals("Deutsch", appLanguageSummary(context))

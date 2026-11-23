@@ -90,6 +90,7 @@ class LanguageLifecycleTest {
     @After
     fun reset() {
         SettingsHost.bindAtStart = true
+        ReviewFlowsTest.Host.service = null // the service holds the Robolectric sandbox's objects
         // AppCompat's choice is static; on 33+ it lives in the (shadow) LocaleManager
         if (Build.VERSION.SDK_INT >= 33) frameworkLocales(LocaleList.getEmptyLocaleList()) else setAppLanguage(null)
     }
@@ -111,7 +112,7 @@ class LanguageLifecycleTest {
      */
     @Test
     fun choiceBeforeBindingReachesTheService() {
-        val service = ReviewFlowsTest.Host.service
+        val service = ReviewFlowsTest.Host.service!!
         ReflectionHelpers.callInstanceMethod<Unit>(service.notificationService, "initializeChannels")
         val channels = app.getSystemService(NotificationManager::class.java)
         assertEquals("Messages", channels.getNotificationChannel("messages").name)
