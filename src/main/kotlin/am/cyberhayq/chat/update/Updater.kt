@@ -21,6 +21,8 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.Request
+import org.json.JSONArray
+import org.json.JSONException
 import org.json.JSONObject
 
 /** A failure with the text the user sees. */
@@ -50,8 +52,11 @@ object Updater {
     const val CHECK = "tatrak_update_check"
     const val RELEASE = "tatrak_update_release"
     const val DISMISSED = "tatrak_update_dismissed"
+    const val PRERELEASE = "tatrak_update_prerelease"
     private const val CHECKED_AT = "tatrak_update_checked_at"
     private const val LATEST = "https://api.github.com/repos/CyberHayq/Tatrak/releases/latest"
+    /** Newest first by creation date; [newest] still ranks by version. */
+    private const val RELEASES = "https://api.github.com/repos/CyberHayq/Tatrak/releases?per_page=10"
     const val DOWNLOAD_PREFIX = "https://github.com/CyberHayq/Tatrak/releases/download/"
     /** AllowedAPKSigningKeys of tools/fdroid/am.cyberhayq.chat.yml. */
     const val RELEASE_CERT = "3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b"
@@ -68,11 +73,32 @@ object Updater {
             val d = a.getOrElse(i) { 0 } - b.getOrElse(i) { 0 }
             if (d != 0) return d > 0
         }
-        // same numbers: a release is newer than its own pre-release (0.4.0 after 0.4.0-beta.1)
-        return isPreRelease(current) && !isPreRelease(tag)
+        return comparePreRelease(preRelease(tag), preRelease(current)) > 0
     }
 
-    private fun isPreRelease(version: String) = '-' in version.substringBefore('+')
+    /** The dot-separated identifiers after `-` (before any `+build`); null for a release. */
+    private fun preRelease(version: String): List<String>? =
+        version.substringBefore('+').substringAfter('-', "").takeIf { it.isNotEmpty() }?.split('.')
+
+    private fun isPreRelease(version: String) = preRelease(version) != null
+
+    /** SemVer 2.0 §11 for equal numbers: beta.9 < beta.10 < rc.1 < the release itself. */
+    private fun comparePreRelease(a: List<String>?, b: List<String>?): Int {
+        if (a == null || b == null) return (if (a == null) 1 else 0) - (if (b == null) 1 else 0)
+        for ((x, y) in a.zip(b)) {
+            val xNumeric = x.isNotEmpty() && x.all { it in '0'..'9' }
+            val yNumeric = y.isNotEmpty() && y.all { it in '0'..'9' }
+            val d =
+                when {
+                    xNumeric && yNumeric -> x.toBigInteger().compareTo(y.toBigInteger())
+                    xNumeric -> -1
+                    yNumeric -> 1
+                    else -> x.compareTo(y)
+                }
+            if (d != 0) return d
+        }
+        return a.size - b.size
+    }
 
     /** Only our releases' download path, after OkHttp resolves `..` and the like. */
     fun acceptUrl(url: String): Boolean =
@@ -91,9 +117,32 @@ object Updater {
             val size = asset.getLong("size")
             if (!acceptUrl(url) || size <= 0) throw UpdateException(R.string.tatrak_update_error_release)
             return Release(version, release.optString("body"), url, size)
-        } catch (e: org.json.JSONException) {
+        } catch (e: JSONException) {
             throw UpdateException(R.string.tatrak_update_error_release, e)
         }
+    }
+
+    /**
+     * The `releases` list answer: the highest non-draft release newer than [current] that [parse]
+     * accepts, so one without an APK for this device does not hide an older one; null when none is newer.
+     */
+    fun newest(json: String, abis: List<String>, current: String): Release? {
+        val newer =
+            try {
+                val releases = JSONArray(json)
+                (0 until releases.length()).map(releases::getJSONObject).filter { !it.optBoolean("draft") && isNewer(it.optString("tag_name"), current) }
+            } catch (e: JSONException) {
+                throw UpdateException(R.string.tatrak_update_error_release, e)
+            }
+        if (newer.isEmpty()) return null
+        val highestFirst = newer.sortedWith { a, b -> if (isNewer(a.getString("tag_name"), b.getString("tag_name"))) -1 else if (isNewer(b.getString("tag_name"), a.getString("tag_name"))) 1 else 0 }
+        return highestFirst.firstNotNullOfOrNull {
+            try {
+                parse(it.toString(), abis)
+            } catch (e: UpdateException) {
+                null
+            }
+        } ?: throw UpdateException(R.string.tatrak_update_error_release)
     }
 
     /** The reason to refuse an APK, or null; signer sets are SHA-256 hex of each certificate. */
@@ -142,14 +191,21 @@ object Updater {
 
     private fun prefs(context: Context) = PreferenceManager.getDefaultSharedPreferences(context)
 
-    /** The stored newer release the user has not put off with "Later". */
+    /** The stored newer release the user has not put off with "Later"; a pre-release only while betas are on. */
     fun pending(context: Context): Release? {
         val prefs = prefs(context)
         val release = Release.fromJson(prefs.getString(RELEASE, null)) ?: return null
-        return release.takeIf { isNewer(it.version, BuildConfig.VERSION_NAME) && it.version != prefs.getString(DISMISSED, null) }
+        return release.takeIf {
+            isNewer(it.version, BuildConfig.VERSION_NAME) &&
+                it.version != prefs.getString(DISMISSED, null) &&
+                (prefs.getBoolean(PRERELEASE, false) || !isPreRelease(it.version))
+        }
     }
 
     fun dismiss(context: Context, version: String) = prefs(context).edit().putString(DISMISSED, version).apply()
+
+    /** "Beta versions" changed: forget the stored release and the last check, so the next one runs in the new channel. */
+    fun channelChanged(context: Context) = prefs(context).edit().remove(RELEASE).remove(CHECKED_AT).apply()
 
     /** The automatic check: on, not under Tor, at most once a day; failures wait for the next day. */
     fun checkIfDue(context: Context) {
@@ -165,10 +221,11 @@ object Updater {
         // https only, also behind GitHub's redirect to its object storage
         HttpConnectionManager.okHttpClient(context).newBuilder().followSslRedirects(false).build()
 
-    /** Blocking: the latest release if it is newer than this app, also stored for the chat list's notice. */
+    /** Blocking: the latest release (or pre-release, with betas on) if it is newer than this app, also stored for the chat list's notice. */
     fun check(context: Context): Release? {
         if (AppSettings(context).isUseTor) throw UpdateException(R.string.tatrak_update_error_tor)
-        val request = Request.Builder().url(LATEST).header("Accept", "application/vnd.github+json").build()
+        val betas = prefs(context).getBoolean(PRERELEASE, false)
+        val request = Request.Builder().url(if (betas) RELEASES else LATEST).header("Accept", "application/vnd.github+json").build()
         val json =
             try {
                 client(context).newCall(request).execute().use { response ->
@@ -178,9 +235,10 @@ object Updater {
             } catch (e: IOException) {
                 throw UpdateException(R.string.tatrak_update_error_network, e)
             }
-        val release = parse(json, Build.SUPPORTED_ABIS.toList())
+        val abis = Build.SUPPORTED_ABIS.toList()
+        val release = if (betas) newest(json, abis, BuildConfig.VERSION_NAME) else parse(json, abis)
         prefs(context).edit().putLong(CHECKED_AT, System.currentTimeMillis()).apply()
-        if (!isNewer(release.version, BuildConfig.VERSION_NAME)) return null
+        if (release == null || !isNewer(release.version, BuildConfig.VERSION_NAME)) return null
         prefs(context).edit().putString(RELEASE, release.toJson()).apply()
         return release
     }

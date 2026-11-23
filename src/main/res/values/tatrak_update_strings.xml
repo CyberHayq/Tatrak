@@ -3,6 +3,8 @@
     <string name="tatrak_updates">Updates</string>
     <string name="tatrak_update_auto">Check for updates automatically</string>
     <string name="tatrak_update_auto_summary">Once a day, from the app\'s GitHub releases. GitHub sees your IP address and the app version. Never while Tor is on.</string>
+    <string name="tatrak_update_prerelease">Beta versions</string>
+    <string name="tatrak_update_prerelease_summary">Also offer pre-releases, which may be less stable. Applies to the automatic check and to Check now.</string>
     <string name="tatrak_update_check_now">Check now</string>
     <string name="tatrak_update_current_version">Installed version %s</string>
     <string name="tatrak_update_available">Version %s is available</string>

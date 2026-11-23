@@ -100,12 +100,13 @@ class PreferenceListTest {
         capture("notifications_dark")
     }
 
-    /** The updates page in the dark: the automatic check is on by default (until the F-Droid submission). */
+    /** The updates page in the dark: the automatic check is on by default (until the F-Droid submission), betas off. */
     @Test
     @Config(qualifiers = "+night")
     fun updatesDark() {
         show(R.xml.tatrak_preferences_updates, dark = true)
         compose.onNodeWithText(context.getString(R.string.tatrak_update_auto)).assertIsOn()
+        compose.onNodeWithText(context.getString(R.string.tatrak_update_prerelease)).assertIsOff()
         capture("updates_dark")
     }
 

@@ -52,6 +52,13 @@ On 2026-10-31: 196 tests, 0 failures. For the emulator use the `x86_64` APK.
 Agents cannot sign with it; they build the unsigned APKs and the owner runs the signing in their own
 terminal. Never generate a replacement release key to update an existing app.
 
+Before tagging, raise `versionCode` in `build.gradle` for every release, each beta included
+(`0.4.0-beta.1` → `0.4.0-beta.2` → `0.4.0` each need a higher code). The in-app updater offers a
+release by its version name but installs it only when its versionCode is higher than the installed
+one; with the same code the user gets "not newer than the installed app" after the download
+(updater). Tag pre-releases `vX.Y.Z-beta.N` (valid
+SemVer: no empty identifiers, no leading zeros): the updater decides beta or release from the tag.
+
 A published release (GitHub and F-Droid's reproducible build) is built from the public
 repository's tag (`~/workspace/tatrak-public`, see public export), not from
 the development tree, because F-Droid rebuilds that tag and compares it with the signed APKs. It is

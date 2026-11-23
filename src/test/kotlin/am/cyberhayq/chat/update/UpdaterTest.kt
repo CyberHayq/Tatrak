@@ -57,7 +57,23 @@ class UpdaterTest {
         assertTrue(Updater.isNewer("v0.4.0", "0.4.0-beta.1"))
         assertFalse(Updater.isNewer("v0.4.0-beta.1", "0.4.0"))
         assertTrue(Updater.isNewer("v0.4.0-beta.1", "0.3.0"))
-        assertFalse(Updater.isNewer("v0.4.0-beta.2", "0.4.0-beta.1"))
+        // pre-releases of the same numbers: SemVer 2.0 §11
+        assertTrue(Updater.isNewer("v0.4.0-beta.2", "0.4.0-beta.1"))
+        assertFalse(Updater.isNewer("v0.4.0-beta.1", "0.4.0-beta.2"))
+        assertTrue(Updater.isNewer("v0.4.0-beta.10", "0.4.0-beta.9"))
+        assertFalse(Updater.isNewer("v0.4.0-beta.9", "0.4.0-beta.10"))
+        assertTrue(Updater.isNewer("v0.4.0-rc.1", "0.4.0-beta.10"))
+        assertFalse(Updater.isNewer("v0.4.0-beta.10", "0.4.0-rc.1"))
+        assertTrue(Updater.isNewer("v0.4.0", "0.4.0-rc.1"))
+        assertFalse(Updater.isNewer("v0.4.0-rc.1", "0.4.0"))
+        // numeric below alphanumeric, a shorter list below a longer one with the same start
+        assertTrue(Updater.isNewer("v0.4.0-beta.x", "0.4.0-beta.2"))
+        assertTrue(Updater.isNewer("v0.4.0-beta.1.1", "0.4.0-beta.1"))
+        assertFalse(Updater.isNewer("v0.4.0-beta", "0.4.0-beta.1"))
+        assertFalse(Updater.isNewer("v0.4.0-beta.1", "0.4.0-beta.1"))
+        // the build part is still ignored
+        assertFalse(Updater.isNewer("v0.4.0-beta.1+b7", "0.4.0-beta.1+b3"))
+        assertTrue(Updater.isNewer("v0.4.0-beta.2+b1", "0.4.0-beta.1+b9"))
     }
 
     private val prefix = Updater.DOWNLOAD_PREFIX
@@ -94,6 +110,39 @@ class UpdaterTest {
         expect(R.string.tatrak_update_error_release) {
             Updater.parse(releaseJson("0.4.0", allAbis, "https://example.com/"), listOf("x86"))
         }
+    }
+
+    private fun entry(version: String, abis: List<String> = allAbis, draft: Boolean = false) =
+        JSONObject(releaseJson(version, abis)).put("draft", draft).put("prerelease", '-' in version)
+
+    @Test
+    fun newestOfTheReleasesList() {
+        val arm = listOf("arm64-v8a", "armeabi-v7a")
+        // GitHub lists by creation date, not by version; a draft is skipped even when highest
+        val list =
+            JSONArray(listOf(
+                entry("0.4.0-beta.9"),
+                entry("0.5.0", draft = true),
+                entry("0.4.0-beta.10"),
+                JSONObject().put("tag_name", "nightly").put("assets", JSONArray()),
+                entry("0.3.0"),
+                entry("0.4.0-beta.2"),
+            )).toString()
+        val release = Updater.newest(list, listOf("x86_64"), "0.4.0-beta.1")!!
+        assertEquals("0.4.0-beta.10", release.version)
+        assertEquals("${prefix}v0.4.0-beta.10/am.cyberhayq.chat-0.4.0-beta.10-x86_64.apk", release.url)
+        // a release beats its own pre-releases
+        assertEquals("0.4.0", Updater.newest(JSONArray(list).put(entry("0.4.0")).toString(), arm, "0.4.0-beta.1")?.version)
+        // the newest beta has no APK for this device: the next newer release is offered
+        val x86Only = JSONArray(list).put(entry("0.4.0-rc.1", listOf("x86_64"))).toString()
+        assertEquals("0.4.0-beta.10", Updater.newest(x86Only, arm, "0.4.0-beta.1")?.version)
+        // nothing newer than the app: up to date, even when the older releases have no usable APK
+        val old = JSONArray(listOf(entry("0.3.0", listOf("mips")), entry("0.4.0-beta.1", emptyList()), entry("0.5.0", draft = true))).toString()
+        assertNull(Updater.newest(old, arm, "0.4.0-beta.1"))
+        assertNull(Updater.newest("[]", arm, "0.4.0-beta.1"))
+        // newer ones exist but none has an APK for this device
+        expect(R.string.tatrak_update_error_release) { Updater.newest(x86Only, listOf("riscv64"), "0.4.0-beta.10") }
+        expect(R.string.tatrak_update_error_release) { Updater.newest("{}", arm, "0.4.0-beta.1") }
     }
 
     @Test
@@ -175,5 +224,18 @@ class UpdaterTest {
         // a stored release that is not newer than this build (installed meanwhile) shows nothing
         prefs.edit().putString(Updater.RELEASE, Release("0.0.1", "n", "${prefix}x", 1).toJson()).commit()
         assertNull(Updater.pending(context))
+    }
+
+    @Test
+    fun storedPreReleaseHiddenWithBetasOff() {
+        prefs.edit().putString(Updater.RELEASE, Release("9.9.9-beta.1", "n", "${prefix}x", 1).toJson()).commit()
+        assertNull(Updater.pending(context))
+        prefs.edit().putBoolean(Updater.PRERELEASE, true).commit()
+        assertEquals("9.9.9-beta.1", Updater.pending(context)?.version)
+        prefs.edit().putBoolean(Updater.PRERELEASE, false).commit()
+        assertNull(Updater.pending(context))
+        // a release still shows with betas off
+        prefs.edit().putString(Updater.RELEASE, Release("9.9.9", "n", "${prefix}x", 1).toJson()).commit()
+        assertEquals("9.9.9", Updater.pending(context)?.version)
     }
 }

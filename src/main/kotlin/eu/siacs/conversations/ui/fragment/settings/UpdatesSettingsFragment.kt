@@ -1,13 +1,14 @@
 package eu.siacs.conversations.ui.fragment.settings
 
 import am.cyberhayq.chat.update.UpdateActivity
+import am.cyberhayq.chat.update.Updater
 import android.content.Intent
 import android.os.Bundle
 import androidx.preference.Preference
 import eu.siacs.conversations.BuildConfig
 import eu.siacs.conversations.R
 
-/** Tatrak: the automatic update check and "Check now" (am.cyberhayq.chat.update.Updater). */
+/** Tatrak: the automatic update check, "Beta versions" and "Check now" (am.cyberhayq.chat.update.Updater). */
 class UpdatesSettingsFragment : XmppPreferenceFragment() {
 
     override fun onCreatePreferences(savedInstanceState: Bundle?, rootKey: String?) {
@@ -19,6 +20,11 @@ class UpdatesSettingsFragment : XmppPreferenceFragment() {
                 true
             }
         }
+    }
+
+    override fun onSharedPreferenceChanged(key: String) {
+        super.onSharedPreferenceChanged(key)
+        if (key == Updater.PRERELEASE) Updater.channelChanged(requireContext())
     }
 
     override fun onStart() {

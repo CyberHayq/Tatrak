@@ -103,7 +103,7 @@ is still pending. Planned features have no committed release dates.
 | Backups, including import of monocles chat backups | In testing |
 | Select several messages in a chat; chat preview on a long press of its avatar | In testing |
 | Frequently used reactions in the message menu | In testing |
-| Updates from GitHub releases inside the app, release signature checked | In testing |
+| Updates from GitHub releases inside the app (beta versions optional), release signature checked | In testing |
 
 ### Roadmap
 

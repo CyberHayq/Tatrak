@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.update
 
+import am.cyberhayq.chat.ui.theme.rememberPreference
 import am.cyberhayq.chat.ui.theme.rememberStringPreference
 import android.content.Intent
 import androidx.compose.foundation.layout.Arrangement
@@ -30,7 +31,8 @@ fun UpdateNotice() {
     // read as state so a finished check or "Later" shows or hides it at once
     val stored = rememberStringPreference(Updater.RELEASE)
     val dismissed = rememberStringPreference(Updater.DISMISSED)
-    val release = remember(stored, dismissed) { Updater.pending(context) } ?: return
+    val betas = rememberPreference(Updater.PRERELEASE) { it.getBoolean(Updater.PRERELEASE, false) }
+    val release = remember(stored, dismissed, betas) { Updater.pending(context) } ?: return
     UpdateNoticeRow(
         release.version,
         onUpdate = { context.startActivity(Intent(context, UpdateActivity::class.java)) },

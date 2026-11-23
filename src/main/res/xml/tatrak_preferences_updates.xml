@@ -5,6 +5,11 @@
         android:key="tatrak_update_check"
         android:summary="@string/tatrak_update_auto_summary"
         android:title="@string/tatrak_update_auto" />
+    <SwitchPreferenceCompat
+        android:defaultValue="false"
+        android:key="tatrak_update_prerelease"
+        android:summary="@string/tatrak_update_prerelease_summary"
+        android:title="@string/tatrak_update_prerelease" />
     <Preference
         android:key="tatrak_update_check_now"
         android:title="@string/tatrak_update_check_now" />

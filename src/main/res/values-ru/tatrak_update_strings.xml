@@ -3,6 +3,8 @@
     <string name="tatrak_updates">Обновления</string>
     <string name="tatrak_update_auto">Проверять обновления автоматически</string>
     <string name="tatrak_update_auto_summary">Раз в сутки, по релизам приложения на GitHub. GitHub видит ваш IP-адрес и версию приложения. Никогда при включённом Tor.</string>
+    <string name="tatrak_update_prerelease">Бета-версии</string>
+    <string name="tatrak_update_prerelease_summary">Предлагать и предварительные выпуски, они могут быть менее стабильными. Для автоматической проверки и для «Проверить сейчас».</string>
     <string name="tatrak_update_check_now">Проверить сейчас</string>
     <string name="tatrak_update_current_version">Установлена версия %s</string>
     <string name="tatrak_update_available">Доступна версия %s</string>

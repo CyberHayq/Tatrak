@@ -19,6 +19,10 @@
 - A tap on a participant's avatar in a group, or on a row of the participants list, opens the
   participant menu (profile, write to them); a long press mentions them.
 
+### Updates
+- "Beta versions" in Settings → Updates (off by default): the update check also offers GitHub
+  pre-releases, and a newer beta is offered to a beta install (0.4.0-beta.2 after 0.4.0-beta.1).
+
 ## 0.4.0-beta.1 (pre-release)
 
 ### Interface

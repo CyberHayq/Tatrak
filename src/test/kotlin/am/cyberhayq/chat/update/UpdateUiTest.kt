@@ -57,6 +57,19 @@ class UpdateUiTest {
         assertEquals("9.9.9", prefs.getString(Updater.DISMISSED, null))
     }
 
+    /** A stored beta follows "Beta versions" while the notice is shown (the preference written directly, as the settings screen also clears the release). */
+    @Test
+    fun betaNoticeFollowsTheSwitch() {
+        val text = "Version 9.9.9-beta.1 is available"
+        prefs.edit().putString(Updater.RELEASE, release.copy(version = "9.9.9-beta.1").toJson()).putBoolean(Updater.PRERELEASE, true).commit()
+        compose.setContent { TatrakTheme(darkTheme = false) { UpdateNotice() } }
+        compose.onNodeWithText(text).assertExists()
+        prefs.edit().putBoolean(Updater.PRERELEASE, false).commit()
+        compose.onNodeWithText(text).assertDoesNotExist()
+        prefs.edit().putBoolean(Updater.PRERELEASE, true).commit()
+        compose.onNodeWithText(text).assertExists()
+    }
+
     private fun dialog(state: UpdateState, testBuild: Boolean, dark: Boolean, name: String) {
         compose.setContent { TatrakTheme(darkTheme = dark) { UpdateDialog(state, testBuild, {}, {}, {}) } }
         compose.onNode(isDialog()).captureRoboImage("build/outputs/roborazzi/$name.png")
