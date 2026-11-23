@@ -68,6 +68,11 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
 - Before building a feature that monocles chat (or another reference app) already has, look at
   its implementation: use it if it fits the rules above (no new dependencies, fast enough, safe),
   otherwise build our own and record why in `knowledge/project/reference-sources.md`.
+- Before building any feature, also look at how Telegram and the other messengers (Conversations,
+  monocles, Signal and the like) do it, including the fixes in the history of that code (commit
+  log of the files, their issue tracker), so Tatrak does not repeat bugs they already fixed (owner,
+  2026-11-24). The plan or report says what was read and what was taken from it. The
+  `../telegram-ref` clone is shallow: read Telegram's history on GitHub (`gh api`).
 - Reference clones next to the repo are read-only: `../monocles-ref` (AGPL-3.0),
   `../telegram-ref`, `../grapheneos-messaging-ref` (re-clone instructions in
   `knowledge/project/reference-sources.md`). Check the licence before copying: Tatrak is GPL-3.0, so AGPL code is not copied (see `knowledge/project/reference-sources.md`).
