@@ -399,16 +399,18 @@ private fun RowScope.DockItem(
                 .semantics { this.selected = selected }
                 .padding(vertical = 4.dp),
     ) {
+        // [capsule]: Telegram 13's 48 dp tab in its 56 dp bar (MAIN_TABS_HEIGHT), the 12 sp label from 28 dp down
         Box(
             contentAlignment = Alignment.Center,
             modifier =
-                Modifier.height(30.dp)
+                Modifier.height(if (capsule) 24.dp else 30.dp)
                     .clip(RoundedCornerShape(15.dp))
                     .background(if (capsule) Color.Transparent else mark)
                     .padding(horizontal = 18.dp),
         ) {
-            if (avatar != null) ChatAvatar(avatar, online = false, size = 24.dp) else Icon(painterResource(icon), null, tint = color, modifier = Modifier.size(22.dp))
+            if (avatar != null) ChatAvatar(avatar, online = false, size = 24.dp) else Icon(painterResource(icon), null, tint = color, modifier = Modifier.size(if (capsule) 24.dp else 22.dp))
         }
-        Text(label, color = color, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        if (capsule) Text(label, color = color, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        else Text(label, color = color, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }

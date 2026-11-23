@@ -168,7 +168,11 @@ Chats, Contacts, Calls and Profile are one level, as in Telegram's `MainTabsActi
 tabs of the list pane of `ConversationsActivity` (also in two panes, where the chat stays in the
 second pane). Only the dock styles have tabs (floating bars in any style: Chats, Contacts,
 Calls, Profile; Slate and Sea's classic bar: Chats, Calls, Contacts, Settings); Telegram's style
-without floating bars has no dock and stays on Chats.[^tabs]
+without floating bars has no dock and stays on Chats.[^tabs] Sizes in the floating style follow Telegram 13
+(`21f7d10`): the folder tab pill is 36 dp (`DialogsActivity.FILTER_TABS_HEIGHT`) with 14 sp titles,
+the tab bar 56 dp (`MAIN_TABS_HEIGHT`: a 48 dp tab, its 12 sp label from 28 dp down as in
+`GlassTabView`), the header pieces 46 dp (`ActionBar`'s glass buttons); Slate and Sea keep their
+own.
 
 - **Switch.** A tap on another tab slides the old and the new page side by side a full width,
   the new one from the side its tab lies on, 320 ms `EaseOutQuint` (Telegram's

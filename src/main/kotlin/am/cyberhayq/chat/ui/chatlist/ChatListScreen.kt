@@ -386,6 +386,7 @@ fun ChatListScreen(
                                 onSelect = { scope.launch { pagerState.animateScrollToPage(it) } },
                                 // floating: clear of the tab pill's round ends
                                 edgePadding = if (floating) 16.dp else 8.dp,
+                                floating = floating,
                             )
                             UpdateNotice()
                         }
@@ -804,7 +805,7 @@ private fun NewChatButton(onClick: () -> Unit, modifier: Modifier) {
 }
 
 @Composable
-private fun FolderTabs(chats: List<ChatListItem>, selectedIndex: Int, onSelect: (Int) -> Unit, edgePadding: Dp) {
+private fun FolderTabs(chats: List<ChatListItem>, selectedIndex: Int, onSelect: (Int) -> Unit, edgePadding: Dp, floating: Boolean) {
     val chatColors = TatrakTheme.chatColors
     val accent = MaterialTheme.colorScheme.primary
     PrimaryScrollableTabRow(
@@ -832,9 +833,10 @@ private fun FolderTabs(chats: List<ChatListItem>, selectedIndex: Int, onSelect: 
             ) {
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 12.dp),
+                    // floating: Telegram 13's 36 dp tab pill (FILTER_TABS_HEIGHT) with 14 sp titles, the 22 dp badge setting the height
+                    modifier = Modifier.padding(horizontal = 4.dp, vertical = if (floating) 3.dp else 12.dp),
                 ) {
-                    Text(stringResource(folder.label), fontSize = 15.sp, fontWeight = FontWeight.Medium)
+                    Text(stringResource(folder.label), fontSize = if (floating) 14.sp else 15.sp, fontWeight = FontWeight.Medium)
                     if (unread > 0) {
                         UnreadBadge(
                             unread,

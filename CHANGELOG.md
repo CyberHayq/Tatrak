@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Interface
+- Floating bars: the folder tabs and the bottom tab bar are smaller, in Telegram 13's sizes (a 36 dp
+  folder bar with 14 sp titles, a 56 dp tab bar with 12 sp labels).
+
 ## 0.4.0
 
 Everything in 0.4.0-beta.1 below, and:
