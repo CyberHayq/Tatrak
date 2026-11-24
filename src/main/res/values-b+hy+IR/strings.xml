@@ -140,7 +140,7 @@
     <string name="pref_confirm_messages_summary">Միացուած լինելու դեպքում Ձեր կոնտակտները կտեսնեն, թէ երբ էք կարդացել նրանց հաղորդագրութիւնները։</string>
     <string name="pref_prevent_screenshots">Արգելել էկրանի հանոյթները</string>
     <string name="pref_prevent_screenshots_summary">Թաքցնել յաւելուածի բովանդակութիւնը յաւելուածների փոխանջատիչում եւ արգելափակել էկրանի հանոյթները</string>
-    <string name="pref_ui_options">Ինտերֆեյս</string>
+    <string name="pref_ui_options">Միջերես</string>
     <string name="openpgp_error">OpenKeychain-ում սխալ առաջացավ։</string>
     <string name="bad_key_for_encryption">Գաղտնագրման համար ոչ պիտանի բանալի։</string>
     <string name="accept">Ընդունել</string>
@@ -1035,7 +1035,7 @@
     <string name="delete_and_close">Ջնջել &amp; արխիւացնել զրոյցը</string>
     <string name="start_chat">Սկսել զրոյց</string>
     <string name="no_certificate_selected">Յաճախորդի վկայական ընտրուած չէ։</string>
-    <string name="pref_title_interface">Ինտերֆեյս</string>
+    <string name="pref_title_interface">Միջերես</string>
     <string name="pref_summary_appearance">Ձեւաւորում, գոյներ, էկրանի հանոյթներ, ներածում</string>
     <string name="pref_title_security">Անվտանգութիւն</string>
     <string name="pref_summary_security">Ծայրից ծայր գաղտնագրում, կոյր վստահութիւն մինչեւ ստուգումը, MITM-ի յայտնաբերում</string>
