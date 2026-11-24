@@ -214,8 +214,9 @@ Use the Gradle wrapper included in the repository:
 ```
 
 APKs are written to `build/outputs/apk/conversationsFree/`. The `conversationsFree` variant is
-Tatrak; the upstream `quicksy` and `playstore` flavours are retained to simplify upstream merges
-and are not shipped.
+Tatrak; the upstream `quicksy` flavour is retained to simplify upstream merges and is not shipped.
+The upstream `playstore` flavour is switched off until Tatrak is published on Google Play (its
+sources stay in `src/*playstore*`; they need a `google-services.json`).
 
 See the [build setup](knowledge/build/build-setup.md) for signing and reproducible release builds.
 

@@ -192,10 +192,8 @@ android {
             buildConfigField('String', 'PRIVACY_POLICY', 'null')
         }
 
-        playstore {
-            dimension = 'distribution'
-            versionNameSuffix = '+playstore'
-        }
+        // Tatrak: no Play Store flavor until Tatrak is published there (owner, 2026-11-24): its sources
+        // (src/*playstore*) need google-services.json, so `assemble` (CodeQL's autobuild) failed on them
         free {
             dimension = 'distribution'
             // Tatrak: no '+free' suffix, so F-Droid's %v equals the release tag's version (v%v)
@@ -206,16 +204,8 @@ android {
         quicksyFree {
             java.srcDir('src/quicksyFree/java')
         }
-        quicksyPlaystore {
-            java.srcDir('src/quicksyPlaystore/java')
-            res.srcDir('src/quicksyPlaystore/res')
-        }
         conversationsFree {
             java.srcDir('src/conversationsFree/java')
-        }
-        conversationsPlaystore {
-            java.srcDir('src/conversationsPlaystore/java')
-            res.srcDir('src/conversationsPlaystore/res')
         }
     }
 
