@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.profile
 
+import am.cyberhayq.chat.ui.theme.groupedBackground
 import am.cyberhayq.chat.ui.chatlist.inErrorColor
 import am.cyberhayq.chat.ui.chat.ChatHeader
 import am.cyberhayq.chat.ui.chat.LetterAvatar
@@ -147,7 +148,7 @@ fun ProfileScreen(state: ProfileState, actions: ProfileActions, modifier: Modifi
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
     TatrakScaffold(
         topBar = { ProfileTopBar(actions) },
-        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+        modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.groupedBackground),
         floatingTop = { FloatingProfileButtons(actions, it) },
     ) { top ->
         LazyColumn(Modifier.fillMaxSize().navigationBarsPadding(), contentPadding = PaddingValues(top = top)) {

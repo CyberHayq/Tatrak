@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.settings
 
+import am.cyberhayq.chat.ui.theme.groupedBackground
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.annotation.SuppressLint
 import android.graphics.drawable.Drawable
@@ -112,7 +113,7 @@ fun PreferenceList(screen: PreferenceGroup, adapter: RecyclerView.Adapter<*>?, m
     val sections = remember(screen, version) { sections(screen) }
     // Text without a colour would fall back to black outside a Surface (unreadable in the dark theme)
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
-        LazyColumn(modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).navigationBarsPadding()) {
+        LazyColumn(modifier.fillMaxSize().background(MaterialTheme.colorScheme.groupedBackground).navigationBarsPadding()) {
             sections.forEachIndexed { index, section ->
                 if (section.title != null) item { SectionHeader(section.title) }
                 // an icon in any row keeps the titles of the section in one column

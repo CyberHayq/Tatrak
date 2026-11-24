@@ -13,6 +13,11 @@
   (seen on some phones, issue #4), the text, time and icons in your own messages switch to a
   dark colour that can be read. Palettes that were already readable are unchanged.
 
+### Interface
+- Dark theme: in Settings, the Settings tab, contact and group profiles, the gaps between the groups
+  of rows and the empty space below them are now darker than the rows, as in Telegram, instead of
+  lighter; the screen reads as one piece.
+
 ## 0.5.0
 
 ### Fixes

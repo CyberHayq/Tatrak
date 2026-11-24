@@ -12,6 +12,7 @@ import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.material3.Typography
 import androidx.compose.material3.Shapes
@@ -180,6 +181,13 @@ private fun ColorScheme.withNeutrals(n: Neutrals) =
  * Glyphs on an accent fill: white, or near-black on a light fill (the night accents, dynamic tone-80 colours, Gold, Cyan and
  * Orange by day). At 0.30 every fill reaches 3:1 (white >= 3.0 below, near-black >= 5.8 above); `glyph()` in gen_accents.py mirrors it.
  */
+/**
+ * The background between grouped rows drawn on surface (settings, profile): surfaceVariant by day, and at night
+ * the surface darkened, so the gaps sit below the rows as in Telegram instead of glowing above them (owner, 2026-11-24).
+ */
+val ColorScheme.groupedBackground: Color
+    get() = if (surface.luminance() < 0.5f) lerp(surface, Color.Black, 0.35f) else surfaceVariant
+
 fun contentOn(fill: Color): Color = if (fill.luminance() > 0.30f) Color(0xFF1A1A1A) else Color.White
 
 /**

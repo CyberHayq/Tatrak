@@ -1,5 +1,6 @@
 package am.cyberhayq.chat.ui.settings
 
+import am.cyberhayq.chat.ui.theme.groupedBackground
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.runtime.CompositionLocalProvider
 import am.cyberhayq.chat.ui.chat.LetterAvatar
@@ -74,7 +75,7 @@ fun SettingsHomeScreen(
     // Text without a colour would fall back to black outside a Surface (unreadable in the dark theme)
     CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onSurface) {
         LazyColumn(
-            modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant).listBottom(),
+            modifier.fillMaxSize().background(MaterialTheme.colorScheme.groupedBackground).listBottom(),
             state = list,
             contentPadding = listPadding(top),
         ) {
@@ -128,7 +129,7 @@ fun ProfileTab(
     ScrollToTopOn(scrollToTop, list)
     TatrakScaffold(
         topBar = { TatrakTopBar(title = stringResource(R.string.title_activity_settings), onBack = null) },
-        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceVariant),
+        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.groupedBackground),
         bottomBar = dock,
     ) { top ->
         SettingsHomeScreen(account, onAccount, sections, top = top, list = list)

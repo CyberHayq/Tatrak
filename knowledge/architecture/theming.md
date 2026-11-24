@@ -58,6 +58,11 @@ sources:
   header + grouped rows into the unchanged preference pages; `MainSettingsFragment` is no
   longer used but kept for upstream merges). `AppearanceFragment`: theme mode (existing
   `theme` setting and arrays), dynamic colours, accent, app-wide wallpaper with a live preview.
+- Grouped lists (2026-11-24, owner's choice "B"): settings home, Profile tab, `PreferenceList` and
+  `ProfileScreen` draw rows on `surface` over `ColorScheme.groupedBackground` (Theme.kt):
+  `surfaceVariant` by day, `surface` mixed 35 % with black at night, so the gaps are darker than
+  the rows, as in Telegram (with `surfaceVariant` they were lighter at night). AMOLED rows are
+  already black, so there the gaps match the rows.
 - Dynamic colours: outgoing text, time and icons go through `readableOn` (4.5:1 against the
   bubble, else `contentOn`), against makers' palettes that pair light with light (issue #4).
 - Language (2026-11-23; `am.cyberhayq.chat.ui.settings.LanguageSettings.kt`): a "Language" row after
