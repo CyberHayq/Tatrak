@@ -24,6 +24,7 @@
     <string name="tatrak_backup_omit_contact_trust">Contact OMEMO key and its trust not imported (verify it anew)</string>
     <string name="tatrak_backup_omit_unproven_contact">monocles contact OMEMO key with no legacy OMEMO message in the backup not imported (verify it anew)</string>
     <string name="tatrak_backup_omit_bad_identity">OMEMO key with unreadable data or trust not imported</string>
+    <string name="tatrak_backup_omit_orphan_session">OMEMO session not imported: unreadable or too large, or its contact key or another session of the same contact was left out (Tatrak sets up new sessions when the contact\'s devices and their keys are available)</string>
     <string name="tatrak_backup_omit_private">Own OMEMO key, device ID, session or prekey not imported (this device gets a new key)</string>
     <string name="tatrak_backup_omit_disappearing">Disappearing message not imported (Tatrak cannot delete it on time)</string>
     <string name="tatrak_backup_omit_caption">Attachment caption dropped (file kept)</string>

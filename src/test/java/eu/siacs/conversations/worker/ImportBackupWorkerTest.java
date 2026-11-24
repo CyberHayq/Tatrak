@@ -1,5 +1,6 @@
 package eu.siacs.conversations.worker;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -55,7 +56,7 @@ import org.robolectric.shadows.ShadowLooper;
  */
 @RunWith(RobolectricTestRunner.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
-@Config(application = Application.class, sdk = 35)
+@Config(application = Application.class, sdk = 35, shadows = ImportBackupWorkerTest.StageIdentities.class)
 public class ImportBackupWorkerTest {
 
     private static final String PASSWORD = "correct horse battery staple";
@@ -982,13 +983,50 @@ public class ImportBackupWorkerTest {
     private static final org.whispersystems.libsignal.IdentityKeyPair OWN_KEY =
             org.whispersystems.libsignal.util.KeyHelper.generateIdentityKeyPair();
     private static final java.util.Map<String, org.whispersystems.libsignal.IdentityKey> CONTACT_KEYS = new java.util.TreeMap<>();
+    // the other side of an established session with third@example.com's device 9 (key "shared")
+    private static final org.whispersystems.libsignal.state.impl.InMemorySignalProtocolStore THIRD_DEVICE;
+    private static final String THIRD_SESSION;
     static {
         // mine: another own device; peer: legacy contact with a legacy message; silent: legacy
         // contact without one; pq: OMEMO2 key (pinned, only a PQ message); shared: a key monocles
         // used for both stacks (pinned and in a legacy message)
+        final var pairs = new java.util.HashMap<String, org.whispersystems.libsignal.IdentityKeyPair>();
         for (final String name : new String[] {"mine", "peer", "silent", "pq", "shared"}) {
-            CONTACT_KEYS.put(name, org.whispersystems.libsignal.util.KeyHelper.generateIdentityKeyPair().getPublicKey());
+            pairs.put(name, org.whispersystems.libsignal.util.KeyHelper.generateIdentityKeyPair());
+            CONTACT_KEYS.put(name, pairs.get(name).getPublicKey());
         }
+        THIRD_DEVICE = new org.whispersystems.libsignal.state.impl.InMemorySignalProtocolStore(pairs.get("shared"), 9);
+        try {
+            final var preKey = new org.whispersystems.libsignal.state.PreKeyRecord(1,
+                    org.whispersystems.libsignal.ecc.Curve.generateKeyPair());
+            final var signed = org.whispersystems.libsignal.util.KeyHelper.generateSignedPreKey(pairs.get("shared"), 1);
+            THIRD_DEVICE.storePreKey(1, preKey);
+            THIRD_DEVICE.storeSignedPreKey(1, signed);
+            final var own = new org.whispersystems.libsignal.state.impl.InMemorySignalProtocolStore(OWN_KEY, 4242);
+            final var third = new org.whispersystems.libsignal.SignalProtocolAddress("third@example.com", 9);
+            new org.whispersystems.libsignal.SessionBuilder(own, third).process(new org.whispersystems.libsignal.state.PreKeyBundle(
+                    THIRD_DEVICE.getLocalRegistrationId(), 9, 1, preKey.getKeyPair().getPublicKey(), 1,
+                    signed.getKeyPair().getPublicKey(), signed.getSignature(), pairs.get("shared").getPublicKey()));
+            // archived states: one of the same key (kept), one of the dropped pq key and one whose
+            // key does not parse (both removed)
+            final var current = own.loadSession(third).getSessionState();
+            final var record = new org.whispersystems.libsignal.state.SessionRecord(state(CONTACT_KEYS.get("pq")));
+            record.promoteState(new org.whispersystems.libsignal.state.SessionState(
+                    org.whispersystems.libsignal.state.StorageProtos.SessionStructure.newBuilder(state(CONTACT_KEYS.get("pq")).getStructure())
+                            .setRemoteIdentityPublic(com.google.protobuf.ByteString.copyFrom(new byte[] {1, 2, 3})).build()));
+            record.promoteState(state(CONTACT_KEYS.get("shared")));
+            record.promoteState(current);
+            THIRD_SESSION = base64(record.serialize());
+        } catch (final org.whispersystems.libsignal.InvalidKeyException
+                | org.whispersystems.libsignal.UntrustedIdentityException e) {
+            throw new AssertionError(e);
+        }
+    }
+
+    private static org.whispersystems.libsignal.state.SessionState state(final org.whispersystems.libsignal.IdentityKey remote) {
+        final var state = new org.whispersystems.libsignal.state.SessionState();
+        state.setRemoteIdentityKey(remote);
+        return state;
     }
 
     private static String fingerprint(final org.whispersystems.libsignal.IdentityKey key) {
@@ -1020,6 +1058,15 @@ public class ImportBackupWorkerTest {
         return "{\"table\":\"messages\",\"values\":{\"uuid\":\"" + uuid + "\",\"conversationUuid\":\"c1\",\"type\":\"0\","
                 + "\"status\":\"0\",\"body\":\"hi\",\"encryption\":\"" + encryption + "\",\"axolotl_fingerprint\":"
                 + (contact == null ? "null" : "\"" + fingerprint(contact) + "\"") + "}}";
+    }
+
+    private static String session(final String name, final int device, final String key) {
+        return row("sessions", "\"name\":\"" + name + "\",\"device_id\":\"" + device + "\",\"key\":\"" + key + "\"");
+    }
+
+    /** A legacy session record as libsignal stores it: its current state names the remote identity key. */
+    private static byte[] sessionRecord(final org.whispersystems.libsignal.IdentityKey remote) {
+        return new org.whispersystems.libsignal.state.SessionRecord(state(remote)).serialize();
     }
 
     private static List<String> omemoBackup(final boolean monocles) {
@@ -1057,7 +1104,19 @@ public class ImportBackupWorkerTest {
             rows.add(row("omemo2_pq_identities", "\"name\":\"tester@example.com\",\"fingerprint\":\""
                     + fingerprint(OWN_KEY.getPublicKey()) + "\",\"pq_key\":\"pq\"").replace("\"a1\"", "\"a2\""));
         }
-        rows.add(row("sessions", "\"name\":\"friend@example.com\",\"device_id\":\"7\",\"key\":\"s\""));
+        // legacy sessions: one per contact key above, one whose key has no identity row (bob's
+        // identity is invalid) and one that does not parse
+        rows.add(session("friend@example.com", 7, base64(sessionRecord(CONTACT_KEYS.get("peer")))));
+        rows.add(session("friend@example.com", 8, base64(sessionRecord(CONTACT_KEYS.get("pq")))));
+        rows.add(session("tester@example.com", 2, base64(sessionRecord(CONTACT_KEYS.get("mine")))));
+        rows.add(session("other@example.com", 3, base64(sessionRecord(CONTACT_KEYS.get("silent")))));
+        rows.add(session("bob@example.com", 4, base64(sessionRecord(
+                org.whispersystems.libsignal.util.KeyHelper.generateIdentityKeyPair().getPublicKey()))));
+        rows.add(session("nofp@example.com", 5, "s"));
+        rows.add(session("third@example.com", 9, THIRD_SESSION));
+        // keys whose identity row is another contact's or the own key: no contact row of their own
+        rows.add(session("stranger@example.com", 11, base64(sessionRecord(CONTACT_KEYS.get("shared")))));
+        rows.add(session("mallory@example.com", 12, base64(sessionRecord(OWN_KEY.getPublicKey()))));
         rows.add(row("prekeys", "\"id\":\"1\",\"key\":\"p\""));
         rows.add(row("signed_prekeys", "\"id\":\"1\",\"key\":\"sp\""));
         return rows;
@@ -1131,6 +1190,14 @@ public class ImportBackupWorkerTest {
         return rows;
     }
 
+    private java.util.Set<String> importedSessions() {
+        final var rows = new java.util.TreeSet<String>();
+        try (final var cursor = db.rawQuery("select name, device_id from sessions", null)) {
+            while (cursor.moveToNext()) rows.add(cursor.getString(0) + ":" + cursor.getInt(1));
+        }
+        return rows;
+    }
+
     private static String omission(final int label, final int count) {
         return ApplicationProvider.getApplicationContext().getString(label) + ": " + count + "\n";
     }
@@ -1160,7 +1227,25 @@ public class ImportBackupWorkerTest {
             }
         }
         assertEquals(expected, importedIdentities());
-        for (final String table : new String[] {"sessions", "prekeys", "signed_prekeys"}) {
+        // a session is kept only with its contact key: one without would never be trusted, and
+        // would keep Tatrak from fetching the contact's devices again; a contact that loses one
+        // session loses all of them, its keys stay
+        final var sessions = new java.util.TreeSet<String>();
+        if (full) {
+            sessions.add("tester@example.com:2");
+            sessions.add("third@example.com:9");
+            if (!monocles) {
+                sessions.add("friend@example.com:7");
+                sessions.add("friend@example.com:8");
+                sessions.add("other@example.com:3");
+            }
+        }
+        assertEquals(sessions, importedSessions());
+        // bob's (invalid identity), the unreadable one, stranger's and mallory's; for monocles also
+        // silent's and both of friend's (pq's key was dropped, peer's went with it)
+        assertEquals(preview, full, preview.contains(omission(
+                eu.siacs.conversations.R.string.tatrak_backup_omit_orphan_session, monocles ? 7 : 4)));
+        for (final String table : new String[] {"prekeys", "signed_prekeys"}) {
             assertEquals(table, full ? 1 : 0, DatabaseUtils.queryNumEntries(db, table));
         }
         final var keys = eu.siacs.conversations.entities.Account.Keys.parse(
@@ -1172,8 +1257,8 @@ public class ImportBackupWorkerTest {
         // the omission list names what this mode and source leave out
         // trust MAYBE and a missing fingerprint
         assertTrue(preview, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_bad_identity, 2)));
-        // own identity, the three key tables and the device id
-        assertEquals(preview, !full, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_private, 5)));
+        // own identity, nine sessions, two prekeys and the device id
+        assertEquals(preview, !full, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_private, 13)));
         assertEquals(preview, none, preview.contains(omission(eu.siacs.conversations.R.string.tatrak_backup_omit_contact_trust, 5)));
         // silent and pq; NONE left every contact key out already
         assertEquals(preview, monocles && !none,
@@ -1234,6 +1319,123 @@ public class ImportBackupWorkerTest {
                 DatabaseUtils.stringForQuery(db, "select key from identities where fingerprint = ?",
                         new String[] {fingerprint("peer")})), 0);
         assertEquals(CONTACT_KEYS.get("peer"), peer);
+    }
+
+    /**
+     * The DatabaseBackend methods SQLiteAxolotlStore sends with, on the test's plain SQLite stage
+     * (SQLCipher does not run on the JVM): the same queries, for the stage's one account.
+     */
+    @org.robolectric.annotation.Implements(value = eu.siacs.conversations.persistance.DatabaseBackend.class, isInAndroidSdk = false)
+    public static class StageIdentities {
+        static SQLiteDatabase stage;
+
+        @org.robolectric.annotation.Implementation
+        public eu.siacs.conversations.crypto.axolotl.FingerprintStatus getFingerprintStatus(
+                final eu.siacs.conversations.entities.Account account, final String fingerprint) {
+            try (final var cursor = stage.rawQuery(
+                    "select trust, active, last_activation from identities where fingerprint = ?", new String[] {fingerprint})) {
+                return cursor.moveToFirst() ? eu.siacs.conversations.crypto.axolotl.FingerprintStatus.fromCursor(cursor) : null;
+            }
+        }
+
+        @org.robolectric.annotation.Implementation
+        public java.util.Set<org.whispersystems.libsignal.IdentityKey> loadIdentityKeys(
+                final eu.siacs.conversations.entities.Account account, final String name) throws Exception {
+            final var keys = new java.util.HashSet<org.whispersystems.libsignal.IdentityKey>();
+            try (final var cursor = stage.rawQuery("select key from identities where name = ? and ownkey = 0", new String[] {name})) {
+                while (cursor.moveToNext()) {
+                    keys.add(new org.whispersystems.libsignal.IdentityKey(android.util.Base64.decode(cursor.getString(0), android.util.Base64.DEFAULT), 0));
+                }
+            }
+            return keys;
+        }
+
+        @org.robolectric.annotation.Implementation
+        public org.whispersystems.libsignal.state.SessionRecord loadSession(
+                final eu.siacs.conversations.entities.Account account,
+                final org.whispersystems.libsignal.SignalProtocolAddress contact) throws IOException {
+            final String key = DatabaseUtils.stringForQuery(stage, "select key from sessions where name = ? and device_id = ?",
+                    new String[] {contact.getName(), String.valueOf(contact.getDeviceId())});
+            return new org.whispersystems.libsignal.state.SessionRecord(android.util.Base64.decode(key, android.util.Base64.DEFAULT));
+        }
+
+        @org.robolectric.annotation.Implementation
+        public void storeSession(final eu.siacs.conversations.entities.Account account,
+                final org.whispersystems.libsignal.SignalProtocolAddress contact,
+                final org.whispersystems.libsignal.state.SessionRecord session) {
+            stage.execSQL("update sessions set key = ? where name = ? and device_id = ?", new Object[] {
+                    android.util.Base64.encodeToString(session.serialize(), android.util.Base64.DEFAULT),
+                    contact.getName(), contact.getDeviceId()});
+        }
+    }
+
+    private org.whispersystems.libsignal.state.SessionRecord importedSession(final String name, final int device) throws IOException {
+        return new org.whispersystems.libsignal.state.SessionRecord(android.util.Base64.decode(DatabaseUtils.stringForQuery(db,
+                "select key from sessions where name = ? and device_id = ?", new String[] {name, String.valueOf(device)}),
+                android.util.Base64.DEFAULT));
+    }
+
+    /**
+     * AxolotlService encrypts only for a session whose remote key has a trusted identity row; a
+     * session that exists also keeps it from fetching the contact's devices. A kept session still
+     * encrypts for its device, and only its archived states of the same key stay.
+     */
+    @Test
+    public void keptSessionsEncryptAndDroppedKeysLeaveNoSession() throws Exception {
+        importBackupFile(ImportBackupWorker.OmemoImport.FULL, backupFile("monocles chat", omemoBackup(true)));
+        StageIdentities.stage = db;
+        final var service = new eu.siacs.conversations.services.XmppConnectionService();
+        service.databaseBackend = eu.siacs.conversations.persistance.DatabaseBackend.isolated(
+                ApplicationProvider.getApplicationContext(), "unused", new byte[0]);
+        final var account = new eu.siacs.conversations.entities.Account(Jid.of("tester@example.com"), PASSWORD);
+        final var store = new eu.siacs.conversations.crypto.axolotl.SQLiteAxolotlStore(account, service);
+        final var third = new org.whispersystems.libsignal.SignalProtocolAddress("third@example.com", 9);
+        final var archived = importedSession("third@example.com", 9).getPreviousSessionStates();
+        assertEquals(1, archived.size());
+        assertEquals(CONTACT_KEYS.get("shared"), archived.get(0).getRemoteIdentityKey());
+        final var session = new eu.siacs.conversations.crypto.axolotl.XmppAxolotlSession(
+                account, store, third, CONTACT_KEYS.get("shared"));
+        final byte[] plaintext = "message key".getBytes(StandardCharsets.UTF_8);
+        final var key = session.processSending(plaintext, false);
+        assertEquals(9, key.deviceId);
+        assertTrue(key.prekey);
+        final byte[] received = new org.whispersystems.libsignal.SessionCipher(THIRD_DEVICE,
+                new org.whispersystems.libsignal.SignalProtocolAddress("tester@example.com", 4242))
+                .decrypt(new org.whispersystems.libsignal.protocol.PreKeySignalMessage(key.key));
+        assertArrayEquals(plaintext, received);
+        // the failure the fix removes: pq's session outlived its dropped key, so it was never
+        // trusted and a message got no key for that device
+        final var orphan = new eu.siacs.conversations.crypto.axolotl.XmppAxolotlSession(account, store,
+                new org.whispersystems.libsignal.SignalProtocolAddress("friend@example.com", 8), CONTACT_KEYS.get("pq"));
+        assertFalse(orphan.getTrust().isTrustedAndActive());
+        assertNull(orphan.processSending(plaintext, false));
+        // friend lost all its sessions, so its device list is fetched again; peer's key stays verified
+        assertEquals(0, DatabaseUtils.queryNumEntries(db, "sessions", "name = 'friend@example.com'"));
+        assertTrue(store.getFingerprintStatus(fingerprint("peer")).isVerified());
+    }
+
+    /**
+     * A session record is checked as its row is read: an unreadable one, and a readable one too big
+     * for the cursor window AxolotlService loads it through, never reach the stage.
+     */
+    @Test
+    public void oversizedSessionsAreLeftOutBesideAValidOne() throws Exception {
+        final var oversized = base64(new org.whispersystems.libsignal.state.SessionRecord(new org.whispersystems.libsignal.state.SessionState(
+                org.whispersystems.libsignal.state.StorageProtos.SessionStructure.newBuilder(state(CONTACT_KEYS.get("shared")).getStructure())
+                        .setAliceBaseKey(com.google.protobuf.ByteString.copyFrom(new byte[ImportBackupWorker.MAX_SESSION_KEY_LENGTH])).build()))
+                .serialize());
+        assertTrue(oversized.length() > ImportBackupWorker.MAX_SESSION_KEY_LENGTH);
+        assertEquals(CONTACT_KEYS.get("shared"), new org.whispersystems.libsignal.state.SessionRecord(
+                java.util.Base64.getDecoder().decode(oversized)).getSessionState().getRemoteIdentityKey());
+        final var rows = new java.util.ArrayList<>(omemoBackup(true));
+        rows.add(session("huge@example.com", 6, "A".repeat(3 * 1024 * 1024)));
+        rows.add(session("third@example.com", 10, oversized));
+        final var worker = importBackupFile(ImportBackupWorker.OmemoImport.FULL, backupFile("monocles chat", rows));
+        assertTrue(worker.previewWritten);
+        // third lost its oversized session, so its kept one goes too
+        assertEquals(java.util.Set.of("tester@example.com:2"), importedSessions());
+        assertTrue(worker.previewText(), worker.previewText().contains(
+                omission(eu.siacs.conversations.R.string.tatrak_backup_omit_orphan_session, 10)));
     }
 
     private int prekeyCounter() throws org.json.JSONException {

@@ -146,6 +146,16 @@ public class ImportBackupWorker extends Worker {
     // Tatrak: the backup carried monocles' PQ state, so its contact keys need a legacy OMEMO message
     // (dropUnprovenContactKeys). Taken from the authenticated rows: the header's app name is not.
     private boolean sawPqState;
+    // Tatrak: DatabaseBackend.loadSession reads a session's whole key column through one cursor
+    // window row (Android's window is 2 MB), so a record has to stay well below that. A libsignal record holds
+    // the current and at most 40 archived states of about 1-2 KB each, plus about 70 bytes per
+    // skipped message key: a real one is a few KB, rarely near 100 KB. 1 MB of Base64 leaves room
+    // for thousands of skipped keys and stays at half the window.
+    @VisibleForTesting static final int MAX_SESSION_KEY_LENGTH = 1024 * 1024;
+    // Tatrak: staged sessions' remote key fingerprints per contact, and the contacts whose session
+    // row was left out (stageSession, dropSessionsWithoutIdentity)
+    private final Map<String, java.util.Set<String>> sessionFingerprints = new HashMap<>();
+    private final java.util.Set<String> contactsLosingSessions = new java.util.HashSet<>();
     // Tatrak: the source's prekey counters (Full mode); restorePreKeyCounter raises the account's to them
     private long preKeyCounter;
     // Tatrak: only a Tatrak backup may carry Tatrak's message types (7, 8); other apps number theirs differently
@@ -347,6 +357,7 @@ public class ImportBackupWorker extends Worker {
         // Tatrak: the authenticated destination stays isolated until explicit foreground consent.
         if (importAccount == null) throw new IOException("Backup has no account");
         if (sawPqState) dropUnprovenContactKeys(db); // Tatrak: before the ownership checks and the preview
+        dropSessionsWithoutIdentity(db); // Tatrak: after every identity row the import leaves out
         try (final Cursor c = db.query("PRAGMA foreign_key_check")) {
             if (c.moveToFirst()) throw new IOException("Invalid account references in backup");
         }
@@ -520,13 +531,92 @@ public class ImportBackupWorker extends Worker {
     }
 
     /**
+     * Tatrak: a staged session row, checked while its row is in hand (a record too big for a
+     * cursor window never reaches the stage). A record that does not parse, or names no remote
+     * key, is left out: DatabaseBackend.loadSession would throw on it. Archived states of another
+     * remote key are removed: libsignal promotes one on a late message, and AxolotlService would
+     * still read the trust of the current key. The current key's fingerprint is kept for
+     * dropSessionsWithoutIdentity. A record longer than MAX_SESSION_KEY_LENGTH is left out too.
+     */
+    private boolean stageSession(final ContentValues values) {
+        final String name = values.getAsString(SQLiteAxolotlStore.NAME);
+        final String key = values.getAsString(SQLiteAxolotlStore.KEY);
+        org.whispersystems.libsignal.state.SessionRecord record;
+        try {
+            record = key == null || key.length() > MAX_SESSION_KEY_LENGTH ? null
+                    : new org.whispersystems.libsignal.state.SessionRecord(android.util.Base64.decode(key, android.util.Base64.DEFAULT));
+        } catch (final IOException | RuntimeException e) {
+            record = null;
+        }
+        final var remote = record == null ? null : record.getSessionState().getRemoteIdentityKey();
+        if (name == null || remote == null) {
+            if (name != null) contactsLosingSessions.add(name);
+            omitted(R.string.tatrak_backup_omit_orphan_session);
+            return false;
+        }
+        if (record.getPreviousSessionStates().removeIf(state -> !remote.equals(state.getRemoteIdentityKey()))) {
+            values.put(SQLiteAxolotlStore.KEY, android.util.Base64.encodeToString(record.serialize(), android.util.Base64.DEFAULT));
+        }
+        // as XmppAxolotlSession.getFingerprint
+        sessionFingerprints.computeIfAbsent(name, n -> new java.util.HashSet<>())
+                .add(eu.siacs.conversations.utils.CryptoHelper.bytesToHex(remote.getPublicKey().serialize()));
+        return true;
+    }
+
+    /**
+     * Tatrak: AxolotlService trusts a session by its remote key's row in `identities`; a session
+     * whose key has no contact row under the session's own JID (left out or dropped above) counts
+     * as unusable. While a contact has any session, AxolotlService does not fetch its device list
+     * again, so a contact that loses one session loses all of them; its keys and their trust stay.
+     * New sessions are set up when its devices and their bundles are fetched.
+     */
+    private void dropSessionsWithoutIdentity(final SupportSQLiteDatabase db) {
+        // name NUL fingerprint: a NUL occurs in neither
+        final java.util.Set<String> identities = new java.util.HashSet<>();
+        try (final Cursor cursor = db.query("SELECT " + SQLiteAxolotlStore.NAME + ", " + SQLiteAxolotlStore.FINGERPRINT
+                + " FROM " + SQLiteAxolotlStore.IDENTITIES_TABLENAME + " WHERE " + SQLiteAxolotlStore.ACCOUNT
+                + " = ? AND " + SQLiteAxolotlStore.OWN + " = 0", new Object[] {importAccount})) {
+            while (cursor.moveToNext()) identities.add(cursor.getString(0) + '\0' + cursor.getString(1));
+        }
+        final java.util.Set<String> contacts = new java.util.HashSet<>(contactsLosingSessions);
+        for (final var entry : sessionFingerprints.entrySet()) {
+            for (final String fingerprint : entry.getValue()) {
+                if (!identities.contains(entry.getKey() + '\0' + fingerprint)) contacts.add(entry.getKey());
+            }
+        }
+        if (contacts.isEmpty()) return;
+        final String where = " FROM " + SQLiteAxolotlStore.SESSION_TABLENAME + " WHERE "
+                + SQLiteAxolotlStore.ACCOUNT + " = ? AND " + SQLiteAxolotlStore.NAME + " = ?";
+        int dropped = 0;
+        db.beginTransaction();
+        try {
+            for (final String name : contacts) {
+                final Object[] arguments = {importAccount, name};
+                try (final Cursor cursor = db.query("SELECT count(*)" + where, arguments)) {
+                    if (cursor.moveToFirst()) dropped += cursor.getInt(0);
+                }
+                db.execSQL("DELETE" + where, arguments);
+            }
+            db.setTransactionSuccessful();
+        } finally {
+            db.endTransaction();
+        }
+        if (dropped > 0) {
+            omissions.merge(getApplicationContext().getString(R.string.tatrak_backup_omit_orphan_session),
+                    dropped, Integer::sum);
+        }
+    }
+
+    /**
      * Tatrak: whether a row of a legacy OMEMO table is imported in the chosen mode; what is left
      * out is counted. Sessions and prekeys belong to the own key; an own key is imported only
      * under the account's bare JID, so monocles' OMEMO2 own key (`<jid>\0omemo2-own`) never is.
      */
     private boolean importOmemoRow(final String table, final ContentValues values, final Jid account) {
         if (!SQLiteAxolotlStore.IDENTITIES_TABLENAME.equals(table)) {
-            if (omemoImport == OmemoImport.FULL) return true;
+            if (omemoImport == OmemoImport.FULL) {
+                return !SQLiteAxolotlStore.SESSION_TABLENAME.equals(table) || stageSession(values);
+            }
             omitted(R.string.tatrak_backup_omit_private);
             return false;
         }

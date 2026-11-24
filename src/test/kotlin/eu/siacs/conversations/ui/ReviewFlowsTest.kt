@@ -117,6 +117,13 @@ class ReviewFlowsTest {
     }
 
     class TestAccount(jid: String) : Account(Jid.of(jid), "fixture") {
+        var online = false
+        var axolotl: AxolotlService? = null
+
+        override fun isOnlineAndConnected() = online
+
+        override fun getAxolotlService(): AxolotlService = axolotl ?: super.getAxolotlService()
+
         private val byAddress = LinkedHashMap<Jid, Contact>()
         private val fakeRoster = object : Roster {
             override fun getContacts() = byAddress.values.toList()
@@ -200,9 +207,9 @@ class ReviewFlowsTest {
             return com.google.common.util.concurrent.Futures.immediateVoidFuture() as com.google.common.util.concurrent.ListenableFuture<Void>
         }
 
-        fun chat(account: Account, jid: Jid, muc: Boolean = false): Conversation =
+        fun chat(account: Account, jid: Jid, muc: Boolean = false, encryption: Int = Message.ENCRYPTION_NONE): Conversation =
             object : Conversation(jid.toString(), account, jid, if (muc) Conversation.MODE_MULTI else Conversation.MODE_SINGLE) {
-                override fun getNextEncryption() = Message.ENCRYPTION_NONE
+                override fun getNextEncryption() = encryption
             }.also(chats::add)
     }
 
@@ -244,6 +251,50 @@ class ReviewFlowsTest {
 
     @Test
     fun addingContactKeepsTheNewChatOnThePhoneBackStack() = addContact(tablet = false)
+
+    /**
+     * A 1:1 OMEMO chat whose contact has a trusted key but no session and no known device (as after a backup
+     * import) fetches the contact's device list when the chat opens; nothing else does before a send fails.
+     */
+    @Test
+    fun omemoChatWithTrustedKeysButNoKnownDeviceFetchesTheDeviceList() {
+        val fetched = ArrayList<Jid>()
+        var trusted = 1L
+        var empty = true
+        service.a.axolotl = object : AxolotlService(service.a, service) {
+            override fun hasEmptyDeviceList(jid: Jid) = empty
+
+            override fun getNumTrustedKeys(jid: Jid) = trusted
+
+            override fun fetchDeviceIds(jid: Jid) {
+                fetched += jid
+            }
+        }
+        fun open(chat: Conversation): List<Jid> {
+            fetched.clear()
+            activity.switchToConversation(chat)
+            fm.executePendingTransactions()
+            return fetched.toList()
+        }
+        service.a.online = true
+        assertEquals(listOf(peer), open(service.chat(service.a, peer, encryption = Message.ENCRYPTION_AXOLOTL)))
+        // no IQ: a plain chat, the self-chat, a group, a contact with known devices or sessions, one without a
+        // trusted key (the send check fetches it), an offline account
+        val other = Jid.of("other@example.com")
+        assertEquals(emptyList<Jid>(), open(service.chat(service.a, other)))
+        assertEquals(emptyList<Jid>(), open(service.chat(service.a, service.a.jid.asBareJid(), encryption = Message.ENCRYPTION_AXOLOTL)))
+        assertEquals(emptyList<Jid>(), open(service.chat(service.a, Jid.of("room@conference.example.com"), muc = true,
+            encryption = Message.ENCRYPTION_AXOLOTL)))
+        val omemo = service.chat(service.a, other, encryption = Message.ENCRYPTION_AXOLOTL)
+        empty = false
+        assertEquals(emptyList<Jid>(), open(omemo))
+        empty = true
+        trusted = 0
+        assertEquals(emptyList<Jid>(), open(service.chat(service.a, Jid.of("third@example.com"), encryption = Message.ENCRYPTION_AXOLOTL)))
+        trusted = 1
+        service.a.online = false
+        assertEquals(emptyList<Jid>(), open(service.chat(service.a, Jid.of("fourth@example.com"), encryption = Message.ENCRYPTION_AXOLOTL)))
+    }
 
     @Test
     @Config(qualifiers = "w1100dp-h760dp")

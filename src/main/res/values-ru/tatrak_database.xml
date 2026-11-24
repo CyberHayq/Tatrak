@@ -24,6 +24,7 @@
     <string name="tatrak_backup_omit_contact_trust">Ключ OMEMO контакта и статус доверия к нему не перенесены (проверьте заново)</string>
     <string name="tatrak_backup_omit_unproven_contact">Ключ OMEMO контакта из monocles без обычного OMEMO-сообщения в копии не перенесён (проверьте заново)</string>
     <string name="tatrak_backup_omit_bad_identity">Ключ OMEMO с нечитаемыми данными или статусом доверия не перенесён</string>
+    <string name="tatrak_backup_omit_orphan_session">Сеанс OMEMO не перенесён: он нечитаем или слишком велик, либо не перенесён ключ контакта или другой сеанс того же контакта (Tatrak установит новые сеансы, когда устройства контакта и их ключи будут доступны)</string>
     <string name="tatrak_backup_omit_private">Собственный ключ OMEMO, ID устройства, сессия или предключ не перенесены (у этого устройства будет новый ключ)</string>
     <string name="tatrak_backup_omit_disappearing">Исчезающее сообщение не перенесено (Tatrak не умеет удалять его по таймеру)</string>
     <string name="tatrak_backup_omit_caption">Подпись к вложению не перенесена (файл сохранён)</string>

@@ -5,6 +5,13 @@
 ### Fixes
 - A file shared into Tatrak while the app had to redraw itself (for example right after a change of
   the style or accent) opened the chat without asking to send the file; the question now comes back.
+- After a full restore of a monocles chat backup, encrypted messages to a contact whose OMEMO key
+  the restore left out could not be sent ("unable to send encrypted messages"). The restore now
+  leaves out all old OMEMO sessions of such a contact, and unreadable or oversized ones (the
+  contact's other keys and their trust stay); Tatrak sets up new sessions when the contact's
+  devices and their keys are available. Opening the chat fetches the device list of a contact
+  that has trusted keys but no known device. A key the restore left out has to be verified anew,
+  as the restore preview says.
 
 ### Interface
 - Floating bars: the folder tabs and the bottom tab bar are smaller, in Telegram 13's sizes (a 36 dp

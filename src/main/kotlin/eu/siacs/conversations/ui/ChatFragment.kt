@@ -573,6 +573,22 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         service.notificationService.setOpenConversation(c)
         extras?.let { processExtras(c, it) }
         if (!confirmShown) confirming?.let(::confirmAttachments)
+        fetchDevicesIfUnknown(c)
+    }
+
+    /**
+     * Tatrak: a contact with a trusted OMEMO key but no session and no known device (a backup
+     * import keeps its keys, not its sessions) passes the trust check before a send, so the send
+     * fails until its device list arrives by PEP. Fetch the list once per bind; the next send's
+     * check then sees devices without a session and builds them. A contact with no trusted key
+     * already makes that check fetch, and an established chat has sessions: neither sends an IQ.
+     */
+    private fun fetchDevicesIfUnknown(c: Conversation) {
+        if (c.mode != Conversation.MODE_SINGLE || c.contact.isSelf) return
+        if (c.nextEncryption != Message.ENCRYPTION_AXOLOTL || !c.account.isOnlineAndConnected) return
+        val axolotl = c.account.axolotlService ?: return
+        val jid = c.address.asBareJid() // AxolotlService.getCryptoTargets of a 1:1 chat
+        if (axolotl.hasEmptyDeviceList(jid) && axolotl.getNumTrustedKeys(jid) > 0) axolotl.fetchDeviceIds(jid)
     }
 
     // --- composer ---------------------------------------------------------------------------
