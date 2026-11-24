@@ -159,7 +159,8 @@ internal abstract class NewChatModel(
     /** Same visibility rules as `MyListFragment.onCreateContextMenu` for `contact_context`. */
     private fun contactMenu(contact: Contact): List<NewChatMenu> = buildList {
         if (!contact.isSelf) add(NewChatMenu.DETAILS)
-        if (contactsOnly && !contact.isSelf) add(NewChatMenu.CALL)
+        // a disabled account cannot call
+        if (contactsOnly && !contact.isSelf && contact.account.isEnabled) add(NewChatMenu.CALL)
         add(NewChatMenu.QR)
         val connection = contact.account.xmppConnection
         if (connection != null && connection.getManager(BlockingManager::class.java).hasFeature() && !contact.isSelf) {
@@ -300,7 +301,8 @@ internal class ContactsTab(activity: XmppActivity, calls: RtpCallStarter) :
     /** The activity's `filter()` for the contacts it shows; also on roster, presence and block list updates. */
     fun filter() {
         if (!activity.xmppConnectionServiceBound) return
-        ContactFlows.filterContacts(activity.xmppConnectionService, list, hideOffline, needle)
+        val service = activity.xmppConnectionService
+        ContactFlows.filterContacts(service, list, hideOffline, needle, AccountFilter.selected(service))
         publish(list, emptyList())
     }
 
@@ -334,6 +336,7 @@ internal class ContactsTab(activity: XmppActivity, calls: RtpCallStarter) :
     /** As the activity's `openConversationForContact(Contact)`. */
     override fun openContact(key: String) {
         val contact = contacts[key] ?: return
+        if (!activity.xmppConnectionServiceBound || ContactFlows.openDisabledContact(activity, contact)) return
         val conversation = activity.xmppConnectionService?.findOrCreateConversation(contact.account, contact.address, false, true) ?: return
         SoftKeyboardUtils.hideSoftKeyboard(activity)
         activity.switchToConversation(conversation)

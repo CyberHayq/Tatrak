@@ -33,6 +33,8 @@ public class ShareWithActivity extends XmppActivity
 
     private static final int REQUEST_STORAGE_PERMISSION = 0x733f32;
     private Conversation mPendingConversation = null;
+    // Tatrak: a Direct Share target, checked once the service is bound
+    private String mShortcutConversation = null;
 
     @Override
     public void onConversationUpdate() {
@@ -125,9 +127,9 @@ public class ShareWithActivity extends XmppActivity
         if (shortcutId != null) {
             final var conversation = shortcutIdToConversation(shortcutId);
             if (conversation != null) {
-                // we have everything we need. Jump into chat
+                // Tatrak: jump into the chat in onBackendConnected, unless its account is disabled
                 populateShare(intent);
-                share(conversation);
+                mShortcutConversation = conversation;
             }
         }
     }
@@ -196,7 +198,7 @@ public class ShareWithActivity extends XmppActivity
         intent.putExtra("direct_search", true);
         // Tatrak: continue the share picker's account scope in the contact chooser.
         final var only = xmppConnectionService == null ? null
-                : am.cyberhayq.chat.ui.accounts.AccountFilter.selected(xmppConnectionService);
+                : am.cyberhayq.chat.ui.accounts.AccountFilter.writable(xmppConnectionService);
         if (only != null) {
             intent.putExtra(ChooseContactActivity.EXTRA_SHARE_ACCOUNT, only.getJid().asBareJid().toString());
         }
@@ -260,6 +262,15 @@ public class ShareWithActivity extends XmppActivity
 
     @Override
     protected void onBackendConnected() {
+        // Tatrak: a disabled account cannot send: its chat's Direct Share target falls back to the picker
+        if (mShortcutConversation != null) {
+            final var conversation = xmppConnectionService.findConversationByUuidReliable(mShortcutConversation);
+            mShortcutConversation = null;
+            if (conversation != null && conversation.getAccount().isEnabled()) {
+                share(conversation.getUuid());
+                return;
+            }
+        }
         if (xmppConnectionServiceBound
                 && share != null
                 && ((share.contact != null && share.account != null))) {

@@ -25,6 +25,9 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
+import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.assert
@@ -575,6 +578,66 @@ class ChatListScreenshotTest {
         compose.waitForIdle()
         assertEquals("b", chosen)
         compose.onNodeWithText("All accounts").assertDoesNotExist()
+    }
+
+    @Test
+    fun accountSwitcherDisabledLight() = accountSwitcherDisabled(darkTheme = false, "account_switcher_disabled_light")
+
+    @Test
+    @Config(qualifiers = "+night")
+    fun accountSwitcherDisabledDark() = accountSwitcherDisabled(darkTheme = true, "account_switcher_disabled_dark")
+
+    /** One enabled and one disabled account: both listed, "All accounts" too, the disabled one muted and pickable. */
+    private fun accountSwitcherDisabled(darkTheme: Boolean, name: String) {
+        var chosen: String? = "none"
+        val accounts =
+            listOf(
+                AccountChoice("a", "Test", letterAvatar("Test", 0xFF5CAFFA.toInt()), 3),
+                AccountChoice("b", "Work", letterAvatar("Work", 0xFFE57A3C.toInt()), 1, disabled = true),
+            )
+        compose.setContent {
+            TatrakTheme(darkTheme = darkTheme, style = TatrakStyle.GLASS, accent = Accent.BLUE, dynamicColors = false, floatingBars = true, barBlur = BarBlur.OFF) {
+                AccountSwitcher(androidx.compose.ui.geometry.Rect(800f, 2400f, 1100f, 2550f), accounts, null, MainTab.CHATS, null, {}, {}, { chosen = it })
+            }
+        }
+        compose.onNodeWithText("All accounts").assertIsDisplayed()
+        compose.onNodeWithText("Test").assertIsDisplayed()
+        // TalkBack reads the row as one: its name and "Disabled"
+        compose.onNode(hasText("Work") and hasText("Disabled")).assertIsDisplayed()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+        compose.onNodeWithText("Work").performClick()
+        assertEquals("b", chosen)
+    }
+
+    /** A disabled account's name (`onSurfaceVariant` on the menu's `surfaceContainer`) is readable in every style, day and night. */
+    @Test
+    fun accountSwitcherMutedNameContrast() {
+        val pairs = ArrayList<Triple<String, androidx.compose.ui.graphics.Color, androidx.compose.ui.graphics.Color>>()
+        compose.setContent {
+            for (style in TatrakStyle.entries) for (accent in Accent.entries) for (night in listOf(null) + am.cyberhayq.chat.ui.theme.NightBackground.entries) {
+                TatrakTheme(darkTheme = night != null, style = style, accent = accent, dynamicColors = false, nightBackground = night ?: am.cyberhayq.chat.ui.theme.NightBackground.entries[0], barBlur = BarBlur.OFF) {
+                    val scheme = androidx.compose.material3.MaterialTheme.colorScheme
+                    pairs += Triple("$style/$accent/$night", scheme.onSurfaceVariant, scheme.surfaceContainer)
+                }
+            }
+        }
+        compose.waitForIdle()
+        assertTrue(pairs.isNotEmpty())
+        val low = pairs.filter { (_, text, back) -> androidx.core.graphics.ColorUtils.calculateContrast(text.toArgb(), back.toArgb()) < 4.5 }
+        assertTrue("below 4.5:1: ${low.map { it.first }}", low.isEmpty())
+    }
+
+    /** More accounts than fit above the dock (landscape, a short window): the rows scroll inside the menu. */
+    @Test
+    fun accountSwitcherScrollsItsRows() {
+        val accounts = (1..12).map { AccountChoice("$it", "Account $it", null, 0, disabled = it % 2 == 0) }
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, barBlur = BarBlur.OFF) {
+                AccountSwitcher(androidx.compose.ui.geometry.Rect(800f, 900f, 1100f, 1050f), accounts, null, MainTab.CHATS, null, {}, {}, {})
+            }
+        }
+        compose.onNodeWithText("Add account").assertIsDisplayed()
+        compose.onNodeWithText("Account 12").assertIsNotDisplayed().performScrollTo().assertIsDisplayed()
     }
 
     /** One account: nothing to filter, so no "All accounts". */

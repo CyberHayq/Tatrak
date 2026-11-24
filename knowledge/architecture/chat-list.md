@@ -264,24 +264,50 @@ The owner's decision (2026-11-21) is an app-wide filter instead of Telegram's ac
   screen behind dims (`0x66` over a light window, `0x33` over a dark one) and blurs (12 dp, only when
   "Blur under bars" is on, so API 31+), the Profile item is drawn again above the dim on a plate with
   28 dp corners and a soft shadow, and a 230 dp menu grows from above it: "Add account", a gap, then
-  "All accounts" (only with more than one enabled account) and every enabled account with a 32 dp
+  "All accounts" (only with more than one account) and every account with a 32 dp
   avatar (shrunk inside a 1.33 dp accent ring when selected), its name in up to two lines and its
-  unread chats. Back or a tap outside closes it. Only the floating dock has the item: Slate and
+  unread chats. A disabled account is listed too (owner, 2026-11-24): its name in `onSurfaceVariant`
+  (at least 4.5:1 on the menu in every style, accent and night background, unit-tested), its avatar
+  at alpha 0.38, "Disabled" (`tatrak_account_disabled`) under the name; TalkBack reads the row as
+  name plus "Disabled". The account rows scroll inside the space above the dock item (landscape, a
+  short window). With a single account its row only closes the menu and saves nothing. Telegram has no
+  disabled accounts; Cheogram's drawer account header also lists every account from
+  `getAccounts()`, disabled ones included. Back or a tap outside closes it. Only the floating dock has the item: Slate and
   Sea's classic bar has Settings in that slot, and Telegram's style without floating bars has no
   dock; a Glass style with "Floating bars" turned off has no dock either (not the classic one).
   The overlay lives in `ChatListFragment`'s composition; the dock item reports its bounds through
   `LocalAccountSwitcher`.
 - **One place.** `AccountFilter` holds the choice in the `tatrak_account_filter` preference (the
   account's uuid; persisted, renaming the key resets existing choices) and answers `selected`
-  (null: all accounts; also when the stored account was removed or disabled, only one account
-  is enabled, or the style has no floating dock, where nothing would show or clear the filter; the
-  stored choice comes back with the dock) and `shows`.[^filter] Every screen asks it: the chat list snapshot (chats, archive,
+  (null: all accounts; also when the stored account was removed, only one account
+  exists (the stored choice is then cleared, so a new second account does not bring it back), or
+  the style has no floating dock, where nothing would show or clear the filter; the stored choice
+  comes back with the dock) and `shows`.[^filter] Every screen asks it: the chat list snapshot (chats, archive,
   folder counters, the "Connecting…" title, the header and dock avatar), message search of all
   chats (the SQL applies the account before the result limit), the tablet's suggested chat, `ContactFlows.filterContacts` (Contacts tab and New chat), New chat's groups and the
   accounts its dialogs offer (`StartConversationActivity.mActivatedAccounts`, the Contacts tab's
   "Add contact"), the Calls list (`callChats`, and in its query before the 300-call limit), the Profile tab and the settings home header
   (`settingsAccount`), and the share picker (`ShareCompose`). The share picker's + passes its
   scope to the contact chooser, including the account options. Notifications ignore the filter.
+- **A disabled account as the filter** (owner's option A, 2026-11-24). Viewing follows it: its
+  chats, archive, search, both Contacts screens (the tab and the drawer's contacts-only
+  `StartConversationActivity`; `ContactFlows.filterContacts` takes the filter from its caller and
+  lists the filtered account's contacts when it is disabled; under "All accounts" a disabled
+  account's contacts stay hidden, as upstream), Calls, Profile, the tablet suggestion and
+  `follow`. What sends or creates asks `AccountFilter.writable` (the filter while it is enabled,
+  otherwise null): New chat's contacts and groups and the accounts its dialogs offer
+  (`enabledAccounts`, also both Contacts screens' "Add contact"), the share picker's + (contact
+  chooser scope).
+- **No new chat on a disabled account.** A contact of a disabled account
+  (`ContactFlows.openDisabledContact`, both Contacts screens and their search "done") opens its
+  existing chat, or the contact details when there is none; its menu has no Call. A closed group
+  of a disabled account opened from the chat list's search is reopened without joining. The share
+  picker lists only enabled accounts' chats (also under "All accounts"), and a Direct Share
+  shortcut is checked after the service binds: a disabled account's chat falls back to the picker.
+  An open chat of a disabled account keeps the classic behaviour: `ConversationFragment` lets you
+  write and queues the message, with the "account disabled / Enable" snackbar; the Compose chat
+  shows the same banner (`ChatBanner.ACCOUNT_DISABLED`) and its call buttons the same Enable
+  dialog (`RtpCallStarter.isAccountInsufficientState`).
 - **Unread per account** counts unmuted chats with unread messages outside the archive, as the
   folder tabs count; "All accounts" shows the sum.
 - **Choosing** writes the preference and refreshes the list and every tab's data. On a tablet,
@@ -310,9 +336,16 @@ called.
 records every tab of both docks by day and night (`main_tabs_<floating|slate>_<tab>_<light|dark>.png`).[^tabstest]
 `ChatListScreenshotTest` opens the account switcher with a long press and records
 `account_switcher_light.png` and `account_switcher_dark.png`, checks that a pick reports the account
-and closes it, and that one account shows no "All accounts". `AccountFilterTest` (fake service and
+and closes it, and that one account shows no "All accounts"; `account_switcher_disabled_light.png` /
+`_dark.png` show one enabled and one disabled account (both rows, "All accounts", the muted row
+read as name plus "Disabled", picked like any other); `accountSwitcherMutedNameContrast` and
+`accountSwitcherScrollsItsRows` cover the contrast and the scrolling rows. `DisabledAccountFlowsTest`
+runs the real New chat, drawer Contacts, Contacts tab and share picker (with Direct Share) under a
+disabled filter. `AccountFilterTest` (fake service and
 connection-less accounts) covers chats, archive and counters, contacts, calls, search, New chat's
-accounts, the fallback when the account is removed or disabled, one enabled account, and the switch
+accounts, `pick`, the fallback when the account is removed (a disabled one stays the filter), the
+choice cleared at one account, a
+disabled account filtering chats, contacts and calls while New chat offers the enabled one, and the switch
 on an outside open, and the pause without the floating dock.[^filtertest] See
 [build setup](../build/build-setup.md).
 

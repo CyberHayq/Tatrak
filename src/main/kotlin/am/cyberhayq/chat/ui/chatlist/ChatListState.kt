@@ -76,9 +76,9 @@ data class ChatListItem(
 @Immutable
 data class AccountHeader(val name: String, val address: String, val avatar: Bitmap?)
 
-/** An enabled account in the dock's account switcher, with its unread chats (as the folder tabs count them). */
+/** An account in the dock's account switcher, with its unread chats (as the folder tabs count them); a disabled one is drawn muted. */
 @Immutable
-data class AccountChoice(val uuid: String, val name: String, val avatar: Bitmap?, val unread: Int)
+data class AccountChoice(val uuid: String, val name: String, val avatar: Bitmap?, val unread: Int, val disabled: Boolean = false)
 
 @Immutable
 data class ChatListState(
@@ -147,7 +147,6 @@ object ChatListSnapshot {
                     toItem(context, service, it, avatarSize, cachedOnly, thumbnailSize)
                 }
                 .partition { it.isArchived }
-        val accounts = service.accounts.filter { it.isEnabled }
         val account =
             (only ?: service.accounts.firstOrNull())?.let {
                 AccountHeader(
@@ -163,14 +162,16 @@ object ChatListSnapshot {
             archived = archived,
             account = account,
             connecting = connecting,
+            // every account, a disabled one too: it can still be the filter
             accounts =
-                accounts.map { a ->
+                service.accounts.map { a ->
                     AccountChoice(
                         uuid = a.uuid,
                         name = accountName(a),
                         avatar = service.avatarService.get(a, avatarSize, avatarsCachedOnly),
                         // the folder tabs' count: unmuted chats outside the archive
                         unread = all.count { it.account === a && it.tatrakArchivedAt == null && !it.isMuted && it.unreadCount() > 0 },
+                        disabled = !a.isEnabled,
                     )
                 },
             selectedAccount = only?.uuid,

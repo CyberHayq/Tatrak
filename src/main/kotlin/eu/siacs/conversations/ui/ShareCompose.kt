@@ -40,8 +40,9 @@ internal class ShareCompose(private val activity: ShareWithActivity) : ShareActi
 
     /** Called on the main thread with the activity's ordered conversation list; shows the filtered account's chats. */
     fun publish(all: List<Conversation>) {
-        val only = activity.xmppConnectionService?.let(AccountFilter::selected)
-        val list = all.filter { AccountFilter.shows(only, it.account) }
+        val only = activity.xmppConnectionService?.let(AccountFilter::writable)
+        // a disabled account cannot send: only enabled accounts' chats, all of them while the filter is a disabled one
+        val list = all.filter { it.account.isEnabled && AccountFilter.shows(only, it.account) }
         conversations = list.associateBy { it.uuid }
         val previous = state.value.targets.associate { it.key to it.avatar }
         state.value =

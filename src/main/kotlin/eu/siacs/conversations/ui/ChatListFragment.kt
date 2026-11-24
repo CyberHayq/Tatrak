@@ -437,14 +437,15 @@ class ChatListFragment : XmppFragment(), ChatListActions {
         val service = xmppConnectionService ?: return
         val message = messageResults.message(key) ?: return
         val found = message.conversation
-        // a closed chat's results carry a stub; opening it starts the chat again like SearchActivity
+        // a closed chat's results carry a stub; opening it starts the chat again like SearchActivity, joining a group
+        // only on an enabled account (a disabled one shows the history)
         val conversation =
             found as? Conversation
                 ?: service.findOrCreateConversation(
                     found.account,
                     found.address,
                     found.mode == Conversational.MODE_MULTI,
-                    true,
+                    found.account.isEnabled,
                     true,
                 )
         MessageSearchResults.openAt(requireContext(), conversation, message.uuid)

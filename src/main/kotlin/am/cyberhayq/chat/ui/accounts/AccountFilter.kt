@@ -18,23 +18,36 @@ object AccountFilter {
     const val KEY = "tatrak_account_filter"
 
     /**
-     * The chosen account, or null for all: none chosen, it was removed or disabled, only one account is enabled, or the
-     * style has no floating dock, so nothing would show the filter or clear it (the choice is kept for its return).
+     * The chosen account, or null for all: none chosen, it was removed, only one account exists (the choice is then
+     * cleared, so it cannot come back with a new second account), or the style has no floating dock, so nothing would
+     * show the filter or clear it (the choice is kept for its return). A disabled account filters what is viewed; what
+     * sends or creates asks [writable].
      */
     @JvmStatic
     fun selected(service: XmppConnectionService): Account? {
         val preferences = PreferenceManager.getDefaultSharedPreferences(service)
+        val uuid = preferences.getString(KEY, null) ?: return null
+        if (service.accounts.size < 2) {
+            preferences.edit().remove(KEY).apply()
+            return null
+        }
         // as TatrakTheme decides the dock: FloatingBars.remember(TatrakStyle.remember())
         val stored = if (preferences.contains(FloatingBars.KEY)) preferences.getBoolean(FloatingBars.KEY, false) else null
         if (!FloatingBars.effective(TatrakStyle.of(preferences.getString(TatrakStyle.KEY, null)), stored)) return null
-        return pick(preferences.getString(KEY, null), service.accounts)
+        return pick(uuid, service.accounts)
     }
 
     internal fun pick(uuid: String?, accounts: List<Account>): Account? {
         uuid ?: return null
-        val enabled = accounts.filter { it.isEnabled }
-        return if (enabled.size < 2) null else enabled.firstOrNull { it.uuid == uuid }
+        return if (accounts.size < 2) null else accounts.firstOrNull { it.uuid == uuid }
     }
+
+    /**
+     * The filter for what sends or creates (New chat, join, add contact, the share picker): the chosen account while it
+     * is enabled; a disabled one cannot write, so then all enabled accounts (null).
+     */
+    @JvmStatic
+    fun writable(service: XmppConnectionService): Account? = selected(service)?.takeIf { it.isEnabled }
 
     /** Whether [account]'s chats and contacts show while the app is filtered to [selected] (null: all). */
     @JvmStatic
@@ -52,8 +65,8 @@ object AccountFilter {
         if (!shows(selected(service), account)) select(service, account.uuid)
     }
 
-    /** `AccountUtils.getEnabledAccounts` (the accounts New chat's dialogs offer), only the chosen one while filtered. */
+    /** `AccountUtils.getEnabledAccounts` (the accounts New chat's dialogs offer), only the [writable] one while filtered. */
     @JvmStatic
     fun enabledAccounts(service: XmppConnectionService): List<String> =
-        selected(service)?.let { listOf(it.jid.asBareJid().toString()) } ?: AccountUtils.getEnabledAccounts(service)
+        writable(service)?.let { listOf(it.jid.asBareJid().toString()) } ?: AccountUtils.getEnabledAccounts(service)
 }

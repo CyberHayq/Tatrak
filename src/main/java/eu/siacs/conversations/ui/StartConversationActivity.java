@@ -492,6 +492,10 @@ public class StartConversationActivity extends XmppActivity
     }
 
     protected void openConversationForContact(Contact contact) {
+        // Tatrak: the Contacts screen may list a disabled account (the dock's filter): no new chat on it
+        if (ContactFlows.openDisabledContact(this, contact)) {
+            return;
+        }
         Conversation conversation =
                 xmppConnectionService.findOrCreateConversation(
                         contact.getAccount(), contact.getAddress(), false, true);
@@ -824,7 +828,7 @@ public class StartConversationActivity extends XmppActivity
             this.mPostponedActivityResult = null;
         }
         this.mActivatedAccounts.clear();
-        // Tatrak: New chat starts from the account the app is filtered to
+        // Tatrak: New chat starts from the account the app is filtered to (all enabled ones while it is disabled)
         this.mActivatedAccounts.addAll(AccountFilter.enabledAccounts(xmppConnectionService));
         configureHomeButton();
         Intent intent = pendingViewIntent.pop();
@@ -971,14 +975,21 @@ public class StartConversationActivity extends XmppActivity
     protected void filterContacts(final String needle) {
         // Tatrak: moved to ContactFlows, shared with the chat list's Contacts tab
         ContactFlows.filterContacts(
-                xmppConnectionService, this.contacts, this.mHideOfflineContacts, needle);
+                xmppConnectionService,
+                this.contacts,
+                this.mHideOfflineContacts,
+                needle,
+                // the Contacts screen shows the filtered account, New chat starts from one that can write
+                getIntent().getBooleanExtra(NewChatCompose.EXTRA_CONTACTS, false)
+                        ? AccountFilter.selected(xmppConnectionService)
+                        : AccountFilter.writable(xmppConnectionService));
         mContactsAdapter.notifyDataSetChanged();
     }
 
     protected void filterConferences(final String needle) {
         this.conferences.clear();
-        // Tatrak: only the account the app is filtered to
-        final Account only = AccountFilter.selected(xmppConnectionService);
+        // Tatrak: only the account the app is filtered to, all enabled ones while it is disabled
+        final Account only = AccountFilter.writable(xmppConnectionService);
         for (final Account account : xmppConnectionService.getAccounts()) {
             if (account.isEnabled() && AccountFilter.shows(only, account)) {
                 for (final Bookmark bookmark :

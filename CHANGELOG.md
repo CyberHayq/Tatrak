@@ -21,6 +21,12 @@
   scrolled. The dim behind the card is Telegram's lighter one. With the list and a chat side by
   side (large screens) there is no preview: a long press on the avatar selects the chat, as in
   Telegram on tablets.
+- Account switcher: a disabled account stays in the list, greyed out with "Disabled" under its
+  name, and "All accounts" shows whenever there is more than one account. Choosing a disabled
+  account shows its chats, contacts, calls and profile; New chat, adding a contact and sharing
+  then offer the enabled accounts, since a disabled account cannot send. A contact of a disabled
+  account opens its existing chat or its details, and sharing never offers a disabled account's
+  chat. The switcher's list scrolls when it does not fit above the bar.
 
 ### Translations
 - Armenian: contacts, contact list, contact details, address book and server use the owner's

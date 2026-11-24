@@ -19,4 +19,5 @@
     <string name="tatrak_bar_blur_clear">Թափանցիկ, ինչպես Telegram-ում</string>
     <string name="tatrak_all_accounts">Բոլոր հաշիվները</string>
     <string name="tatrak_switch_account">Փոխել հաշիվը</string>
+    <string name="tatrak_account_disabled">Անջատված</string>
 </resources>

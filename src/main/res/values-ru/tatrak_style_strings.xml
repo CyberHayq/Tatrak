@@ -22,5 +22,6 @@
     <string name="tatrak_bar_blur_clear">Прозрачное, как в Telegram</string>
     <!-- the account switcher (long press on the floating bar's Profile) -->
     <string name="tatrak_all_accounts">Все аккаунты</string>
+    <string name="tatrak_account_disabled">Отключён</string>
     <string name="tatrak_switch_account">Сменить аккаунт</string>
 </resources>

@@ -65,14 +65,15 @@ final class ContactFlows {
             final XmppConnectionService xmppConnectionService,
             final List<ListItem> contacts,
             final boolean hideOfflineContacts,
-            final String needle) {
+            final String needle,
+            final Account only) {
         contacts.clear();
         final List<Account> accounts = xmppConnectionService.getAccounts();
         final var showOffline = !hideOfflineContacts;
-        // Tatrak: only the account the app is filtered to (the dock's account switcher)
-        final Account only = AccountFilter.selected(xmppConnectionService);
+        // Tatrak: only the account the app is filtered to (the dock's account switcher): AccountFilter.selected
+        // for the Contacts tab, which then shows a disabled account's contacts too; AccountFilter.writable for New chat
         for (final Account account : accounts) {
-            if (account.isEnabled() && AccountFilter.shows(only, account)) {
+            if ((account.isEnabled() || account == only) && AccountFilter.shows(only, account)) {
                 for (Contact contact : account.getRoster().getContacts()) {
                     Presence.Availability s = contact.getShownStatus();
                     if (contact.showInContactList()
@@ -84,6 +85,23 @@ final class ContactFlows {
             }
         }
         Collections.sort(contacts);
+    }
+
+    /**
+     * A disabled account cannot start a chat: its contact opens the existing chat (its history stays readable), or the
+     * contact's details when there is none. False for an enabled account's contact.
+     */
+    static boolean openDisabledContact(final XmppActivity activity, final Contact contact) {
+        if (contact.getAccount().isEnabled()) {
+            return false;
+        }
+        final Conversation conversation = activity.xmppConnectionService.find(contact.getAccount(), contact.getAddress());
+        if (conversation != null) {
+            activity.switchToConversation(conversation);
+        } else {
+            activity.switchToContactDetails(contact);
+        }
+        return true;
     }
 
     static void deleteContact(

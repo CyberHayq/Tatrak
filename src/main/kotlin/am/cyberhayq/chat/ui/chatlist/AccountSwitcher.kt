@@ -24,6 +24,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -36,6 +38,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.graphics.Color
@@ -58,8 +61,9 @@ import eu.siacs.conversations.R
 /**
  * Telegram's account selector (`MainTabsActivity.openAccountSelector`): a long press on the floating dock's Profile
  * ([anchor]: its bounds in the root; null: closed) dims the screen, lifts the item onto a rounded plate and opens a menu
- * above it: "Add account", then "All accounts" (only with more than one account) and each enabled account with its
- * avatar, name and unread chats, the [selected] one (null: all) ringed. The caller blurs what lies under it.
+ * above it: "Add account", then "All accounts" (only with more than one account) and every account with its avatar,
+ * name and unread chats, the [selected] one (null: all) ringed; a disabled one muted, with "Disabled" under its name
+ * (Telegram has no disabled accounts; Cheogram's account header lists them too). The caller blurs what lies under it.
  */
 @Composable
 internal fun AccountSwitcher(
@@ -105,14 +109,16 @@ internal fun AccountSwitcher(
                             transformOrigin = TransformOrigin(1f, 1f)
                         },
                     ) {
-                        AccountMenu(accounts, selected, onAdd = { onDismiss(); onAdd() }, onSelect = { onDismiss(); onSelect(it) })
+                        // one account: nothing to filter, so a tap on its row only closes the menu
+                        AccountMenu(accounts, selected, onAdd = { onDismiss(); onAdd() }, onSelect = { onDismiss(); if (accounts.size > 1) onSelect(it) })
                     }
                 },
             ) { measurables, constraints ->
                 val loose = constraints.copy(minWidth = 0, minHeight = 0)
                 val item = measurables[0].measure(loose)
-                val menu = measurables[1].measure(loose)
                 val margin = 8.dp.roundToPx()
+                // the space above the item; the account rows scroll inside it
+                val menu = measurables[1].measure(loose.copy(maxHeight = (shown.top.toInt() - 8.dp.roundToPx() - margin).coerceIn(0, constraints.maxHeight)))
                 // the menu's end over the item's, 8 dp above it (ItemOptions' gap and its 4 dp lift)
                 val x = (shown.right.toInt() - menu.width).coerceIn(margin, (constraints.maxWidth - menu.width - margin).coerceAtLeast(margin))
                 val y = (shown.top.toInt() - menu.height - 8.dp.roundToPx()).coerceAtLeast(margin)
@@ -139,19 +145,25 @@ private fun AccountMenu(accounts: List<AccountChoice>, selected: String?, onAdd:
         }
         // ItemOptions.addGap
         Spacer(Modifier.fillMaxWidth().padding(vertical = 4.dp).height(8.dp).background(scheme.onSurface.copy(alpha = 0.05f)))
-        // one account: nothing to filter
-        if (accounts.size > 1) {
-            AccountRow(stringResource(R.string.tatrak_all_accounts), null, all = true, accounts.sumOf { it.unread }, selected == null) { onSelect(null) }
-        }
-        accounts.forEach {
-            AccountRow(it.name, it.avatar, all = false, it.unread, it.uuid == selected || accounts.size == 1) { onSelect(it.uuid) }
+        Column(Modifier.weight(1f, fill = false).verticalScroll(rememberScrollState())) {
+            // one account: nothing to filter
+            if (accounts.size > 1) {
+                AccountRow(stringResource(R.string.tatrak_all_accounts), null, all = true, accounts.sumOf { it.unread }, selected == null, disabled = false) { onSelect(null) }
+            }
+            accounts.forEach {
+                AccountRow(it.name, it.avatar, all = false, it.unread, it.uuid == selected || accounts.size == 1, it.disabled) { onSelect(it.uuid) }
+            }
         }
     }
 }
 
-/** Telegram's `accountView`: a 32 dp avatar, shrunk inside a ring when selected, and the name in up to two lines. */
+/**
+ * Telegram's `accountView`: a 32 dp avatar, shrunk inside a ring when selected, and the name in up to two lines; a
+ * [disabled] account's name in the muted text colour (`onSurfaceVariant`, readable at 4.5:1), its avatar faded,
+ * "Disabled" under the name (TalkBack reads both: the clickable row merges them).
+ */
 @Composable
-private fun AccountRow(name: String, avatar: Bitmap?, all: Boolean, unread: Int, selected: Boolean, onClick: () -> Unit) {
+private fun AccountRow(name: String, avatar: Bitmap?, all: Boolean, unread: Int, selected: Boolean, disabled: Boolean, onClick: () -> Unit) {
     val shape = LocalAvatarShape.current
     val accent = MaterialTheme.colorScheme.primary
     Row(
@@ -173,17 +185,24 @@ private fun AccountRow(name: String, avatar: Bitmap?, all: Boolean, unread: Int,
                     Icon(painterResource(R.drawable.ic_group_24dp), null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(size * 0.6f))
                 }
             } else {
-                ChatAvatar(avatar, online = false, size = size)
+                Box(if (disabled) Modifier.alpha(DISABLED_ALPHA) else Modifier) { ChatAvatar(avatar, online = false, size = size) }
             }
         }
-        Text(
-            name,
-            color = MaterialTheme.colorScheme.onSurface,
-            fontSize = 16.sp,
-            maxLines = 2,
-            overflow = TextOverflow.Ellipsis,
-            modifier = Modifier.weight(1f).padding(start = 13.dp),
-        )
+        Column(Modifier.weight(1f).padding(start = 13.dp)) {
+            Text(
+                name,
+                color = if (disabled) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface,
+                fontSize = 16.sp,
+                maxLines = if (disabled) 1 else 2,
+                overflow = TextOverflow.Ellipsis,
+            )
+            if (disabled) {
+                Text(stringResource(R.string.tatrak_account_disabled), color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 13.sp, maxLines = 1)
+            }
+        }
         if (unread > 0) UnreadBadge(unread, TatrakTheme.chatColors.unreadBadge)
     }
 }
+
+/** Material's alpha for disabled content. */
+private const val DISABLED_ALPHA = 0.38f

@@ -118,23 +118,65 @@ class AccountFilterTest {
     }
 
     @Test
-    fun oneEnabledAccountMeansNoFilter() {
+    fun pickNeedsTwoAccountsAndAnExistingOne() {
         b.setOption(Account.OPTION_DISABLED, true)
-        AccountFilter.select(context, a.uuid)
-        val service = Service()
-        assertNull(AccountFilter.selected(service))
-        assertEquals(listOf("a1", "b1", "b2"), snapshot(service).chats.map { it.uuid })
+        assertNull(AccountFilter.pick(null, listOf(a, b)))
+        assertNull(AccountFilter.pick(a.uuid, listOf(a)))
+        assertNull(AccountFilter.pick(TestAccount("carol@example.com").uuid, listOf(a, b)))
+        assertEquals(a, AccountFilter.pick(a.uuid, listOf(a, b)))
+        // a disabled account filters what is viewed too
+        assertEquals(b, AccountFilter.pick(b.uuid, listOf(a, b)))
     }
 
     @Test
-    fun aRemovedOrDisabledAccountFallsBackToAll() {
+    fun aRemovedAccountFallsBackToAllADisabledOneStays() {
         AccountFilter.select(context, b.uuid)
         val c = TestAccount("carol@example.com")
         assertNull(AccountFilter.selected(Service(listOf(a, c))))
         b.setOption(Account.OPTION_DISABLED, true)
-        assertNull(AccountFilter.selected(Service(listOf(a, b, c))))
-        b.setOption(Account.OPTION_DISABLED, false)
         assertEquals(b, AccountFilter.selected(Service(listOf(a, b, c))))
+        assertNull(AccountFilter.writable(Service(listOf(a, b, c))))
+    }
+
+    /** Down to one account the choice goes, so a new second account does not bring it back. */
+    @Test
+    fun oneAccountLeftClearsTheChoice() {
+        AccountFilter.select(context, b.uuid)
+        assertNull(AccountFilter.selected(Service(listOf(b))))
+        assertNull(androidx.preference.PreferenceManager.getDefaultSharedPreferences(context).getString(AccountFilter.KEY, null))
+        assertNull(AccountFilter.selected(Service(listOf(b, TestAccount("carol@example.com")))))
+    }
+
+    /** The owner's option A: a disabled account's chats, contacts and calls show; New chat offers the enabled ones. */
+    @Test
+    fun aDisabledAccountFiltersViewingWhileNewChatOffersTheEnabledOnes() {
+        b.setOption(Account.OPTION_DISABLED, true)
+        val service = Service()
+        for ((account, peer) in listOf(a to "ann", b to "ben")) {
+            account.roster.getContact(Jid.of("$peer@example.com")).setOption(Contact.Options.IN_ROSTER)
+        }
+        AccountFilter.select(context, b.uuid)
+
+        val filtered = snapshot(service)
+        assertEquals(listOf("b1", "b2"), filtered.chats.map { it.uuid })
+        assertEquals(b.uuid, filtered.selectedAccount)
+        // the switcher lists both, the disabled one marked
+        assertEquals(mapOf(a.uuid to false, b.uuid to true), filtered.accounts.associate { it.uuid to it.disabled })
+        assertEquals(setOf("b1", "b2"), callChats(service).keys)
+
+        val contacts = ArrayList<ListItem>()
+        ContactFlows.filterContacts(service, contacts, false, null, AccountFilter.selected(service))
+        assertEquals(listOf("ben@example.com"), contacts.map { (it as Contact).address.toString() })
+
+        // New chat: its contacts and its dialogs' accounts are the enabled account's
+        ContactFlows.filterContacts(service, contacts, false, null, AccountFilter.writable(service))
+        assertEquals(listOf("ann@example.com"), contacts.map { (it as Contact).address.toString() })
+        assertEquals(listOf("alice@example.com"), AccountFilter.enabledAccounts(service))
+
+        // all accounts: a disabled account's contacts stay hidden, as upstream
+        AccountFilter.select(context, null)
+        ContactFlows.filterContacts(service, contacts, false, null, AccountFilter.selected(service))
+        assertEquals(listOf("ann@example.com"), contacts.map { (it as Contact).address.toString() })
     }
 
     @Test
@@ -173,7 +215,7 @@ class AccountFilterTest {
         AccountFilter.select(context, a.uuid)
 
         val contacts = ArrayList<ListItem>()
-        ContactFlows.filterContacts(service, contacts, false, null)
+        ContactFlows.filterContacts(service, contacts, false, null, AccountFilter.selected(service))
         assertEquals(listOf("ann@example.com"), contacts.map { (it as Contact).address.toString() })
 
         assertEquals(setOf("a1", "a2"), callChats(service).keys)
@@ -189,7 +231,7 @@ class AccountFilterTest {
 
         AccountFilter.select(context, null)
         contacts.clear()
-        ContactFlows.filterContacts(service, contacts, false, null)
+        ContactFlows.filterContacts(service, contacts, false, null, AccountFilter.selected(service))
         assertEquals(2, contacts.size)
         assertEquals(setOf("a1", "a2", "b1", "b2"), callChats(service).keys)
     }
