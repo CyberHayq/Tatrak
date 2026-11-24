@@ -15,10 +15,14 @@ and OpenPGP end-to-end encryption.
 [Build](#-building-from-source) · [Report an issue](https://github.com/CyberHayq/Tatrak/issues)
 
 <p align="center">
-  <img src="docs/images/01-organised-chats.png" width="200" alt="Keep your chats organised: Tatrak chat folders and conversation list" />
-  <img src="docs/images/02-encrypted-messages.png" width="200" alt="Stay close with encrypted messages: Tatrak conversation in dark theme" />
-  <img src="docs/images/03-replies.png" width="200" alt="Make every reply count: Tatrak replies in light theme" />
-  <img src="docs/images/04-personalisation.png" width="200" alt="Your chats, your colours: Tatrak with a custom accent palette" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/01.png" width="200" alt="Keep your chats in order: Tatrak chat list with folders, floating bars and a contact typing" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/02.png" width="200" alt="Talk freely, privately: an OMEMO-encrypted chat in dark theme with a photo, a reply and a reaction" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/03.png" width="200" alt="Bring everyone together: a family group with names, a photo, reactions and a mention" />
+</p>
+<p align="center">
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/04.png" width="200" alt="Make it yours: Appearance settings with style cards and floating bars" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/05.png" width="200" alt="No phone number, any server: the welcome screen" />
+  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/06.png" width="200" alt="Conversations and monocles backups: the backup restore list" />
 </p>
 
 ## 🎯 Our goals
