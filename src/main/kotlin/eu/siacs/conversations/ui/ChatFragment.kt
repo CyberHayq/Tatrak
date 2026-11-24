@@ -174,6 +174,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private var pendingUuid: String? = null
     /** Picker results that arrived before the service was bound (process death). */
     private var pendingAttachments: List<Attachment>? = null
+
+    /** Files whose "Send N files?" question is open, or restored after a recreation that took the dialog away. */
+    private var confirming: List<Attachment>? = null
+    private var confirmShown = false
     private var pendingExtras: Bundle? = null
     private var afterTrust: AfterTrust? = null
     private var afterPermissions: (() -> Unit)? = null
@@ -347,6 +351,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             ?.let { BundleCompat.getParcelableArrayList(it, STATE_TRUST_ATTACHMENTS, Attachment::class.java) }
             ?.let { afterTrust = AfterTrust.Attachments(it) }
         pendingPhotoUri = savedInstanceState?.getString(STATE_PHOTO_URI)?.let(Uri::parse)
+        // a share's question outlives a recreation (rotation, a changed style) as the classic previews do
+        confirming = savedInstanceState?.let { BundleCompat.getParcelableArrayList(it, STATE_CONFIRM_ATTACHMENTS, Attachment::class.java) }
         // a rotation keeps them in the view model; this is for a recreated process
         savedInstanceState
             ?.let { BundleCompat.getParcelableArrayList(it, STATE_MEDIA_PREVIEWS, Attachment::class.java) }
@@ -435,6 +441,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             outState.putParcelableArrayList(STATE_TRUST_ATTACHMENTS, ArrayList(it.attachments))
         }
         pendingPhotoUri?.let { outState.putString(STATE_PHOTO_URI, it.toString()) }
+        confirming?.let { outState.putParcelableArrayList(STATE_CONFIRM_ATTACHMENTS, ArrayList(it)) }
         if (viewModel.previews.isNotEmpty()) {
             outState.putParcelableArrayList(STATE_MEDIA_PREVIEWS, ArrayList(viewModel.previews))
             outState.putStringArrayList(STATE_CAMERA_DRAFTS, viewModel.cameraDrafts.mapTo(ArrayList()) { it.toString() })
@@ -557,6 +564,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         c.messagesLoaded.set(true)
         service.notificationService.setOpenConversation(c)
         extras?.let { processExtras(c, it) }
+        if (!confirmShown) confirming?.let(::confirmAttachments)
     }
 
     // --- composer ---------------------------------------------------------------------------
@@ -1103,6 +1111,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private fun confirmAttachments(attachments: List<Attachment>) {
         if (attachments.isEmpty()) return
         if (requireClassicForPgp()) return
+        confirming = attachments
+        confirmShown = true
         MaterialAlertDialogBuilder(requireActivity())
             .setTitle(conversation?.name)
             .setMessage(
@@ -1112,8 +1122,13 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                     attachments.size,
                 )
             )
-            .setPositiveButton(R.string.tatrak_chat_send) { _, _ -> commitAttachments(attachments) }
-            .setNegativeButton(R.string.cancel, null)
+            .setPositiveButton(R.string.tatrak_chat_send) { _, _ ->
+                confirming = null
+                commitAttachments(attachments)
+            }
+            .setNegativeButton(R.string.cancel) { _, _ -> confirming = null }
+            // not onDismiss: a recreation dismisses the dialog too, and the question must come back then
+            .setOnCancelListener { confirming = null }
             .show()
     }
 
@@ -2409,6 +2424,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         private const val STATE_PHOTO_URI = "tatrak_chat_photo_uri"
         private const val STATE_MEDIA_PREVIEWS = "tatrak_chat_media_previews"
         private const val STATE_CAMERA_DRAFTS = "tatrak_chat_camera_drafts"
+        private const val STATE_CONFIRM_ATTACHMENTS = "tatrak_chat_confirm_attachments"
 
         /** Opens the chat scrolled to this message (search results); see [showMessage]. */
         const val EXTRA_MESSAGE_UUID = "am.cyberhayq.chat.message_uuid"

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Fixes
+- A file shared into Tatrak while the app had to redraw itself (for example right after a change of
+  the style or accent) opened the chat without asking to send the file; the question now comes back.
+
 ### Interface
 - Floating bars: the folder tabs and the bottom tab bar are smaller, in Telegram 13's sizes (a 36 dp
   folder bar with 14 sp titles, a 56 dp tab bar with 12 sp labels).

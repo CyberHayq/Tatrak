@@ -338,6 +338,64 @@ class ReviewFlowsTest {
         assertTrue(activity.requestMainPermissions(contacts, ContactFlows.REQUEST_SYNC_CONTACTS))
     }
 
+    class NamedShare : android.content.ContentProvider() {
+        override fun onCreate() = true
+        override fun query(uri: android.net.Uri, projection: Array<String>?, selection: String?, args: Array<String>?, sort: String?) =
+            android.database.MatrixCursor(arrayOf(android.provider.OpenableColumns.DISPLAY_NAME)).apply { addRow(arrayOf("screenshot.png")) }
+        override fun getType(uri: android.net.Uri) = "image/png"
+        override fun insert(uri: android.net.Uri, values: android.content.ContentValues?): android.net.Uri? = null
+        override fun delete(uri: android.net.Uri, selection: String?, args: Array<String>?) = 0
+        override fun update(uri: android.net.Uri, values: android.content.ContentValues?, selection: String?, args: Array<String>?) = 0
+    }
+
+    /** A share's "Send N files?" outlives a recreation (owner's phone, 2026-11-24: a changed style relaunched the activity). */
+    @Test
+    fun sharedFilesQuestionComesBackAfterARecreation() {
+        val chat = service.chat(service.a, peer)
+        // a named content URI: MimeUtils' name lookup throws for a nameless one under the JVM (not on a device)
+        Robolectric.setupContentProvider(NamedShare::class.java, "test.share")
+        val uri = android.net.Uri.parse("content://test.share/screenshot.png")
+        fun share() =
+            controller.newIntent(
+                Intent(activity, ConversationsActivity::class.java)
+                    .setAction(Intent.ACTION_SEND_MULTIPLE)
+                    .putExtra(ConversationsActivity.EXTRA_CONVERSATION, chat.uuid)
+                    .putExtra(ConversationsActivity.EXTRA_TYPE, "image/png")
+                    .putParcelableArrayListExtra(Intent.EXTRA_STREAM, arrayListOf(uri))
+            )
+        // the question, not a dialog of the attach path that may follow it
+        fun question() =
+            ShadowDialog.getShownDialogs().filterIsInstance<AlertDialog>().last {
+                it.isShowing && it.findViewById<android.widget.TextView>(android.R.id.message)?.text?.contains("1") == true
+            }
+        share()
+        fm.executePendingTransactions()
+        val first = question()
+        assertTrue(first.isShowing)
+        controller.recreate()
+        fm.executePendingTransactions()
+        // the fake Host binds without the ServiceConnection callback a real one gets
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "onBackendConnected")
+        shadowOf(Looper.getMainLooper()).idle()
+        val again = question()
+        assertNotSame(first, again)
+        assertTrue(again.isShowing)
+        assertEquals("1 file", ReflectionHelpers.getField<List<Attachment>?>(main, "confirming")?.size?.let { "$it file" })
+        // Send hands the files to the attach path (its permission, trust and upload gates are other tests' business)
+        again.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(ReflectionHelpers.getField<List<Attachment>?>(main, "confirming"))
+
+        // an answered question stays answered
+        controller.recreate()
+        fm.executePendingTransactions()
+        // the fake Host binds without the ServiceConnection callback a real one gets
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "onBackendConnected")
+        shadowOf(Looper.getMainLooper()).idle()
+        // (the attach path may show its own dialogs; the question itself is gone)
+        assertNull(ReflectionHelpers.getField<List<Attachment>?>(main, "confirming"))
+    }
+
     @Test
     fun detachedCallActionsRecheckTheirAccount() {
         val a = service.chat(service.a, peer)
