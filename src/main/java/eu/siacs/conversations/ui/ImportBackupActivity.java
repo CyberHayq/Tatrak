@@ -149,8 +149,13 @@ public class ImportBackupActivity extends ActionBarActivity
         final var action = intent == null ? null : intent.getAction();
         final var data = intent == null ? null : intent.getData();
         if (Intent.ACTION_VIEW.equals(action) && data != null) {
-            openBackupFileFromUri(data, true);
             setIntent(new Intent(Intent.ACTION_MAIN));
+            // Tatrak: another app must not make Tatrak read its own private files as a backup
+            if (isOwnData(this, data)) {
+                showBackupThrowable(new java.io.FileNotFoundException(data.toString()));
+                return;
+            }
+            openBackupFileFromUri(data, true);
             return;
         }
 
@@ -219,6 +224,35 @@ public class ImportBackupActivity extends ActionBarActivity
     @Override
     public void onClick(final BackupFile backupFile) {
         showEnterPasswordDialog(backupFile, false, ImportBackupWorker.OmemoImport.FULL);
+    }
+
+    /**
+     * Tatrak: whether a URI handed in by another app points into Tatrak itself: one of its own
+     * content providers, a file in its private data directories, or another scheme. Only
+     * content:// of other apps and file:// outside those directories may be read as a backup.
+     */
+    @androidx.annotation.VisibleForTesting
+    static boolean isOwnData(final android.content.Context context, final Uri uri) {
+        final String scheme = uri.getScheme();
+        if ("content".equals(scheme)) {
+            final String authority = uri.getAuthority();
+            if (authority == null || authority.isEmpty()) return true;
+            final var provider = context.getPackageManager().resolveContentProvider(authority, 0);
+            return provider != null && context.getPackageName().equals(provider.packageName);
+        }
+        if (!"file".equals(scheme) || uri.getPath() == null) return true;
+        try {
+            final String path = new java.io.File(uri.getPath()).getCanonicalPath();
+            final var info = context.getApplicationInfo();
+            for (final String dir : new String[] {info.dataDir, info.deviceProtectedDataDir}) {
+                if (dir == null) continue;
+                final String own = new java.io.File(dir).getCanonicalPath();
+                if (path.equals(own) || path.startsWith(own + java.io.File.separator)) return true;
+            }
+            return false;
+        } catch (final IOException e) {
+            return true;
+        }
     }
 
     private void openBackupFileFromUri(final Uri uri, final boolean finishOnCancel) {

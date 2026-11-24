@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- Restoring a backup opened from another app no longer reads a file that belongs to Tatrak
+  itself: a link into Tatrak's own storage or file providers is refused as "not a backup file".
+  Backups opened from a file manager or chosen in Tatrak are unaffected.
+
 ## 0.5.0
 
 ### Fixes
