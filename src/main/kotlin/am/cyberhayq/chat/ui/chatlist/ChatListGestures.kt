@@ -485,7 +485,7 @@ internal fun DrawerHost(
 
 /**
  * Claims a mostly horizontal drag once it passes the touch slop, if [canClaim] agrees with its direction
- * (total movement so far); vertical drags and unclaimed ones are left to the children untouched.
+ * (total movement so far); vertical drags, drags after a long press and unclaimed ones are left to the children untouched.
  * [onEnd] gets the velocity (dp per second) and the total horizontal movement.
  */
 @Composable
@@ -512,6 +512,8 @@ internal fun Modifier.claimHorizontalDrag(
                 total += delta
                 if (!claimed) {
                     if (!change.pressed) break
+                    // held still past the long press (the avatar's chat preview, a row's selection): that gesture owns the finger
+                    if (change.uptimeMillis - down.uptimeMillis >= viewConfiguration.longPressTimeoutMillis) break
                     if (abs(total.y) > viewConfiguration.touchSlop && abs(total.y) > abs(total.x)) break
                     if (abs(total.x) <= viewConfiguration.touchSlop) continue
                     if (!claim(total.x)) break

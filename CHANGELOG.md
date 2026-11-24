@@ -6,6 +6,9 @@
 - Restoring a backup opened from another app no longer reads a file that belongs to Tatrak
   itself: a link into Tatrak's own storage or file providers is refused as "not a backup file".
   Backups opened from a file manager or chosen in Tatrak are unaffected.
+- A long press on a chat's avatar opened the chat preview, and moving the same finger to the right
+  then pulled out the side menu (in the archive: went back to the chat list). A finger held still
+  until the long press now belongs to the preview or the selection, not to the swipe.
 
 ## 0.5.0
 

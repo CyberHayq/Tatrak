@@ -39,6 +39,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
@@ -428,6 +429,21 @@ class ChatListScreenshotTest {
         compose.onNodeWithText("Personal").performClick()
         compose.waitForIdle()
         compose.onRoot().performTouchInput { swipeRight() }
+        compose.waitForIdle()
+        compose.onNodeWithText("Settings").assertDoesNotExist()
+    }
+
+    /** A long press on the avatar opens the chat preview; moving the same finger right afterwards must not open the menu. */
+    @Test
+    fun swipeAfterAvatarLongPressKeepsTheDrawerClosed() {
+        compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), NoListActions) } }
+        val row = compose.onNodeWithText("Saved Messages").fetchSemanticsNode().boundsInRoot
+        compose.onRoot().performTouchInput {
+            down(Offset(30.dp.toPx(), row.center.y))
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            repeat(10) { moveBy(Offset(40f, 0f)) }
+            up()
+        }
         compose.waitForIdle()
         compose.onNodeWithText("Settings").assertDoesNotExist()
     }
