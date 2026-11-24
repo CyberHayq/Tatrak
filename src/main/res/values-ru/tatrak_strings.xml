@@ -19,6 +19,7 @@
     <string name="tatrak_archived_many">Чатов перемещено в архив: %d</string>
     <string name="tatrak_unarchived">Чат возвращён из архива</string>
     <string name="tatrak_chat_open">Открыть чат</string>
+    <string name="tatrak_chat_preview_close">Закрыть просмотр</string>
     <string name="tatrak_chat_preview">Просмотр чата</string>
     <string name="tatrak_undo">Отменить</string>
     <string name="tatrak_close_selection">Отменить выбор</string>

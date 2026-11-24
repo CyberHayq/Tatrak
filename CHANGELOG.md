@@ -9,6 +9,11 @@
 ### Interface
 - Floating bars: the folder tabs and the bottom tab bar are smaller, in Telegram 13's sizes (a 36 dp
   folder bar with 14 sp titles, a 56 dp tab bar with 12 sp labels).
+- The chat preview (long press on a chat's avatar) opens into the chat as in Telegram: a tap makes
+  the card the full chat at once with a short bounce, and the chat stays where the card was
+  scrolled. The dim behind the card is Telegram's lighter one. With the list and a chat side by
+  side (large screens) there is no preview: a long press on the avatar selects the chat, as in
+  Telegram on tablets.
 
 ## 0.4.0
 

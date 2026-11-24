@@ -23,6 +23,7 @@ import am.cyberhayq.chat.ui.chat.MessageFocus
 import am.cyberhayq.chat.ui.chat.highlightInConference
 import am.cyberhayq.chat.ui.chat.ReplyPreview
 import am.cyberhayq.chat.ui.chat.StickerStore
+import am.cyberhayq.chat.ui.chat.ScrollAnchor
 import am.cyberhayq.chat.ui.chat.SwipeBackLayout
 import am.cyberhayq.chat.ui.chat.VoicePlayer
 import am.cyberhayq.chat.ui.chat.VoiceRecorder
@@ -398,6 +399,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                                 notice = viewModel.notice,
                                 onNoticeShown = { viewModel.notice = null },
                                 seenMentions = viewModel.seenMentions,
+                                startAt = startAt,
                             )
                         }
                     }
@@ -410,29 +412,29 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     /** Set by [ConversationsActivity.showConversation] when this chat slides in over the list. */
     var slideAfterLoad = false
 
+    /** Where the list opens: the preview card's place when this chat took over from it ([PreviewHandOff]). */
+    private var startAt: ScrollAnchor? = null
+    /** The next enter replaces a preview card that already shows this chat full size: no push. */
+    private var enterFromPreview = false
+
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        // As Telegram: slide in once the first messages are laid out (listReady). Composing them in
-        // the middle of the slide dropped frames on slower phones. The fragment still reaches
-        // onStart (bind) while postponed; it stays below RESUMED, see markRead.
-        // shortcut: fixed 300 ms cap, after it the slide starts and messages pop in mid-way as before
-        if (slideAfterLoad) postponeEnterTransition(300, TimeUnit.MILLISECONDS)
+        // slide in once the first messages are laid out (listReady)
+        if (slideAfterLoad) postponeForFirstMessages()
     }
 
     override fun listReady() {
         if (!slideAfterLoad) return
         slideAfterLoad = false
-        viewLifecycleOwner.lifecycleScope.launch {
-            // the next frame lays out the initial scroll (alpha 0), the one after starts the slide
-            awaitFrame()
-            awaitFrame()
-            startPostponedEnterTransition()
-        }
+        startAfterFirstMessages()
     }
 
     /** Animators, not the old view animations: only these can follow a back gesture. */
-    override fun onCreateAnimator(transit: Int, enter: Boolean, nextAnim: Int): Animator? =
-        slideAnimator(this, nextAnim, R.animator.tatrak_chat_enter, R.animator.tatrak_chat_pop_exit, 1f)
+    override fun onCreateAnimator(transit: Int, enter: Boolean, nextAnim: Int): Animator? {
+        val fromPreview = enter && enterFromPreview
+        if (enter) enterFromPreview = false
+        return chatAnimator(this, nextAnim, fromPreview)
+    }
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
@@ -487,6 +489,11 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     /** Called by the activity like [ConversationFragment.reInit]. */
     fun reInit(conversation: Conversation, extras: Bundle?) {
         QuickLoader.set(conversation.uuid)
+        // only a chat made for this open takes it, never one already shown that the activity re-inits
+        val handOff = if (isAdded) null else takePreviewHandOff(conversation.uuid, this)
+        // read when the view is made, which follows
+        startAt = handOff?.startAt
+        enterFromPreview = handOff != null
         val previous = this.conversation
         // a group private message lasts only while its chat stays open: every entry from outside ends it, except the
         // private-message entry itself; a share or forward into the open chat says so
@@ -505,7 +512,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         this.conversation = conversation
         // as ConversationFragment.reInit: a read chat opens with the last pages only, so loaded
         // history does not keep growing (and every snapshot with it) across visits
-        if (extras != null && conversation.isRead) conversation.trim()
+        // history keeps its loaded pages when a preview card hands over: the card may show an older message
+        if (extras != null && conversation.isRead && handOff == null) conversation.trim()
         val service = xmppConnectionService
         if (service == null || !isAdded) {
             pendingExtras = extras
@@ -1158,13 +1166,6 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private fun privateTarget(c: Conversation?): Jid? = c?.takeIf { it.mode == Conversation.MODE_MULTI }?.nextCounterpart
 
     private fun privateMode() = privateTarget(conversation) != null
-
-    /** What the room's composer holds: its stored draft, as a fresh open shows it. */
-    private fun roomDraft(c: Conversation): String {
-        val participating = c.mode == Conversational.MODE_SINGLE || c.mucOptions.participating()
-        val draft = c.draft
-        return if (participating && draft != null) draft.message() else ""
-    }
 
     /**
      * ConversationFragment.privateMessageWith: the composer sends text (and a reply) to [counterpart] until the bar's X.
@@ -2426,6 +2427,23 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         private const val STATE_CAMERA_DRAFTS = "tatrak_chat_camera_drafts"
         private const val STATE_CONFIRM_ATTACHMENTS = "tatrak_chat_confirm_attachments"
 
+        /** Set by [ChatListFragment] around its [openChat] call when a preview card became the chat; taken by [reInit]. */
+        internal var previewHandOff: PreviewHandOff? = null
+
+        /**
+         * Asked by [ConversationsActivity.openConversation] after it has run the pending transactions: a newer
+         * navigation that ran there ended the preview's request, and the preview's chat must not replace it.
+         */
+        @JvmStatic
+        fun previewOpenCancelled(): Boolean = previewHandOff?.ended == true
+
+        /** [previewHandOff] if it is [uuid]'s, once; [by] is the chat that takes over from the card. */
+        internal fun takePreviewHandOff(uuid: String, by: Fragment): PreviewHandOff? =
+            previewHandOff?.takeIf { it.uuid == uuid }?.also {
+                previewHandOff = null
+                it.taker = by
+            }
+
         /** Opens the chat scrolled to this message (search results); see [showMessage]. */
         const val EXTRA_MESSAGE_UUID = "am.cyberhayq.chat.message_uuid"
 
@@ -2460,6 +2478,14 @@ internal fun slideAnimator(fragment: Fragment, nextAnim: Int, enterAnim: Int, ex
     val width = view.width.takeIf { it > 0 } ?: view.resources.displayMetrics.widthPixels
     return if (enter) dragAnimator(fragment, view, width * fraction, 0f) else dragAnimator(fragment, view, 0f, width * fraction)
 }
+
+/**
+ * [ChatFragment]'s animators: a chat taking over from a preview card that already shows it full size enters at
+ * once ([fromPreview]); the back-stack entry keeps its animations, so Back and swipe-back close as after a row tap.
+ */
+internal fun chatAnimator(fragment: Fragment, nextAnim: Int, fromPreview: Boolean): Animator? =
+    if (fromPreview) ValueAnimator.ofFloat(0f, 1f).setDuration(0)
+    else slideAnimator(fragment, nextAnim, R.animator.tatrak_chat_enter, R.animator.tatrak_chat_pop_exit, 1f)
 
 /**
  * Telegram's ActionBarLayout.startLayoutAnimation: the top screen fades in from 48 dp to the
@@ -2545,3 +2571,37 @@ internal fun toggleMute(
 
 internal fun isStickerPack(url: HttpUrl): Boolean = StickerStore.isPack(url)
 
+/** What the room's composer holds: its stored draft, as a fresh open shows it (also the preview card's, expanded). */
+internal fun roomDraft(c: Conversation): String {
+    val participating = c.mode == Conversational.MODE_SINGLE || c.mucOptions.participating()
+    val draft = c.draft
+    return if (participating && draft != null) draft.message() else ""
+}
+
+/**
+ * One tap on a chat preview card ([ChatPreview]) turning it into [uuid]'s chat: the real chat opens where the card
+ * stood ([startAt], known when the pulse ends) without the push. [taker] is the chat fragment made for it.
+ */
+internal class PreviewHandOff(val uuid: String) {
+    var startAt: ScrollAnchor? = null
+    var taker: Fragment? = null
+    /** Another fragment took the container or the card went: nothing may open for this tap any more. */
+    var ended = false
+}
+
+/**
+ * As Telegram: a chat slides in once its first messages are laid out ([startAfterFirstMessages]); composing them in
+ * the middle of the slide dropped frames on slower phones. The fragment still reaches onStart (bind) while postponed;
+ * it stays below RESUMED, see [ChatFragment.markRead].
+ * shortcut: fixed 300 ms cap, after it the slide starts and messages pop in mid-way as before
+ */
+internal fun Fragment.postponeForFirstMessages() = postponeEnterTransition(300, TimeUnit.MILLISECONDS)
+
+/** The first messages are laid out ([ChatActions.listReady]): the next frame lays out the initial scroll, the one after starts the slide. */
+internal fun Fragment.startAfterFirstMessages() {
+    viewLifecycleOwner.lifecycleScope.launch {
+        awaitFrame()
+        awaitFrame()
+        startPostponedEnterTransition()
+    }
+}

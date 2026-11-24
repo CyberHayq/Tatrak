@@ -736,6 +736,20 @@ class ChatListScreenshotTest {
         assertEquals(listOf("chat-3", "chat-3"), previewed)
     }
 
+    /** Two panes: no preview beside the open chat (Telegram: none on tablets); the avatar's long press selects the row. */
+    @Test
+    fun twoPanesHaveNoPreview() {
+        val previewed = mutableListOf<String>()
+        val actions = object : ChatListActions by NoListActions { override fun previewChat(uuid: String) { previewed += uuid } }
+        compose.setContent { TatrakTheme(darkTheme = false) { ChatListScreen(sampleState(), actions, canPreview = false) } }
+        val ani = compose.onNodeWithText("Ani")
+        assertTrue((ani.fetchSemanticsNode().config.getOrElseNullable(androidx.compose.ui.semantics.SemanticsActions.CustomActions) { null } ?: emptyList()).none { it.label == "Preview chat" })
+        ani.performTouchInput { longClick(androidx.compose.ui.geometry.Offset(37.dp.toPx(), centerY)) }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Archive").assertExists()
+        assertTrue(previewed.isEmpty())
+    }
+
     /** Each tab is a 48 dp button with its label; Chats is selected; the other tabs go to [MainTabs], the FAB starts a chat. */
     @Test
     fun floatingBottomBarSwitchesTabs() {

@@ -19,6 +19,7 @@
     <string name="tatrak_archived_many">%d chats archived</string>
     <string name="tatrak_unarchived">Chat moved back from archive</string>
     <string name="tatrak_chat_open">Open chat</string>
+    <string name="tatrak_chat_preview_close">Close preview</string>
     <string name="tatrak_chat_preview">Preview chat</string>
     <string name="tatrak_undo">Undo</string>
     <string name="tatrak_close_selection">Cancel selection</string>

@@ -1,6 +1,7 @@
 package eu.siacs.conversations.ui
 
 import am.cyberhayq.chat.ui.chat.ChatPreview
+import am.cyberhayq.chat.ui.chat.ScrollAnchor
 import am.cyberhayq.chat.ui.chat.ChatViewModel
 import am.cyberhayq.chat.ui.chat.NoChatActions
 import am.cyberhayq.chat.ui.chat.currentTextPalette
@@ -42,11 +43,15 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import am.cyberhayq.chat.ui.chat.PreviewCovered
+import android.os.Handler
+import android.os.Looper
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.FragmentManager
 import androidx.compose.runtime.setValue
 import eu.siacs.conversations.ui.fragment.settings.SettingsHomeFragment
 import eu.siacs.conversations.ui.fragment.settings.settingsAccount
 import eu.siacs.conversations.ui.fragment.settings.settingsSections
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import am.cyberhayq.chat.ui.chatlist.ChatListScreen
 import am.cyberhayq.chat.ui.chatlist.ChatListViewModel
@@ -110,8 +115,9 @@ class ChatListFragment : XmppFragment(), ChatListActions {
     /** The chat shown by [ChatPreview]; its model only reads, it never marks anything read. */
     private val previewModel by lazy { ViewModelProvider(this)["preview", ChatViewModel::class.java].also { it.preview = true } }
     private var previewing by mutableStateOf<Conversation?>(null)
-    /** A tap in the preview is opening its chat; a second tap must not open it again. */
-    private var opening = false
+    private val handOffs = PreviewHandOffs(this, R.id.main_fragment) { previewing = null }
+    /** The card's tap until its pulse ends ([ChatPreview] onExpand to onOpen). */
+    private var handOff: PreviewHandOff? = null
     private val previewActions =
         object : NoChatActions() {
             override suspend fun loadThumbnail(uuid: String, sizePx: Int): Bitmap? {
@@ -144,6 +150,7 @@ class ChatListFragment : XmppFragment(), ChatListActions {
         callList = CallList(activity, calls, lifecycleScope) { selectTab(MainTab.CHATS) }
         contactsTab = ContactsTab(activity, calls)
         savedInstanceState?.getString(STATE_TAB)?.let { tab = MainTab.valueOf(it) }
+        parentFragmentManager.addOnBackStackChangedListener(handOffs)
         // The chat applies the write before closing. The tab host offers Undo as soon as it is visible.
         parentFragmentManager.setFragmentResultListener(ARCHIVE_FROM_CHAT, this) { _, result ->
             val uuid = result.getString(ARCHIVE_FROM_CHAT) ?: return@setFragmentResultListener
@@ -152,6 +159,11 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                 showArchiveUndo(context, snackbar, this@ChatListFragment, listOf(uuid), showHint = tab == MainTab.CHATS)
             }
         }
+    }
+
+    override fun onDestroy() {
+        parentFragmentManager.removeOnBackStackChangedListener(handOffs)
+        super.onDestroy()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -179,7 +191,7 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                     // ItemOptions' blur of the screen under the account switcher
                     val blur by animateDpAsState(if (switcher != null && LocalBarBlur.current != BarBlur.OFF) 12.dp else 0.dp, label = "blur")
                     CompositionLocalProvider(LocalAccountSwitcher provides { switcher = it }) {
-                        Box(Modifier.fillMaxSize()) {
+                        PreviewCovered(previewing != null) {
                             // blur(0) would still add a clipping layer
                             Box(Modifier.fillMaxSize().then(if (blur > 0.dp) Modifier.blur(blur) else Modifier)) {
                                 MainTabs(
@@ -197,6 +209,8 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                                                 canInvite = canInvite,
                                                 snackbar = snackbar,
                                                 onTab = ::selectTab,
+                                                // as Telegram (DialogsActivity.onItemLongClick, !isTablet): no preview beside an open chat
+                                                canPreview = !ConversationsActivity.isTabletView(requireActivity()),
                                             )
                                         MainTab.CONTACTS -> {
                                             val contacts by contactsTab.state.collectAsStateWithLifecycle()
@@ -240,8 +254,10 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                             ChatPreview(
                                 preview,
                                 previewActions,
-                                onOpen = { openFromPreview(c) },
+                                onExpand = { handOff = handOffs.begin(c.uuid) },
+                                onOpen = { startAt -> openFromPreview(c, startAt) },
                                 onDismiss = { previewing = null },
+                                draft = remember(c) { roomDraft(c) },
                             )
                         }
                     }
@@ -259,7 +275,8 @@ class ChatListFragment : XmppFragment(), ChatListActions {
     // a chat opened another way (notification, share) replaces the list: its card must not come back with the view
     override fun onDestroyView() {
         previewing = null
-        opening = false
+        handOff = null
+        handOffs.reset()
         super.onDestroyView()
     }
 
@@ -363,20 +380,19 @@ class ChatListFragment : XmppFragment(), ChatListActions {
     }
 
     /**
-     * The preview stays over the chat while it opens underneath (public issue #2: closing it first showed
-     * the bare list for up to the postponed enter plus the push); onDestroyView clears it once the list
-     * has left. shortcut: a fixed 600 ms ends it where the list stays (two panes), past the 300 ms wait
-     * and the 150 ms push; replace with the chat's own "shown" signal when the card morphs (backlog).
+     * The card has become the chat ([ChatPreview]). The real chat opens as a row tap opens it, at the card's place and
+     * without the push ([PreviewHandOff]); it waits for its first messages as usual and then replaces the list, card
+     * included, in one step (public issue #2).
      */
-    private fun openFromPreview(c: Conversation) {
-        if (opening) return
-        opening = true
-        openChat(c.uuid)
-        lifecycleScope.launch {
-            delay(600)
-            previewing = null
-            opening = false
-        }
+    private fun openFromPreview(c: Conversation, startAt: ScrollAnchor?) {
+        val request = handOff ?: return run { previewing = null }
+        handOff = null
+        request.startAt = startAt
+        val conversation = xmppConnectionService?.findConversationByUuid(c.uuid)
+        val selector = activity as? OnConversationSelected
+        // closed meanwhile: nothing would replace the card
+        if (conversation == null || selector == null) return handOffs.end(request)
+        handOffs.open(request) { selector.onConversationSelected(conversation) }
     }
 
     override fun openChat(uuid: String) {
@@ -511,6 +527,65 @@ class ChatListFragment : XmppFragment(), ChatListActions {
 }
 
 private const val STATE_TAB = "tatrak_main_tab"
+
+/**
+ * The list's side of a preview card becoming its chat ([PreviewHandOff]); [onCardGone] removes the card. Apart from
+ * [ChatListFragment] so a FragmentManager test can drive it. It runs no pending transactions itself: that would start
+ * the chat's postponed enter before its messages are laid out.
+ */
+internal class PreviewHandOffs(
+    private val list: Fragment,
+    private val containerId: Int,
+    private val onCardGone: () -> Unit,
+) : FragmentManager.OnBackStackChangedListener {
+    private val fm get() = list.parentFragmentManager
+    private val main = Handler(Looper.getMainLooper())
+    /** From the card's tap until its chat is left or another fragment takes the container. */
+    private var request: PreviewHandOff? = null
+
+    /** The card was tapped; from now on any other fragment in the container ends this request. */
+    fun begin(uuid: String): PreviewHandOff = PreviewHandOff(uuid).also { request = it }
+
+    /** The pulse ended: opens the chat with [open], the row tap's call, if the request still stands. */
+    fun open(handOff: PreviewHandOff, open: () -> Unit) {
+        // posted: transactions already committed (a notification's chat) run first, and may end the request
+        main.post {
+            if (request !== handOff || !showsList()) return@post end(handOff)
+            ChatFragment.previewHandOff = handOff
+            try {
+                open()
+            } finally {
+                // not taken (the classic screen opened): the next chat must not inherit it
+                ChatFragment.previewHandOff = null
+            }
+            // posted after the open's own transaction: if nothing took the container, nothing will replace the card
+            main.post { if (request === handOff && handOff.taker == null && showsList()) end(handOff) }
+        }
+    }
+
+    /** The card goes, and with it the request. */
+    fun end(handOff: PreviewHandOff) {
+        handOff.ended = true
+        if (request === handOff) request = null
+        onCardGone()
+    }
+
+    /** The list's view is gone; a new one starts without a card. */
+    fun reset() {
+        request = null
+    }
+
+    // Another fragment took the container (a newer open, the classic screen), or the list is back after the card's
+    // chat: Back while the chat waits for its messages, or during the list's exit, brings the same list view back
+    // without onDestroyView, and the inert card would stay over it
+    override fun onBackStackChanged() {
+        val handOff = request ?: return
+        val current = fm.findFragmentById(containerId)
+        if (if (current === list) handOff.taker != null else current !== handOff.taker) end(handOff)
+    }
+
+    private fun showsList() = list.isAdded && fm.findFragmentById(containerId) === list
+}
 
 /** Local archive shared by the chat's menu and the list's selection actions. */
 internal fun updateArchive(service: XmppConnectionService, conversations: List<Conversation>, archived: Boolean) {

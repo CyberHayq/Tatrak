@@ -24,6 +24,18 @@ import androidx.compose.ui.graphics.toPixelMap
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.test.pressKey
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.assertIsNotFocused
+import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.semantics.SemanticsProperties
+import androidx.compose.ui.semantics.SemanticsNode
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,10 +73,12 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.input.TextFieldValue
+import androidx.compose.foundation.lazy.LazyListState
+import androidx.compose.ui.unit.height
+import androidx.compose.ui.unit.width
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.github.takahirom.roborazzi.captureScreenRoboImage
 import com.github.takahirom.roborazzi.ExperimentalRoborazziApi
-import androidx.compose.ui.test.isDialog
 import androidx.compose.ui.test.swipeDown
 import eu.siacs.conversations.R
 import kotlinx.coroutines.CompletableDeferred
@@ -1142,7 +1156,7 @@ class ChatScreenshotTest {
         compose.waitForIdle()
         fun top() = compose.onNodeWithText("Message number 17", useUnmergedTree = true).getBoundsInRoot().top
         val before = top()
-        compose.onNode(isDialog()).performTouchInput { swipeDown(startY = centerY - 150f, endY = centerY + 150f) }
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performTouchInput { swipeDown(startY = centerY - 150f, endY = centerY + 150f) }
         compose.waitForIdle()
         assertTrue("${top()} > $before", top() > before)
         assertEquals(0, opened)
@@ -1152,20 +1166,205 @@ class ChatScreenshotTest {
         assertEquals(0, opened)
         // a touch that stops a fling belongs to the list, it opens nothing
         compose.mainClock.autoAdvance = false
-        compose.onNode(isDialog()).performTouchInput { swipeDown(startY = centerY - 200f, endY = centerY + 200f, durationMillis = 60) }
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performTouchInput { swipeDown(startY = centerY - 200f, endY = centerY + 200f, durationMillis = 60) }
         compose.mainClock.advanceTimeBy(48)
         val flingTop = top()
-        compose.onNode(isDialog()).performTouchInput { click(center) }
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performTouchInput { click(center) }
         compose.mainClock.advanceTimeBy(1_000)
         compose.mainClock.autoAdvance = true
         compose.waitForIdle()
         assertEquals(0, opened)
         // the list moved little after the touch: it was the fling's touch (the guard is shown by removing it, which fails above)
         assertTrue("fling stopped at $flingTop, now ${top()}", abs((top() - flingTop).value) < 150f)
-        compose.onNode(isDialog()).performTouchInput { click(center) }
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performTouchInput { click(center) }
+        compose.waitForIdle()
+        assertEquals(1, opened)
+        // the card is the chat now: a second tap opens nothing more
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performTouchInput { click(center) }
         compose.waitForIdle()
         assertEquals(1, opened)
         assertEquals(0, actions.reads)
+    }
+
+    /**
+     * A tap makes the card the whole window at once and pulses it (Telegram's expandPreviewFragment); the chat
+     * opens when the pulse ends, at the card's place; the full chat in the card still marks nothing read.
+     */
+    @Test fun chatPreviewSnapsAndPulses() {
+        val actions = ReadCounter()
+        val opened = mutableListOf<ScrollAnchor?>()
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                ChatPreview(longGroupChat(Samples(currentTextPalette())), actions, onOpen = { opened += it }, onDismiss = {}, draft = "See you then")
+            }
+        }
+        compose.waitForIdle()
+        val window = compose.onRoot().getBoundsInRoot()
+        val card = compose.onNodeWithTag(CHAT_PREVIEW_TAG)
+        assertTrue("${card.getBoundsInRoot()} in $window", card.getBoundsInRoot().width < window.width)
+        compose.mainClock.autoAdvance = false
+        card.performTouchInput { click(center) }
+        compose.mainClock.advanceTimeBy(100)
+        assertEquals(window.width, card.getBoundsInRoot().width)
+        assertEquals(window.height, card.getBoundsInRoot().height)
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_preview_pulse.png")
+        assertTrue(opened.isEmpty())
+        compose.mainClock.advanceTimeBy(300)
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_preview_expanded.png")
+        // not scrolled: the newest message at the bottom
+        assertEquals(listOf(ScrollAnchor("n24", 0)), opened)
+        assertEquals(0, actions.reads)
+    }
+
+    /** Back and an outside tap together close the card once (Telegram 13.2.1 fixed a second close taking the list too). */
+    @Test fun chatPreviewClosesOnce() {
+        var dismissed = 0
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+                ChatPreview(privateChat(Samples(currentTextPalette())), NoChatActions(), onOpen = {}, onDismiss = { dismissed++ })
+            }
+        }
+        compose.waitForIdle()
+        compose.runOnIdle { backDispatcher!!.onBackPressed() }
+        compose.onRoot().performTouchInput { click(Offset(8f, 8f)) }
+        compose.waitForIdle()
+        assertEquals(1, dismissed)
+    }
+
+    /** Back while the card becomes the chat does nothing: the chat is on its way. */
+    @Test fun chatPreviewBackWhileExpandingIsIgnored() {
+        var dismissed = 0
+        var opened = 0
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+                ChatPreview(privateChat(Samples(currentTextPalette())), NoChatActions(), onOpen = { opened++ }, onDismiss = { dismissed++ })
+            }
+        }
+        compose.waitForIdle()
+        compose.mainClock.autoAdvance = false
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performTouchInput { click(center) }
+        compose.mainClock.advanceTimeBy(50)
+        compose.runOnIdle { backDispatcher!!.onBackPressed() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        assertEquals(0, dismissed)
+        assertEquals(1, opened)
+    }
+
+    /**
+     * TalkBack: the card offers "Open chat" and "Close preview"; inside it the messages are read, one node each, and
+     * nothing announces an action (a bubble's menu, a link, a reaction) that would do nothing in the preview.
+     */
+    @Test fun chatPreviewTalkBack() {
+        var dismissed = 0
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                ChatPreview(privateChat(Samples(currentTextPalette())), NoChatActions(), onOpen = {}, onDismiss = { dismissed++ })
+            }
+        }
+        compose.waitForIdle()
+        val card = compose.onNodeWithTag(CHAT_PREVIEW_TAG).fetchSemanticsNode()
+        assertEquals("Open chat", card.config[SemanticsActions.OnClick].label)
+        assertEquals("Close preview", card.config[SemanticsActions.Dismiss].label)
+        val acting = mutableListOf<String>()
+        fun walk(n: SemanticsNode) {
+            n.children.forEach { child ->
+                val actions = child.config.map { it.key }.filter { it == SemanticsActions.OnClick || it == SemanticsActions.OnLongClick || it == SemanticsActions.CustomActions }
+                if (actions.isNotEmpty()) acting += "${actions.map { it.name }} ${child.config.getOrElseNullable(SemanticsProperties.ContentDescription) { null }}"
+                walk(child)
+            }
+        }
+        walk(card)
+        assertEquals(emptyList<String>(), acting)
+        compose.onNodeWithContentDescription("Sure, 10 works, 09:20", substring = true).assertExists()
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performSemanticsAction(SemanticsActions.Dismiss)
+        compose.waitForIdle()
+        assertEquals(1, dismissed)
+    }
+
+    /**
+     * The card takes the keyboard focus from what it covers (the list's search field stops taking text) and gives it
+     * back when it closes in place; Tab stays out of its content; Enter expands it, and expanded it keeps every key.
+     */
+    @Test fun chatPreviewTakesTheKeyboardFocus() {
+        var show by mutableStateOf(false)
+        val field = FocusRequester()
+        var opened = 0
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+                Box(Modifier.fillMaxSize()) {
+                    PreviewCovered(show) { BasicTextField("", {}, Modifier.focusRequester(field).testTag("search")) }
+                    if (show) ChatPreview(privateChat(Samples(currentTextPalette())), NoChatActions(), onOpen = { opened++ }, onDismiss = { show = false })
+                }
+            }
+        }
+        compose.runOnIdle { field.requestFocus() }
+        compose.onNodeWithTag("search", useUnmergedTree = true).assertIsFocused()
+        show = true
+        compose.waitForIdle()
+        compose.onNodeWithTag("search", useUnmergedTree = true).assertIsNotFocused()
+        val card = compose.onNodeWithTag(CHAT_PREVIEW_TAG)
+        card.assertIsFocused()
+        card.performKeyInput { pressKey(Key.Tab) }
+        compose.onNodeWithTag("search", useUnmergedTree = true).assertIsNotFocused()
+        // closed in place: the search field has the focus again
+        compose.runOnIdle { backDispatcher!!.onBackPressed() }
+        compose.waitForIdle()
+        compose.onNodeWithTag("search", useUnmergedTree = true).assertIsFocused()
+        show = true
+        compose.waitForIdle()
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performKeyInput { pressKey(Key.Enter) }
+        compose.waitForIdle()
+        assertEquals(1, opened)
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).performKeyInput { pressKey(Key.Tab) }
+        compose.onNodeWithTag(CHAT_PREVIEW_TAG).assertIsFocused()
+    }
+
+    /** TalkBack reads a preview row as the row shows it: the pack's host, the trust warning, the attachment's kind; no "Load more" button. */
+    @Test fun chatPreviewRowSpeech() {
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                val s = Samples(currentTextPalette())
+                val items =
+                    listOf(
+                        s.text("p", false, GroupPosition.SINGLE, "x", "10:01").copy(kind = MessageKind.STICKER_PACK, text = AnnotatedString("https://stickers.example.org/pack/42?key=abc")),
+                        s.text("w", false, GroupPosition.SINGLE, "Hello", "10:02", trust = "Not a trusted key"),
+                        s.text("f", true, GroupPosition.SINGLE, "", "10:03", status = DeliveryStatus.DELIVERED)
+                            .copy(kind = MessageKind.FILE, file = FileInfo("report.pdf", "1.2 MB", FileState.LOCAL)),
+                        LoadMoreItem("Today"),
+                    )
+                ChatPreview(privateChat(s).copy(items = items), NoChatActions(), onOpen = {}, onDismiss = {})
+            }
+        }
+        compose.waitForIdle()
+        compose.onNodeWithContentDescription("Sticker pack, stickers.example.org, 10:01").assertExists()
+        compose.onNodeWithContentDescription("Not a trusted key, Hello, 10:02").assertExists()
+        compose.onNodeWithContentDescription("file, report.pdf, 1.2 MB, 10:03, Delivered").assertExists()
+        compose.onNodeWithText("Load more messages").assertDoesNotExist()
+    }
+
+    /** The chat a preview card became opens where the card stood, not at its usual place. */
+    @Test fun chatOpensAtTheHandedOverPlace() {
+        val list = LazyListState()
+        lateinit var state: ChatState
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                state = longGroupChat(Samples(currentTextPalette()))
+                ChatScreen(
+                    state, TextFieldValue(), {}, null, NoChatActions(),
+                    MutableStateFlow(VoicePlayback()), MutableStateFlow(VoiceRecording()),
+                    listState = list, startAt = ScrollAnchor("n20", 7),
+                )
+            }
+        }
+        compose.waitForIdle()
+        assertEquals(state.items.indexOfFirst { it.key == "n20" }, list.firstVisibleItemIndex)
+        assertEquals(7, list.firstVisibleItemScrollOffset)
     }
 
     // ---- floating bars (step 4): header, banner and composer pills over the messages ----

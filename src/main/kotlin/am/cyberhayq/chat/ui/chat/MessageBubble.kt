@@ -844,16 +844,7 @@ private fun StatusIcon(status: DeliveryStatus, color: Color) {
         }
     Icon(
         painterResource(icon),
-        contentDescription = stringResource(when (status) {
-            DeliveryStatus.SENDING -> R.string.tatrak_status_sending
-            DeliveryStatus.SENT -> R.string.tatrak_status_sent
-            DeliveryStatus.DELIVERED -> R.string.tatrak_status_delivered
-            DeliveryStatus.READ -> R.string.tatrak_status_read
-            DeliveryStatus.FAILED -> R.string.tatrak_status_failed
-            DeliveryStatus.CANCELLED -> R.string.tatrak_status_cancelled
-            DeliveryStatus.OFFERED -> R.string.tatrak_status_offered
-            DeliveryStatus.NONE -> return
-        }),
+        contentDescription = stringResource(statusDescription(status) ?: return),
         tint = tint,
         // one 16 dp slot for every status: the smaller clock grew the bubble when the send was acked
         modifier = Modifier.size(16.dp).padding(if (status == DeliveryStatus.SENDING) 1.5.dp else 0.dp),
@@ -1238,3 +1229,16 @@ private fun Reactions(item: MessageItem, actions: ChatActions, modifier: Modifie
         }
     }
 }
+
+/** What the delivery tick says to TalkBack; null without one. */
+internal fun statusDescription(status: DeliveryStatus): Int? =
+    when (status) {
+        DeliveryStatus.SENDING -> R.string.tatrak_status_sending
+        DeliveryStatus.SENT -> R.string.tatrak_status_sent
+        DeliveryStatus.DELIVERED -> R.string.tatrak_status_delivered
+        DeliveryStatus.READ -> R.string.tatrak_status_read
+        DeliveryStatus.FAILED -> R.string.tatrak_status_failed
+        DeliveryStatus.CANCELLED -> R.string.tatrak_status_cancelled
+        DeliveryStatus.OFFERED -> R.string.tatrak_status_offered
+        DeliveryStatus.NONE -> null
+    }

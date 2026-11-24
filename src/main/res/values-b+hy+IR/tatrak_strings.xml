@@ -19,6 +19,7 @@
     <string name="tatrak_archived_many">Արխիւացվեց %d զրոյց</string>
     <string name="tatrak_unarchived">Զրոյցը վերադարձվեց արխիւից</string>
     <string name="tatrak_chat_open">Բացել զրոյցը</string>
+    <string name="tatrak_chat_preview_close">Փակել նախադիտումը</string>
     <string name="tatrak_chat_preview">Նախադիտել զրոյցը</string>
     <string name="tatrak_undo">Հետարկել</string>
     <string name="tatrak_close_selection">Չեղարկել ընտրութիւնը</string>

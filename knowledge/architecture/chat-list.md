@@ -140,23 +140,57 @@ while it is being swiped.
   draw it with the letter avatar. monocles shows a static file-type icon instead of a thumbnail.
 - **Chat preview (2026-11-20, public issue #2).** As Telegram's `DialogsActivity.onItemLongClick`
   (`showChatPreview` only when `isPointInsideAvatar`): a long press on a row's avatar opens the
-  chat in a card (92 % × 75 %, a Compose `Dialog` over the dimmed list); a long press elsewhere on
+  chat in a card (92 % × 75 % of the safe area, over the dimmed list); a long press elsewhere on
   the row still selects it. While chats are selected the avatar has no gesture of its own (its long
   press toggles the row) and the row no preview action. Otherwise the avatar has a
   nested `combinedClickable` sharing the row's `MutableInteractionSource` (the row still ripples)
   and `clearAndSetSemantics {}`; TalkBack gets a "Preview chat" custom action on the row.[^rows]
-  `ChatListFragment.previewChat` binds a second `ChatViewModel` (key `"preview"`) and shows
+  `ChatListFragment.previewChat` binds a second `ChatViewModel` (key `"preview"`) and draws the
+  card in the list's own `ComposeView`, in the same window as the chat that replaces it:
+  Telegram's `0x2e` dim (about 18 %), the card centred in the safe area, appearing in 190 ms (scale
+  0.7→1, overshoot 1.02) and closing in 150 ms (scale →0.9, `EASE_OUT_QUINT`), as `ActionBarLayout`;
+  Back or an outside tap closes it (twice is one close). While it shows, the list under it is out
+  of TalkBack's and the keyboard's reach (`PreviewCovered`): the card takes the focus (the search
+  field stops taking text) and gives it back when it closes in place; Enter or the D-pad's centre
+  opens it, and nothing inside it takes focus. TalkBack gets the card's "Open chat" and "Close
+  preview" (dismiss) actions and reads each message as one node built from what the row draws
+  (`previewSpeech`: trust warning, sender, quoted reply, the text or the attachment's kind and
+  name, a sticker pack's host instead of its link, caption, edited, time or status text, delivery,
+  reactions); the bubbles, links and reactions announce no actions there, and the preview has no
+  "Load more" row. Inside,
   `ChatScreen(preview = true)`: no composer, no header buttons, no message menu or selection,
   classic layout (`LocalFloatingBars provides false`). Its actions are `NoChatActions` with only
   the thumbnails wired (`loadMessageThumbnail`, shared with `ChatFragment`), and `MessageList`
   skips `markRead` in preview mode, so the preview sends no read marker and leaves the unread
   badge; `setOpenConversation` / `messagesLoaded` are never called. Its snapshots
   (`SnapshotParams.preview`) ask nothing of the contact: no XEP-0202 entity time, no XEP-0012 last
-  activity. A tap on the card opens the chat as a row tap does, which marks it read as usual: seen
-  at `PointerEventPass.Initial`, it is a single finger lifted within the touch slop before the
-  long-press timeout and not cancelled, and is consumed so no bubble or button acts on it; a drag
-  is left to the list and a long press does nothing. TalkBack's card action is "Open chat". An
-  outside tap or Back closes the card, and so does the chat being closed meanwhile.
+  activity. A tap on the card (a single finger lifted within the touch slop before the long-press
+  timeout, not cancelled, seen at `PointerEventPass.Initial` and consumed; a drag is left to the
+  list) or TalkBack's "Open chat" **expands** it as Telegram's `expandPreviewFragment`: the card
+  takes the whole window at once and pulses (scale 1→1.05→1, 200 ms, ease-both, haptic
+  `KEYBOARD_TAP`), showing the full chat (header buttons, the user's bar style, the draft in the
+  composer) but inert (every touch eaten, `markRead` still a no-op, Back ignored). When the pulse
+  ends, `openFromPreview` sets a `PreviewHandOff` (uuid and the card list's `ScrollAnchor`) and
+  calls `openChat` as a row tap does; `ChatFragment.reInit` takes it, so the chat opens at the
+  card's place (`InitialScroll`'s `startAt`; a read chat keeps its loaded pages for this entry
+  instead of being trimmed, so an older anchor is still there) with a zero-length enter
+  (`chatAnimator`; the back-stack entry keeps its pop animations), waits for `listReady` as usual
+  and then replaces the list view, card included, in one step; the next ordinary open of that chat
+  trims it as upstream does. `PreviewHandOffs` (the list's
+  side) runs no pending transactions itself (that would start the chat's postponed enter before
+  its messages): the tap begins a request (`PreviewHandOff`), and its back-stack listener ends it
+  and removes the card when any other fragment takes the container (a notification's chat during
+  the pulse, even one Back has left again) or when the list is back after the card's chat (Back
+  before or right after the swap, where the FragmentManager may bring the same list view back
+  without `onDestroyView`). At the pulse end the open is posted after the work already committed,
+  runs only if the request stands, and the chat fragment made for it records itself as the taker;
+  `ConversationsActivity.openConversation` gives way (`ChatFragment.previewOpenCancelled`) when the
+  pending transactions it runs first were a newer navigation that ended the request (a
+  notification committed behind the posted open); if nothing took the container once the open's
+  own transaction has run, the card goes. Read
+  markers and `setOpenConversation` come from the real chat, as after a row tap. In two panes (`ConversationsActivity.isTabletView`) there is no preview:
+  `ChatListScreen(canPreview = false)` leaves the avatar without a gesture of its own, so its long
+  press selects the row (Telegram: `DialogsActivity.onItemLongClick` previews only on phones).
   Not done: Telegram's menu under the preview (mark read, mute, pin, delete) and the blur behind
   it.[^preview]
 - **Colours** follow Telegram's default day theme (white header, `#229AF0` unread badges,

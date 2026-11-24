@@ -218,6 +218,8 @@ fun ChatListScreen(
     snackbar: SnackbarHostState = remember { SnackbarHostState() },
     /** A dock's tab other than Chats ([MainTabs]); Chats itself scrolls the list to the top. */
     onTab: (MainTab) -> Unit = {},
+    /** The avatar's long press previews the chat; without it (two panes) it selects the row like the rest of it. */
+    canPreview: Boolean = true,
 ) {
     val drawer = rememberDrawerController()
     val scope = rememberCoroutineScope()
@@ -284,11 +286,11 @@ fun ChatListScreen(
     // created once: new lambdas on every snapshot would make every visible row recompose
     val currentSelectionMode by rememberUpdatedState(selectionMode)
     val currentActions by rememberUpdatedState(actions)
-    val rowCallbacks = remember {
+    val rowCallbacks = remember(canPreview) {
         RowCallbacks(
             onClick = { uuid -> if (currentSelectionMode) toggle(uuid) else currentActions.openChat(uuid) },
             onLongClick = { uuid -> toggle(uuid) },
-            onAvatarLongClick = { uuid -> currentActions.previewChat(uuid) },
+            onAvatarLongClick = if (canPreview) { uuid -> currentActions.previewChat(uuid) } else null,
         )
     }
     val openArchive = remember { { showArchive = true } }
@@ -577,7 +579,7 @@ fun ChatListScreen(
 private class RowCallbacks(
     val onClick: (String) -> Unit,
     val onLongClick: (String) -> Unit,
-    val onAvatarLongClick: (String) -> Unit,
+    val onAvatarLongClick: ((String) -> Unit)?,
 )
 
 // a data class with the remembered opener, so an unchanged archive lets ChatList skip
@@ -699,7 +701,7 @@ private fun ChatList(
                     onLongClick = { callbacks.onLongClick(chat.uuid) },
                     modifier = Modifier.animateItem(),
                     // while selecting, the avatar is part of the row: its long press toggles, no preview action
-                    onAvatarLongClick = if (selected.isEmpty()) { { callbacks.onAvatarLongClick(chat.uuid) } } else null,
+                    onAvatarLongClick = if (selected.isEmpty()) callbacks.onAvatarLongClick?.let { preview -> { preview(chat.uuid) } } else null,
                 )
             }
             // Telegram's end gap: a list shorter than the screen must still scroll the hidden row out of view
@@ -768,7 +770,7 @@ private fun SearchResults(
                 selected = chat.uuid in selected,
                 onClick = { callbacks.onClick(chat.uuid) },
                 onLongClick = { callbacks.onLongClick(chat.uuid) },
-                onAvatarLongClick = if (selected.isEmpty()) { { callbacks.onAvatarLongClick(chat.uuid) } } else null,
+                onAvatarLongClick = if (selected.isEmpty()) callbacks.onAvatarLongClick?.let { preview -> { preview(chat.uuid) } } else null,
             )
         }
         if (messages.results.isNotEmpty()) {

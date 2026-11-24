@@ -111,6 +111,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
@@ -124,6 +125,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.AppSettings
 import eu.siacs.conversations.R
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import eu.siacs.conversations.entities.Message
 import eu.siacs.conversations.utils.UIHelper
 import java.io.File
@@ -409,6 +411,8 @@ fun ChatScreen(
     preview: Boolean = false,
     /** The message list's scroll state, when the caller must see it ([ChatPreview]: a touch that stops a fling). */
     listState: LazyListState? = null,
+    /** Where the list opens instead of the unread divider: a [ChatPreview] card that became this chat. */
+    startAt: ScrollAnchor? = null,
 ) {
     val menu = remember(state.conversationUuid) { mutableStateOf<Pair<String, Rect>?>(null) }
     val menuKey = remember(menu) { derivedStateOf { menu.value?.first } }
@@ -488,6 +492,7 @@ fun ChatScreen(
                             blurred = backdrop != null,
                             preview = preview,
                             external = listState,
+                            startAt = startAt,
                         )
                     }
                 }
@@ -799,6 +804,7 @@ private fun MessageList(
     /** [ChatPreview]: never marks anything read, whatever [actions] does, and has no selection. */
     preview: Boolean = false,
     external: LazyListState? = null,
+    startAt: ScrollAnchor? = null,
 ) {
     val padded = bars != null
     val listState = external ?: rememberLazyListState()
@@ -808,7 +814,7 @@ private fun MessageList(
 
     // no read markers until the chat has scrolled to the unread divider
     var initialScrollDone by remember(state.generation) { mutableStateOf(false) }
-    InitialScroll(state, listState, padded) {
+    InitialScroll(state, listState, padded, startAt) {
         initialScrollDone = true
         actions.listReady()
     }
@@ -927,14 +933,15 @@ private fun MessageList(
                                 onMenu = onMenu,
                                 onSelect = onSelect,
                                 onSwipeReply = { actions.reply(it.key) },
-                                modifier = Modifier.animateItem().then(flash.modifier(item.key)),
+                                modifier = Modifier.animateItem().then(flash.modifier(item.key)).then(if (preview) Modifier.previewSpeech(previewSpeech(item)) else Modifier),
                                 selecting = selection.isNotEmpty(),
                                 selected = item.key in selectionSet,
                             )
                         is DateItem -> DateChip(item.day, Modifier.animateItem().padding(vertical = 6.dp))
                         is UnreadItem -> UnreadDivider(Modifier.animateItem())
                         is ServiceItem -> ServiceMessage(item, Modifier.animateItem())
-                        is LoadMoreItem -> LoadMoreRow(actions, Modifier.animateItem())
+                        // the preview loads no history: a button there would do nothing
+                        is LoadMoreItem -> if (!preview) LoadMoreRow(actions, Modifier.animateItem())
                     }
                 }
             }
@@ -1052,19 +1059,58 @@ private class MessageFlash {
 
 /** Opens a newly bound chat at the "Unread messages" divider, otherwise at the bottom. */
 @Composable
-private fun InitialScroll(state: ChatState, listState: LazyListState, padded: Boolean, onDone: () -> Unit) {
+private fun InitialScroll(state: ChatState, listState: LazyListState, padded: Boolean, startAt: ScrollAnchor?, onDone: () -> Unit) {
     val done = remember(state.generation) { booleanArrayOf(false) }
     LaunchedEffect(state.generation, state.loaded) {
         if (!state.loaded || done[0]) return@LaunchedEffect
         done[0] = true
+        val anchor = startAt?.let { a -> state.items.indexOfFirst { it.key == a.key } }?.takeIf { it >= 0 }
         val divider = state.items.indexOfFirst { it is UnreadItem }
-        if (divider >= 0) {
+        if (anchor != null) {
+            // where the preview card stood, so the chat's first frame is the card's last
+            listState.scrollToItem(anchor, startAt.offset)
+        } else if (divider >= 0) {
             listState.scrollToItem(divider)
             val viewport = listState.layoutInfo.shownHeight(padded)
             listState.scrollBy(-(viewport * 0.75f))
         }
         onDone()
     }
+}
+
+/** [ChatPreview]: TalkBack reads the message as one node; its buttons, links and reactions would do nothing there. */
+private fun Modifier.previewSpeech(speech: String): Modifier = clearAndSetSemantics { contentDescription = speech }
+
+/** What a message row shows, in its order, as [ChatPreview] reads it: the same texts and labels the bubble draws. */
+@Composable
+private fun previewSpeech(item: MessageItem): String {
+    val content =
+        when (item.kind) {
+            MessageKind.TEXT, MessageKind.EMOJI, MessageKind.INFO -> listOf(item.text.text)
+            MessageKind.IMAGE -> listOf(stringResource(if (item.media?.isVideo == true) R.string.video else R.string.image))
+            MessageKind.STICKER -> listOf(stringResource(R.string.tatrak_sticker))
+            MessageKind.AUDIO -> listOf(stringResource(R.string.audio), item.audioDurationMs.takeIf { it > 0 }?.let(::formatDuration))
+            MessageKind.FILE -> listOf(stringResource(R.string.file), item.file?.title, item.file?.subtitle)
+            MessageKind.LOCATION -> listOf(stringResource(R.string.location))
+            MessageKind.CALL -> listOf(item.call?.title, item.call?.duration)
+            // StickerPackContent: the host, not the long link
+            MessageKind.STICKER_PACK ->
+                listOf(stringResource(R.string.tatrak_stickers_pack_card), item.text.text.toHttpUrlOrNull()?.host)
+        }
+    return (
+        listOf(item.trustWarning, item.senderName, item.reply?.let { "${it.name}: ${it.text}" }) +
+            content +
+            listOf(
+                item.caption?.text,
+                if (item.retractUnverified) stringResource(R.string.tatrak_retract_unverified) else null,
+                if (item.edited) stringResource(R.string.tatrak_chat_edited) else null,
+                item.statusText ?: item.time,
+                statusDescription(item.status)?.let { stringResource(it) },
+            ) +
+            item.reactions.map { "${it.emoji} ${it.count}" }
+        )
+        .filterNot { it.isNullOrEmpty() }
+        .joinToString(", ")
 }
 
 /** Keeps the newest message in view when it arrives while the user is at the bottom. */

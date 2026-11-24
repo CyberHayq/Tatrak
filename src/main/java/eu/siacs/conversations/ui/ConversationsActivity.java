@@ -446,6 +446,10 @@ public class ConversationsActivity extends QrCodeProcessingActivity
     private void openConversation(@Nullable final Conversation conversation, final Bundle extras) {
         final var fragmentManager = getSupportFragmentManager();
         executePendingTransactions(fragmentManager);
+        // Tatrak: a chat preview's open gives way to a newer navigation that the line above just ran
+        if (ChatFragment.previewOpenCancelled()) {
+            return;
+        }
         final boolean mainNeedsRefresh;
         if (binding.secondaryFragment != null) {
             fragmentManager.popBackStackImmediate();
