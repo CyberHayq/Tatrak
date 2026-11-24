@@ -58,6 +58,8 @@ sources:
   header + grouped rows into the unchanged preference pages; `MainSettingsFragment` is no
   longer used but kept for upstream merges). `AppearanceFragment`: theme mode (existing
   `theme` setting and arrays), dynamic colours, accent, app-wide wallpaper with a live preview.
+- Dynamic colours: outgoing text, time and icons go through `readableOn` (4.5:1 against the
+  bubble, else `contentOn`), against makers' palettes that pair light with light (issue #4).
 - Language (2026-11-23; `am.cyberhayq.chat.ui.settings.LanguageSettings.kt`): a "Language" row after
   Interface, its summary the chosen language or "System default". `LanguageFragment` lists "System
   default" and every locale of `res/xml/locales_config.xml` (parsed with `getXml`; `LocaleConfig`

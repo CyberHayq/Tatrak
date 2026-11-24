@@ -116,6 +116,8 @@ fun rememberDynamicColors(): Boolean {
 /** The accent's colour slots filled from the system's dynamic scheme (Android 12+). */
 fun dynamicAccent(context: Context, dark: Boolean): AccentColors {
     val scheme = if (dark) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
+    val bubble = if (dark) scheme.primaryContainer.copy(alpha = 1f) else scheme.primaryContainer
+    val onBubble = readableOn(bubble, scheme.onPrimaryContainer)
     return AccentColors(
         primary = scheme.primary,
         onPrimary = scheme.onPrimary,
@@ -123,12 +125,12 @@ fun dynamicAccent(context: Context, dark: Boolean): AccentColors {
         onPrimaryContainer = if (dark) scheme.onSurface else scheme.onPrimary,
         secondary = scheme.secondary,
         link = scheme.primary,
-        bubbleOutgoing = if (dark) scheme.primaryContainer.copy(alpha = 1f) else scheme.primaryContainer,
-        timeOutgoing = scheme.onPrimaryContainer.copy(alpha = 0.6f),
+        bubbleOutgoing = bubble,
+        timeOutgoing = onBubble.copy(alpha = 0.6f),
         checkRead = scheme.primary,
         unreadBadge = scheme.primary,
         accentIn = scheme.primary,
-        accentOut = scheme.onPrimaryContainer,
+        accentOut = onBubble,
     )
 }
 

@@ -60,6 +60,15 @@ class AccentTest {
         assertEquals(Color(0xFF1A1A1A), contentOn(Color(0xFF5DA7E8)))
     }
 
+    /** Issue #4: a maker's palette with light text on a light outgoing bubble falls back to a dark glyph; readable pairs stay. */
+    @Test
+    fun outgoingTextStaysReadableOnAMakersPalette() {
+        assertEquals(Color(0xFF1A1A1A), readableOn(Color(0xFFB9CBFF), Color(0xFFF5F5F5)))
+        assertEquals(Color.Black, readableOn(Color(0xFFB9CBFF), Color.Black))
+        assertEquals(Color(0xFFF5F5F5), readableOn(Color(0xFF445274), Color(0xFFF5F5F5)))
+        assertEquals(Color.White, readableOn(Color(0xFF445274), Color(0xFF5A6A90)))
+    }
+
     /** A stored "on" restored onto Android 11 must not lock the accent picker (no dynamic colours there). */
     @Test
     @Config(sdk = [30])

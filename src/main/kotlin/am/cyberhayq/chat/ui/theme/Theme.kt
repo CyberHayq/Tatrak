@@ -183,6 +183,15 @@ private fun ColorScheme.withNeutrals(n: Neutrals) =
 fun contentOn(fill: Color): Color = if (fill.luminance() > 0.30f) Color(0xFF1A1A1A) else Color.White
 
 /**
+ * [preferred] if it reaches 4.5:1 on [fill], else [contentOn]. Some makers' dynamic palettes pair a light
+ * primaryContainer with a light onPrimaryContainer (public issue #4: white text on a light outgoing bubble).
+ */
+fun readableOn(fill: Color, preferred: Color): Color {
+    val (light, dark) = listOf(fill.luminance(), preferred.luminance()).sortedDescending()
+    return if ((light + 0.05f) / (dark + 0.05f) >= 4.5f) preferred else contentOn(fill)
+}
+
+/**
  * The chat list FAB fill: [accent] darkened (in sRGB, as `mix(c, K, t)` in gen_accents.py) until a white pencil reaches 4.5:1,
  * i.e. luminance <= 1.05 / 4.5 - 0.05 = 0.1833; owner's choice 2026-11-15 (Telegram's white pencil without lowering contrast). Already dark accents
  * are returned unchanged; `fab_fill()` in check_contrast.py mirrors it.
@@ -238,7 +247,7 @@ fun TatrakTheme(
                 unreadBadge = colors.unreadBadge,
                 accentIn = colors.accentIn,
                 accentOut = colors.accentOut,
-            )
+            ).let { if (dynamic) it.copy(textOutgoing = readableOn(it.bubbleOutgoing, it.textOutgoing)) else it }
         }
     val scheme =
         remember(colors, darkTheme, neutrals) {
