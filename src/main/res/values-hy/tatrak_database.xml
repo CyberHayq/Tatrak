@@ -22,13 +22,13 @@
     <string name="tatrak_backup_omit_encryption">Հաղորդագրության գաղտնագրման տեսակը չի աջակցվում</string>
     <string name="tatrak_backup_omit_outgoing">Ելքային գաղտնագրման չաջակցվող նախընտրությունը զրոյացվել է</string>
     <string name="tatrak_backup_omit_pq_keys">Հետքվանտային OMEMO2 բանալին, աշխատաշրջանը կամ վստահության գրառումը (monocles-ից) չի ներմուծվել</string>
-    <string name="tatrak_backup_omit_contact_trust">Կոնտակտի OMEMO բանալին ու վստահությունը չեն ներմուծվել (կրկին ստուգեք)</string>
-    <string name="tatrak_backup_omit_unproven_contact">monocles-ի կոնտակտի OMEMO բանալին, որի համար պահուստավորումում հին OMEMO հաղորդագրություն չկա, չի ներմուծվել (կրկին ստուգեք)</string>
+    <string name="tatrak_backup_omit_contact_trust">Կապի անձի OMEMO բանալին ու վստահությունը չեն ներմուծվել (կրկին ստուգեք)</string>
+    <string name="tatrak_backup_omit_unproven_contact">monocles-ի կապի անձի OMEMO բանալին, որի համար պահուստավորումում հին OMEMO հաղորդագրություն չկա, չի ներմուծվել (կրկին ստուգեք)</string>
     <string name="tatrak_backup_omit_bad_identity">Չընթեռնելի տվյալներով կամ վստահությամբ OMEMO բանալին չի ներմուծվել</string>
     <string name="tatrak_backup_omit_private">Սեփական OMEMO բանալին, սարքի ID-ն, աշխատաշրջանը կամ նախնական բանալին չի ներմուծվել (այս սարքը նոր բանալի կստանա)</string>
     <string name="tatrak_backup_omit_disappearing">Անհետացող հաղորդագրությունը չի ներմուծվել (Tatrak-ը չի կարող այն ժամանակին ջնջել)</string>
     <string name="tatrak_backup_omit_caption">Կցորդի նկարագրությունը բաց է թողնվել (ֆայլը պահպանվել է)</string>
-    <string name="tatrak_backup_unsafe_omemo_keys">Այս պահուստավորման սեփական OMEMO բանալին հնարավոր չէ անվտանգ վերականգնել։ OMEMO-ի համար ընտրեք «Միայն կոնտակտների վստահությունը» կամ «Ոչինչ»։</string>
+    <string name="tatrak_backup_unsafe_omemo_keys">Այս պահուստավորման սեփական OMEMO բանալին հնարավոր չէ անվտանգ վերականգնել։ OMEMO-ի համար ընտրեք «Միայն կապի անձանց վստահությունը» կամ «Ոչինչ»։</string>
     <string name="tatrak_backup_omit_type">Tatrak-ին անհայտ տեսակի հաղորդագրությունը (%1$d, օրինակ՝ monocles-ի պատմություն) չի ներմուծվել</string>
     <string name="tatrak_backup_omit_conflict">Իրար հակասող տողեր / %1$s</string>
     <string name="tatrak_backup_status_reading">Կարդացվում է պահուստավորումը…</string>

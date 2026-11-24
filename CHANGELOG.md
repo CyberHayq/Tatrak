@@ -15,6 +15,12 @@
   side (large screens) there is no preview: a long press on the avatar selects the chat, as in
   Telegram on tablets.
 
+### Translations
+- Armenian: contacts, contact list, contact details, address book and server use the owner's
+  terms (կապի անձ, Կապեր, Կապերի ցանկ, Կապի տվյալներ, Հասցեագիրք, սպասարկիչ), as do interface,
+  automatic and airplane mode (Միջերես, ինքնաշխատ, Թռիչքային դրություն), in both orthographies;
+  the traditional orthography no longer mixes in reformed spellings.
+
 ## 0.4.0
 
 Everything in 0.4.0-beta.1 below, and:

@@ -51,7 +51,7 @@
     <string name="tatrak_appearance_preview_out">Բարի լույս։ Նոր պաստառը շատ գեղեցիկ է։</string>
     <string name="tatrak_profile_subject">Թեմա</string>
     <string name="tatrak_profile_group_settings">Խմբի կարգավորումներ</string>
-    <string name="tatrak_profile_keys">Կոնտակտի տվյալներն ու գաղտնագրման բանալիները</string>
+    <string name="tatrak_profile_keys">Կապի տվյալներն ու գաղտնագրման բանալիները</string>
     <string name="tatrak_profile_all_members">Բոլոր անդամները</string>
     <string name="tatrak_profile_leave">Լքել խումբը</string>
     <string name="tatrak_profile_search">Որոնել</string>
@@ -60,10 +60,10 @@
     <string name="tatrak_setup_title">Ինչպե՞ս եք ցանկանում սկսել։</string>
     <string name="tatrak_setup_subtitle">Սա կարող եք փոխել ավելի ուշ՝ Կարգավորումներ → Անվտանգություն բաժնում։</string>
     <string name="tatrak_setup_easy_title">Հեշտ</string>
-    <string name="tatrak_setup_easy_text">Ձեր կոնտակտների նոր OMEMO բանալիներն ինքնաշխատ վստահելի են համարվում մինչև դրանք ստուգելը, իսկ համակարգի հավաստագրման կենտրոնները վստահելի են։</string>
+    <string name="tatrak_setup_easy_text">Ձեր կապի անձանց նոր OMEMO բանալիներն ինքնաշխատ վստահելի են համարվում մինչև դրանք ստուգելը, իսկ համակարգի հավաստագրման կենտրոնները վստահելի են։</string>
     <string name="tatrak_setup_advanced_title">Ընդլայնված</string>
-    <string name="tatrak_setup_advanced_text">OMEMO բանալիները վստահելի չեն համարվում մինչև դրանք ստուգելը, իսկ համակարգի հավաստագրման կենտրոնները վստահելի չեն․ յուրաքանչյուր սերվերի հավաստագիր հաստատում եք ինքներդ։</string>
-    <string name="tatrak_cb_title">Սերվերը չի աջակցում channel binding-ին</string>
+    <string name="tatrak_setup_advanced_text">OMEMO բանալիները վստահելի չեն համարվում մինչև դրանք ստուգելը, իսկ համակարգի հավաստագրման կենտրոնները վստահելի չեն․ յուրաքանչյուր սպասարկչի հավաստագիր հաստատում եք ինքներդ։</string>
+    <string name="tatrak_cb_title">Սպասարկիչը չի աջակցում channel binding-ին</string>
     <string name="tatrak_cb_message">%1$s-ը չի առաջարկում channel binding, որը պաշտպանում է ձեր մուտքը TLS-ի միջնորդավորված որոշ հարձակումներից։\n\nԵթե անջատեք այս պահանջը, կկարողանաք միանալ, սակայն կապը որսացող հարձակվողը որոշ դեպքերում կարող է կարդալ կամ փոփոխել այն՝ առանց ձեր նկատելու։ Այս կարգավորումը վերաբերում է բոլոր հաշիվներին և կարող եք այն կրկին միացնել Կարգավորումներ → Անվտանգություն բաժնում։</string>
     <string name="tatrak_cb_accept">Անջատել և ընդունել ռիսկը</string>
     <string name="tatrak_voice_discard_title">Դեն նետե՞լ ձայնային հաղորդագրությունը։</string>

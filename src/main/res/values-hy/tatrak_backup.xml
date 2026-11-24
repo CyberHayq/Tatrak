@@ -15,10 +15,10 @@
         <item quantity="other">Չհաջողվեց կարդալ %d ֆայլ, ու դրանք բաց են թողնվել։</item>
     </plurals>
     <string name="tatrak_restore_omemo">OMEMO գաղտնագրում</string>
-    <string name="tatrak_restore_omemo_full">Ամբողջը․ սեփական բանալին և կոնտակտների վստահությունը</string>
+    <string name="tatrak_restore_omemo_full">Ամբողջը․ սեփական բանալին և կապի անձանց վստահությունը</string>
     <string name="tatrak_restore_omemo_full_summary">Այս սարքը կշարունակի գործել ինչպես հինը։ Ընտրեք այս տարբերակը միայն եթե հին հավելվածն այլևս այս հաշիվը չի գործարկում, հակառակ դեպքում երկու սարքերը կխանգարեն միմյանց գաղտնագրմանը։</string>
-    <string name="tatrak_restore_omemo_trust">Միայն կոնտակտների վստահությունը</string>
-    <string name="tatrak_restore_omemo_trust_summary">Այս սարքը կստանա նոր բանալի․ ձեր ստուգած կոնտակտները կմնան ստուգված։ Կոնտակտները կտեսնեն ձեր նոր սարքը։</string>
+    <string name="tatrak_restore_omemo_trust">Միայն կապի անձանց վստահությունը</string>
+    <string name="tatrak_restore_omemo_trust_summary">Այս սարքը կստանա նոր բանալի․ ձեր ստուգած կապի անձինք կմնան ստուգված։ Կապի անձինք կտեսնեն ձեր նոր սարքը։</string>
     <string name="tatrak_restore_omemo_none">Ոչինչ</string>
-    <string name="tatrak_restore_omemo_none_summary">Կստեղծվի նոր բանալի, և բոլոր կոնտակտների բանալիները պետք է կրկին ստուգվեն։</string>
+    <string name="tatrak_restore_omemo_none_summary">Կստեղծվի նոր բանալի, և բոլոր կապի անձանց բանալիները պետք է կրկին ստուգվեն։</string>
 </resources>

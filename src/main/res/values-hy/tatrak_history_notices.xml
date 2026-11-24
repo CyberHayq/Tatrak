@@ -1,5 +1,5 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="tatrak_history_notices">Պատմության բեռնման ծանուցումներ</string>
-    <string name="tatrak_history_notices_summary">Զրույցի վերևում ցուցադրել «Պատմությունը բեռնվում է սերվերից» և «Սերվերում այլևս պատմություն չկա» հաղորդագրությունները։</string>
+    <string name="tatrak_history_notices_summary">Զրույցի վերևում ցուցադրել «Պատմությունը բեռնվում է սպասարկչից» և «Սպասարկչում այլևս պատմություն չկա» հաղորդագրությունները։</string>
 </resources>

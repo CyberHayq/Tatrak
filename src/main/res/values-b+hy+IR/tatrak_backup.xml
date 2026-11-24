@@ -7,18 +7,18 @@
         <item>monocles chat․ առանց Tatrak-ին հատուկ տուեալների</item>
     </string-array>
     <string name="tatrak_backup_media">Ներառել լուսանկարներն ու ֆայլերը</string>
-    <string name="tatrak_backup_media_summary">Մեկանգամյա պահուստաւորումներում ներառւում են նաեւ լուսանկարները, տեսանիւթերն ու ֆայլերը, ուստի դրանք շատ աւելի մեծ են։ Ինքնաշխատ պահուստաւորումներում եւ Conversations ձեւաչափով պահուստաւորումներում դրանք երբէք չեն ներառւում։</string>
+    <string name="tatrak_backup_media_summary">Մէկանգամեայ պահուստաւորումներում ներառւում են նաեւ լուսանկարները, տեսանիւթերն ու ֆայլերը, ուստի դրանք շատ աւելի մեծ են։ Ինքնաշխատ պահուստաւորումներում եւ Conversations ձեւաչափով պահուստաւորումներում դրանք երբէք չեն ներառւում։</string>
     <string name="tatrak_backup_partial_title">Պահուստաւորումը մասամբ է վերականգնուել</string>
-    <string name="tatrak_backup_partial_summary">Որոշ տուեալներ չհաջողվեց վերականգնել։ Բաց թողնուած գրառումներ՝ %1$d։</string>
+    <string name="tatrak_backup_partial_summary">Որոշ տուեալներ չհաջողուեց վերականգնել։ Բաց թողնուած գրառումներ՝ %1$d։</string>
     <plurals name="tatrak_backup_files_left_out">
-        <item quantity="one">Չհաջողվեց կարդալ %d ֆայլը, ու այն բաց է թողնուել։</item>
-        <item quantity="other">Չհաջողվեց կարդալ %d ֆայլ, ու դրանք բաց են թողնուել։</item>
+        <item quantity="one">Չհաջողուեց կարդալ %d ֆայլը, ու այն բաց է թողնուել։</item>
+        <item quantity="other">Չհաջողուեց կարդալ %d ֆայլ, ու դրանք բաց են թողնուել։</item>
     </plurals>
     <string name="tatrak_restore_omemo">OMEMO գաղտնագրում</string>
-    <string name="tatrak_restore_omemo_full">Ամբողջը․ սեփական բանալին եւ կոնտակտների վստահութիւնը</string>
-    <string name="tatrak_restore_omemo_full_summary">Այս սարքը կշարունակի գործել ինչպես հինը։ Ընտրէք այս տարբերակը միայն եթէ հին յաւելուածն այլեւս այս հաշիւը չի գործարկում, հակառակ դեպքում երկու սարքերը կխանգարեն միմյանց գաղտնագրմանը։</string>
-    <string name="tatrak_restore_omemo_trust">Միայն կոնտակտների վստահութիւնը</string>
-    <string name="tatrak_restore_omemo_trust_summary">Այս սարքը կստանա նոր բանալի․ ձեր ստուգած կոնտակտները կմնան ստուգուած։ Կոնտակտները կտեսնեն ձեր նոր սարքը։</string>
+    <string name="tatrak_restore_omemo_full">Ամբողջը․ սեփական բանալին եւ կապի անձանց վստահութիւնը</string>
+    <string name="tatrak_restore_omemo_full_summary">Այս սարքը կշարունակի գործել ինչպէս հինը։ Ընտրէք այս տարբերակը միայն եթէ հին յաւելուածն այլեւս այս հաշիւը չի գործարկում, հակառակ դեպքում երկու սարքերը կխանգարեն միմեանց գաղտնագրմանը։</string>
+    <string name="tatrak_restore_omemo_trust">Միայն կապի անձանց վստահութիւնը</string>
+    <string name="tatrak_restore_omemo_trust_summary">Այս սարքը կստանա նոր բանալի․ ձեր ստուգած կապի անձինք կմնան ստուգուած։ Կապի անձինք կտեսնեն ձեր նոր սարքը։</string>
     <string name="tatrak_restore_omemo_none">Ոչինչ</string>
-    <string name="tatrak_restore_omemo_none_summary">Կստեղծվի նոր բանալի, եւ բոլոր կոնտակտների բանալիները պէտք է կրկին ստուգվեն։</string>
+    <string name="tatrak_restore_omemo_none_summary">Կստեղծուի նոր բանալի, եւ բոլոր կապի անձանց բանալիները պէտք է կրկին ստուգուեն։</string>
 </resources>

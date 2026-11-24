@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="tatrak_viewer_counter">%1$d՝ %2$d-ից</string>
-    <string name="tatrak_viewer_play">Նվագարկել</string>
+    <string name="tatrak_viewer_play">Նուագարկել</string>
     <string name="tatrak_viewer_pause">Դադար</string>
-    <string name="tatrak_viewer_load_failed">Չհաջողվեց բացել ֆայլը</string>
+    <string name="tatrak_viewer_load_failed">Չհաջողուեց բացել ֆայլը</string>
 </resources>
