@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0
 
 ### Fixes
 - A file shared into Tatrak while the app had to redraw itself (for example right after a change of
@@ -29,7 +29,7 @@
   chat. The switcher's list scrolls when it does not fit above the bar.
 
 ### Translations
-- Armenian: contacts, contact list, contact details, address book and server use the owner's
+- Armenian: contacts, contact list, contact details, address book and server use native
   terms (կապի անձ, Կապեր, Կապերի ցանկ, Կապի տվյալներ, Հասցեագիրք, սպասարկիչ), as do interface,
   automatic and airplane mode (Միջերես, ինքնաշխատ, Թռիչքային դրություն), in both orthographies;
   the traditional orthography no longer mixes in reformed spellings.

@@ -1,0 +1,5 @@
+- A chat preview (long press on the avatar) opens into the chat as in Telegram
+- Disabled accounts stay in the account switcher; the app can show one of them
+- Armenian: native terms instead of loanwords; a consistent traditional orthography
+- A shared file is no longer lost when the app redraws itself
+- After restoring a monocles chat backup, encrypted messages reach every contact
