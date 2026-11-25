@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1
 
 ### Fixes
 - Restoring a backup opened from another app no longer reads a file that belongs to Tatrak
@@ -9,9 +9,10 @@
 - A long press on a chat's avatar opened the chat preview, and moving the same finger to the right
   then pulled out the side menu (in the archive: went back to the chat list). A finger held still
   until the long press now belongs to the preview or the selection, not to the swipe.
-- Dynamic colors: if the phone's wallpaper palette pairs a light outgoing bubble with light text
-  (seen on some phones, issue #4), the text, time and icons in your own messages switch to a
-  dark colour that can be read. Palettes that were already readable are unchanged.
+- Dynamic colors: if the phone's wallpaper palette pairs a light outgoing bubble with light text,
+  or a dark one with dark text (seen on some phones, issue #4), the text, time and icons in your
+  own messages switch to a colour that can be read. Palettes that were already readable are
+  unchanged.
 
 ### Interface
 - Dark theme: in Settings, the Settings tab, contact and group profiles, the gaps between the groups

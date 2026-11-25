@@ -1,0 +1,4 @@
+- Dynamic colors: your own messages stay readable on any wallpaper palette
+- A swipe after a long press no longer opens the side menu
+- Dark theme: the gaps between groups of settings are darker than the rows
+- Backup import refuses a link to Tatrak's own files

@@ -64,7 +64,7 @@ sources:
   the rows, as in Telegram (with `surfaceVariant` they were lighter at night). AMOLED rows are
   already black, so there the gaps match the rows.
 - Dynamic colours: outgoing text, time and icons go through `readableOn` (4.5:1 against the
-  bubble, else `contentOn`), against makers' palettes that pair light with light (issue #4).
+  bubble, else `contentOn`), against makers' palettes that pair light with light or dark with dark (issue #4).
 - Language (2026-11-23; `am.cyberhayq.chat.ui.settings.LanguageSettings.kt`): a "Language" row after
   Interface, its summary the chosen language or "System default". `LanguageFragment` lists "System
   default" and every locale of `res/xml/locales_config.xml` (parsed with `getXml`; `LocaleConfig`
