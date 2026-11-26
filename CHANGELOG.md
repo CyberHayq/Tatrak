@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+- Photo viewer: panning a zoomed photo no longer jumps to the next or previous photo when the
+  pan reaches the photo's edge; the photo stops there, and a new swipe from the edge turns the
+  page.
+- In-app update: if the system refuses to start the installation (a device policy, a revoked
+  permission to install apps), Tatrak says the update failed instead of closing.
+
 ## 0.5.1
 
 ### Fixes

@@ -586,8 +586,8 @@ private fun time(ms: Int): String {
 
 /**
  * Pinch and double-tap zoom with panning, swipe down to close, tap. A one-finger sideways drag on
- * an unzoomed page, or one that pushes a zoomed photo past its side edge, is left alone, so the
- * pager turns the page.
+ * an unzoomed page, or one that starts by pushing a zoomed photo past its side edge, is left alone,
+ * so the pager turns the page; a pan that reaches the edge midway stops there.
  */
 @Composable
 private fun Gestures(
@@ -644,6 +644,7 @@ private fun Gestures(
                     var mode = Mode.UNDECIDED
                     var travel = Offset.Zero
                     var handoff = false
+                    var panned = false
                     while (true) {
                         val event = awaitPointerEvent()
                         val pressed = event.changes.count { it.pressed }
@@ -655,10 +656,11 @@ private fun Gestures(
                             Mode.TRANSFORM -> {
                                 val zoom = event.calculateZoom()
                                 val pan = event.calculatePan()
-                                // one finger pushing a zoomed photo past its side edge turns the page: leave the
-                                // events unconsumed for the pager until the finger lifts
+                                // one finger that starts by pushing a zoomed photo past its side edge turns the page:
+                                // leave the events unconsumed for the pager until the finger lifts. Decided once, so
+                                // a pan that reaches the edge midway does not hand its speed to the pager.
                                 if (pressed > 1) handoff = false
-                                else if (!handoff) {
+                                else if (!handoff && !panned) {
                                     val maxX = size.width * (scale - 1f) / 2f
                                     val atEdge = (pan.x > 0 && offset.x >= maxX - 0.5f) || (pan.x < 0 && offset.x <= -maxX + 0.5f)
                                     handoff = atEdge && abs(pan.x) > abs(pan.y)
@@ -671,6 +673,7 @@ private fun Gestures(
                                     val q = (centroid - center - offset) / scale
                                     offset = clamp(centroid - center - q * newScale + pan, newScale)
                                     scale = newScale
+                                    panned = true
                                     event.changes.forEach { it.consume() }
                                 }
                             }

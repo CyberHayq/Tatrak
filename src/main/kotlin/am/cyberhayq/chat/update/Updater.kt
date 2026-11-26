@@ -315,6 +315,9 @@ object Updater {
             }
         } catch (e: IOException) {
             throw UpdateException(R.string.tatrak_update_failed, e)
+        } catch (e: SecurityException) {
+            // the installer refuses the session (a device policy, a revoked install permission): show it, don't crash
+            throw UpdateException(R.string.tatrak_update_failed, e)
         } finally {
             file.delete()
         }
