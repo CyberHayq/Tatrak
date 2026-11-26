@@ -2571,6 +2571,14 @@ public class XmppConnectionService extends Service {
                         for (final Conversation conversation : removed) {
                             files.addAll(databaseBackend.deleteMessagesInConversation(conversation));
                         }
+                        // Tatrak: closed chats are not loaded; their files go too
+                        for (final Conversation conversation :
+                                databaseBackend.getConversations(Conversation.STATUS_ARCHIVED)) {
+                            if (account.getUuid().equals(conversation.getAccountUuid())) {
+                                files.addAll(
+                                        databaseBackend.deleteMessagesInConversation(conversation));
+                            }
+                        }
                         if (databaseBackend.deleteAccount(account)) {
                             Log.d(Config.LOGTAG, "deleted account from database");
                         }

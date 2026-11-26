@@ -12,10 +12,12 @@ import eu.siacs.conversations.R
 import eu.siacs.conversations.entities.Account
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Conversational
+import eu.siacs.conversations.persistance.DatabaseBackend
 import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.xmpp.Jid
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -25,6 +27,11 @@ import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
 import org.robolectric.annotation.GraphicsMode
+import org.robolectric.util.ReflectionHelpers
+import com.google.common.util.concurrent.Futures
+import java.util.concurrent.Callable
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** The confirmations of destructive actions: shown with their text, Cancel does nothing, the button runs the action. */
 @RunWith(RobolectricTestRunner::class)
@@ -105,9 +112,11 @@ class ConfirmTest {
         }
     }
 
+    // the name without a roster or room behind it
     private fun conversation(mode: Int) =
-        Conversation("c1", "Book club", null, "a1", Jid.of("club@conference.example.com"), 0, Conversation.STATUS_AVAILABLE, mode, Conversation.Attributes.parse(null))
-            .apply { account = Account(Jid.of("tester@example.com"), "secret") }
+        object : Conversation("c1", "Book club", null, "a1", Jid.of("club@conference.example.com"), 0, Conversation.STATUS_AVAILABLE, mode, Conversation.Attributes.parse(null)) {
+            override fun getName(): CharSequence = "Book club"
+        }.apply { account = Account(Jid.of("tester@example.com"), "secret") }
 
     /** ConversationFragment's order: clear, then close (leave) when ticked; Cancel calls nothing. */
     @Test
@@ -134,6 +143,46 @@ class ConfirmTest {
         single.click(DialogInterface.BUTTON_POSITIVE)
         assertEquals(listOf("clear", "clear", "archive"), service.calls)
         assertEquals(listOf(false, true), done)
+    }
+
+    /** The title names the chat; once its host shows another chat, the button clears nothing. */
+    @Test
+    fun clearHistoryNamesTheChatAndRechecksIt() {
+        val activity = activity()
+        val service = Recorder()
+        var shown = true
+        confirmClearHistory(activity, conversation(Conversational.MODE_SINGLE), { service }, { shown }) {}
+        idle()
+        val dialog = org.robolectric.shadows.ShadowDialog.getLatestDialog() as AlertDialog
+        assertEquals("Clear the history of Book club?", dialog.text(androidx.appcompat.R.id.alertTitle))
+        shown = false
+        dialog.click(DialogInterface.BUTTON_POSITIVE)
+        assertEquals(emptyList<String>(), service.calls)
+    }
+
+    /** A rotation during the media browser's count: the old activity is destroyed, not finishing, and gets no dialog. */
+    @Test
+    fun deleteFilesCountAfterRecreationShowsNothing() {
+        val controller = Robolectric.buildActivity(AppCompatActivity::class.java)
+        val activity = controller.get()
+        activity.setTheme(R.style.Theme_Conversations3)
+        controller.setup()
+        // getInstance needs the unlocked storage; the empty selection never opens it
+        ReflectionHelpers.setStaticField(DatabaseBackend::class.java, "instance", DatabaseBackend.isolated(activity, "unused", ByteArray(0)))
+        val gate = CountDownLatch(1)
+        try {
+            XmppConnectionService.DATABASE_READER.execute { gate.await(5, TimeUnit.SECONDS) }
+            confirmDeleteFiles(activity, emptyList()) {}
+            controller.pause().stop().destroy()
+            assertFalse(activity.isFinishing)
+            gate.countDown()
+            Futures.submit(Callable { 0 }, XmppConnectionService.DATABASE_READER).get(5, TimeUnit.SECONDS)
+            idle()
+            assertNull(org.robolectric.shadows.ShadowDialog.getLatestDialog())
+        } finally {
+            gate.countDown()
+            ReflectionHelpers.setStaticField(DatabaseBackend::class.java, "instance", null)
+        }
     }
 
     // screenshots of a few representative confirmations, light and dark

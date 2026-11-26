@@ -318,6 +318,8 @@ public class ConversationFragment extends XmppFragment
             };
     private Toast messageLoaderToast;
     private boolean reInitRequiredOnStart = true;
+    // Tatrak: open "Clear history" question, dismissed when another chat is shown
+    private androidx.appcompat.app.AlertDialog clearing;
     private final OnClickListener clickToMuc =
             new OnClickListener() {
 
@@ -1478,6 +1480,7 @@ public class ConversationFragment extends XmppFragment
         getParentFragmentManager().removeOnBackStackChangedListener(backStackListener);
         messageListAdapter.setOnContactPictureClicked(null);
         messageListAdapter.setOnContactPictureLongClicked(null);
+        if (clearing != null) clearing.dismiss(); // Tatrak
     }
 
     private void quoteText(String text) {
@@ -2135,7 +2138,8 @@ public class ConversationFragment extends XmppFragment
     protected void clearHistoryDialog(final Conversation conversation) {
         final MaterialAlertDialogBuilder builder =
                 new MaterialAlertDialogBuilder(requireActivity());
-        builder.setTitle(R.string.clear_conversation_history);
+        // Tatrak: name the chat; confirming does nothing once another chat is shown
+        builder.setTitle(getString(R.string.tatrak_clear_history_of, conversation.getName()));
         final View dialogView =
                 requireActivity().getLayoutInflater().inflate(R.layout.dialog_clear_history, null);
         final CheckBox endConversationCheckBox =
@@ -2145,6 +2149,7 @@ public class ConversationFragment extends XmppFragment
         builder.setPositiveButton(
                 getString(R.string.confirm),
                 (dialog, which) -> {
+                    if (!isAdded() || this.conversation != conversation) return; // Tatrak
                     requireXmppActivity()
                             .xmppConnectionService
                             .clearConversationHistory(conversation);
@@ -2158,7 +2163,8 @@ public class ConversationFragment extends XmppFragment
                         refresh();
                     }
                 });
-        builder.create().show();
+        clearing = builder.create(); // Tatrak
+        clearing.show();
     }
 
     protected void muteConversationDialog(final Conversation conversation) {
@@ -2852,6 +2858,10 @@ public class ConversationFragment extends XmppFragment
     private boolean reInit(final Conversation conversation, final boolean hasExtras) {
         if (conversation == null) {
             return false;
+        }
+        if (clearing != null && this.conversation != conversation) {
+            clearing.dismiss(); // Tatrak: the question was about the previous chat
+            clearing = null;
         }
         this.conversation = conversation;
         // once we set the conversation all is good and it will automatically do the right thing in

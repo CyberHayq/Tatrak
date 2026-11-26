@@ -42,6 +42,12 @@
   and for a camera, video or contact request answered after a permission question. Tapping the
   same picker again, or sending another message that needs the key check, while the earlier one
   has not answered yet now says so instead of replacing it.
+- "Clear chat history" names the chat, closes when a notification opens another chat in its
+  place, and never clears a chat other than the one on screen, on both chat screens (the classic
+  one shows OpenPGP chats).
+- Rotating the media browser while it counts the files to delete no longer crashes it.
+- Deleting an account also deletes the files of its closed chats; before, only the files of the
+  chats still in the list went.
 
 ## 0.5.1
 

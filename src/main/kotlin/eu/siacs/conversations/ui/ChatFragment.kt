@@ -168,6 +168,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private val viewModel by viewModelLazy
     private val voiceRecorder by lazy { VoiceRecorder(requireContext().applicationContext) }
     private var voiceWarning: androidx.appcompat.app.AlertDialog? = null
+    // open "Clear history" of the shown chat; dismissed when another chat is shown
+    private var clearing: androidx.appcompat.app.AlertDialog? = null
 
     private val voicePlayer by lazy {
         VoicePlayer(lifecycleScope, requireContext().getSystemService(AudioManager::class.java)) {
@@ -536,6 +538,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         // leaving the chat ends a private message; a configuration change of the open chat keeps it
         if (activity?.isChangingConfigurations != true) conversation?.takeIf { it.mode == Conversation.MODE_MULTI }?.nextCounterpart = null
         voicePlayer.release()
+        clearing?.dismiss() // replaced by the classic screen, or recreated
         super.onDestroy()
     }
 
@@ -558,6 +561,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             endPrivate(conversation, notice = content && conversation === previous)
         }
         if (previous != null && previous !== conversation) {
+            clearing?.dismiss()
+            clearing = null
             saveDraft(previous)
             // ConversationFragment.saveMessageDraftStopAudioPlayer clears the media previews too
             dropPreviews()
@@ -1653,7 +1658,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     /** ConversationFragment.clearHistoryDialog, including "end the conversation too". */
     override fun clearHistory() {
         val c = conversation ?: return
-        confirmClearHistory(requireActivity(), c, { xmppConnectionService }) { closed ->
+        clearing = confirmClearHistory(requireActivity(), c, { xmppConnectionService }, { isAdded && conversation?.uuid == c.uuid }) { closed ->
             if (closed) {
                 (activity as? ConversationsActivity)?.onConversationArchived(c)
             } else {

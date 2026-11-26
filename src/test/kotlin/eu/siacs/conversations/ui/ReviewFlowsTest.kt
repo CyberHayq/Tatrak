@@ -187,6 +187,12 @@ class ReviewFlowsTest {
             saved += conversation.uuid
         }
 
+        val cleared = ArrayList<String>()
+
+        override fun clearConversationHistory(conversation: Conversation) {
+            cleared += conversation.uuid
+        }
+
         val sent = ArrayList<Message>()
         val attached = ArrayList<android.net.Uri>()
         val resent = ArrayList<Message>()
@@ -459,6 +465,61 @@ class ReviewFlowsTest {
         shadowOf(Looper.getMainLooper()).idle()
         // (the attach path may show its own dialogs; the question itself is gone)
         assertNull(ReflectionHelpers.getField<List<Attachment>?>(main, "confirming"))
+    }
+
+    /** "Clear history" of chat A, then a notification opens B in the same fragment: A's question goes, and clears nothing. */
+    @Test
+    fun clearHistoryQuestionGoesWhenAnotherChatOpens() {
+        val a = service.chat(service.a, peer)
+        val b = service.chat(service.a, Jid.of("other@example.com"))
+        activity.switchToConversation(a)
+        fm.executePendingTransactions()
+        val chat = main as ChatFragment
+        chat.clearHistory()
+        shadowOf(Looper.getMainLooper()).idle()
+        val question = ShadowDialog.getLatestDialog() as AlertDialog
+        assertEquals("Clear the history of ${a.name}?", question.findViewById<android.widget.TextView>(androidx.appcompat.R.id.alertTitle)?.text.toString())
+        activity.deliver(Intent(ConversationsActivity.ACTION_VIEW_CONVERSATION).putExtra(ConversationsActivity.EXTRA_CONVERSATION, b.uuid))
+        fm.executePendingTransactions()
+        assertSame(chat, main)
+        assertSame(b, chat.getConversation())
+        assertFalse(question.isShowing)
+        // a tap that still reaches the old question
+        question.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<String>(), service.cleared)
+        chat.clearHistory()
+        shadowOf(Looper.getMainLooper()).idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(b.uuid), service.cleared)
+    }
+
+    /** The same on the classic screen (OpenPGP chats): ConversationFragment.clearHistoryDialog. */
+    @Test
+    fun classicClearHistoryQuestionGoesWhenAnotherChatOpens() {
+        val a = service.chat(service.a, peer, encryption = Message.ENCRYPTION_PGP)
+        val b = service.chat(service.a, Jid.of("other@example.com"), encryption = Message.ENCRYPTION_PGP)
+        activity.switchToConversation(a)
+        fm.executePendingTransactions()
+        val classic = main as ConversationFragment
+        classic.clearHistoryDialog(a)
+        shadowOf(Looper.getMainLooper()).idle()
+        val question = ShadowDialog.getLatestDialog() as AlertDialog
+        assertEquals("Clear the history of ${a.name}?", question.findViewById<android.widget.TextView>(androidx.appcompat.R.id.alertTitle)?.text.toString())
+        activity.deliver(Intent(ConversationsActivity.ACTION_VIEW_CONVERSATION).putExtra(ConversationsActivity.EXTRA_CONVERSATION, b.uuid))
+        fm.executePendingTransactions()
+        assertSame(classic, main)
+        assertSame(b, classic.conversation)
+        assertFalse(question.isShowing)
+        question.getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<String>(), service.cleared)
+        classic.clearHistoryDialog(b)
+        shadowOf(Looper.getMainLooper()).idle()
+        (ShadowDialog.getLatestDialog() as AlertDialog).getButton(AlertDialog.BUTTON_POSITIVE).performClick()
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(b.uuid), service.cleared)
     }
 
     @Test

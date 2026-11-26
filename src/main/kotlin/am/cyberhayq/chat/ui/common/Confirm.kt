@@ -37,26 +37,29 @@ fun confirmAction(
 
 /**
  * ConversationFragment.clearHistoryDialog for the chat and the profile: the same calls in the same
- * order; [onDone] gets whether the chat was closed (left, for a group) as well.
+ * order; [onDone] gets whether the chat was closed (left, for a group) as well. The title names [c];
+ * the confirmation does nothing once [stillShown] says the host shows another chat.
  */
 fun confirmClearHistory(
     activity: Activity,
     c: Conversation,
     service: () -> XmppConnectionService?,
+    stillShown: () -> Boolean = { true },
     onDone: (closed: Boolean) -> Unit,
-) {
+): AlertDialog {
     val content = activity.layoutInflater.inflate(R.layout.tatrak_dialog_checkbox, null)
     val close = content.findViewById<CheckBox>(R.id.tatrak_checkbox)
     close.setText(
         if (c.mode == Conversation.MODE_MULTI) R.string.tatrak_clear_history_leave_group
         else R.string.tatrak_clear_history_close_chat
     )
-    MaterialAlertDialogBuilder(activity)
-        .setTitle(R.string.clear_conversation_history)
+    return MaterialAlertDialogBuilder(activity)
+        .setTitle(activity.getString(R.string.tatrak_clear_history_of, c.name))
         .setMessage(R.string.tatrak_clear_history_explained)
         .setView(content)
         .setNegativeButton(R.string.cancel, null)
         .setPositiveButton(R.string.tatrak_delete) { _, _ ->
+            if (!stillShown()) return@setPositiveButton
             val s = service() ?: return@setPositiveButton
             s.clearConversationHistory(c)
             if (close.isChecked) s.archiveConversation(c)
@@ -96,7 +99,8 @@ fun confirmDeleteFiles(activity: Activity, files: Collection<File>, delete: Runn
             XmppConnectionService.DATABASE_READER,
         )
     fun ask(count: Int) {
-        if (activity.isFinishing) return
+        // a recreated activity is destroyed but not finishing; show() would throw
+        if (activity.isFinishing || activity.isDestroyed) return
         val title = activity.resources.getQuantityString(R.plurals.delete_files_dialog, files.size, files.size)
         confirmAction(activity, title, deleteFilesText(activity, files.size, count), R.string.tatrak_delete, delete)
     }

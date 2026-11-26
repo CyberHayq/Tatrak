@@ -13,6 +13,7 @@
     <string name="tatrak_leave_destroyed_explained">The group no longer exists on the server. It disappears from your list and its bookmark is removed on all your devices. Its messages stay on this device.</string>
 
     <!-- clear chat history (chat menu, profile) -->
+    <string name="tatrak_clear_history_of">Clear the history of %s?</string>
     <string name="tatrak_clear_history_explained">All messages in this chat are deleted from this device, with their files unless other messages use them. This can\'t be undone. The other side, your other devices and the server archive keep their copies, and these messages are not downloaded here again.</string>
     <string name="tatrak_clear_history_close_chat">Also delete the chat from my list</string>
     <string name="tatrak_clear_history_leave_group">Also leave the group</string>
