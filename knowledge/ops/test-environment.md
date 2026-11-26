@@ -199,3 +199,14 @@ agent (and any brief) that runs emulator checks:
 - `podman exec … send.py` prints "Task was destroyed but it is pending!" at exit; harmless.
 - Earlier checks (2026-10-29/30) ran against an ejabberd and a Prosody whose configs lived in a
   temporary folder and were lost; this setup replaces them.
+
+## Appium regression suite
+
+The executable pytest/Appium suite lives in [`tools/qa/`](../../tools/qa/README.md).
+Run its commands from that directory; its Python and Node dependencies are separate from Gradle.
+It contains nine regression cases and three smoke cases, including a login case that needs
+a separate initial-state installation. Collection and default runs are safe without devices;
+real device execution requires `--run-e2e` and explicit serials.
+The [recorded results](../../tools/qa/RUN_RESULTS.md) cover Tatrak 0.5.0 on API 31 on 2026-11-25,
+not the current development branch. See the [case definitions](../../tools/qa/TEST_CASES.md)
+and [remaining catalogue](../../tools/qa/REGRESSION_CASES.md) for exact coverage and limitations.

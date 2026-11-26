@@ -1,0 +1,23 @@
+.venv/
+__pycache__/
+.pytest_cache/
+artifacts/
+.env
+.tools/
+
+# Separate Android source checkout and downloaded desktop application.
+/Tatrak-dev/
+/orca-app/
+*.AppImage
+*.apk
+*.aab
+*.zip
+*.tar.gz
+*.log
+/core
+/core.*
+
+# Keep only the QA runbooks from machine-specific setup work.
+/setup/*
+!/setup/appium-environment.md
+!/setup/test-chat-fixtures.md

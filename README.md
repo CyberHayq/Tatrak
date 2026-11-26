@@ -224,6 +224,10 @@ sources stay in `src/*playstore*`; they need a `google-services.json`).
 
 See the [build setup](knowledge/build/build-setup.md) for signing and reproducible release builds.
 
+The [Appium regression suite](tools/qa/README.md) includes nine regression cases and three
+smoke cases. Run its commands from `tools/qa/`; device checks require explicit opt-in.
+See the [recorded results](tools/qa/RUN_RESULTS.md) for the tested APK and coverage limits.
+
 ## 💬 Support and contributions
 
 Report bugs and suggest improvements through the

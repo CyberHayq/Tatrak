@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Developer tooling
+- Add the Appium/pytest QA suite under `tools/qa/`: nine regression cases, three smoke cases,
+  fixture helpers, pinned test-tool dependencies, run instructions and recorded emulator results.
+
 ### Fixes
 - Photo viewer: panning a zoomed photo no longer jumps to the next or previous photo when the
   pan reaches the photo's edge; the photo stops there, and a new swipe from the edge turns the
