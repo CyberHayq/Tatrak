@@ -264,6 +264,10 @@ android {
                 systemProperty 'robolectric.pixelCopyRenderMode', 'hardware'
                 // Tatrak: the whole suite runs in one JVM; Gradle's default heap ran out (BackupFileHeaderTest's Argon2)
                 maxHeapSize = '2g'
+                // Tatrak: Robolectric unpacks ~200 MB per test JVM into java.io.tmpdir and leaves it there; /tmp may be a tmpfs
+                def testTmp = layout.buildDirectory.dir('tmp/unit-test-jvm').get().asFile
+                systemProperty 'java.io.tmpdir', testTmp.path
+                doFirst { project.delete(testTmp); testTmp.mkdirs() }
             }
         }
     }
