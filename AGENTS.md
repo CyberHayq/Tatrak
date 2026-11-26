@@ -113,9 +113,13 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
 - A large or independent task (a feature, a new screen family, anything with its own tests)
   goes to an agent in its own worktree and branch (`orca worktree create --agent`), so its diff
   stays apart and it can be committed on its own. Small tasks may run in the main working tree.
-- At most two or three agents at once: one Gradle build at a time on this machine, so every brief
-  says to wait for a running build before starting one, with a time limit:
-  `timeout 1800 sh -c 'while pgrep -f "[G]radleWrapperMain" >/dev/null; do sleep 20; done'`.
+- Never two builds or heavy jobs at once (owner, 2026-11-27): every Gradle command, emulator run
+  and other heavy job takes one machine-wide lock, so the second one waits instead of starting:
+  `flock -w 1800 ~/.cache/tatrak-heavy.lock ./gradlew ...` (the same for emulator scripts). Every
+  brief says so. A `pgrep` wait is not enough: two agents can both see no build and start together
+  (and `gradlew` runs the wrapper as `java -jar gradle/wrapper/gradle-wrapper.jar`, so the old
+  `GradleWrapperMain` pattern never matched; parallel builds ran out of memory, 2026-11-27). At
+  most two or three agents at once.
 - The briefs name the shared files a task may touch (`tatrak_strings.xml`, `ChatFragment.kt`,
   `knowledge/log.md`, `risks.md`, `backlog.md`): agents only append to the knowledge pages, and
   the main session merges the branches and resolves conflicts there.
@@ -271,7 +275,7 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
   Messages from the other side:
   `podman exec tatrak-prosody python3 /send.py friend tester "text"`.
 - Don't use `pkill -f` or `pgrep -f` with a pattern that also matches its own command line:
-  write the pattern as `[G]radleWrapperMain`, so the shell running it does not match itself (on
+  write the pattern as `[g]radle-wrapper.jar`, so the shell running it does not match itself (on
   2026-11-20 a wait loop with the plain pattern waited for itself for 45 minutes).
 - Every shell command an agent runs has a time limit (owner, 2026-11-20): a `timeout` on waits,
   loops and long scripts, and the tool's own timeout on Gradle runs; never an unbounded wait.
