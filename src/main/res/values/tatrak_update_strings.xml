@@ -28,4 +28,5 @@
     <string name="tatrak_update_error_not_release_build">This copy is a test build, not signed with the release key, so it cannot install updates. The downloaded file was deleted.</string>
     <string name="tatrak_update_error_version">The downloaded file is not newer than the installed app; it was deleted.</string>
     <string name="tatrak_update_error_install">The system installer refused the update: %s</string>
+    <string name="tatrak_update_error_no_installer">The system installer could not be opened. Try again.</string>
 </resources>

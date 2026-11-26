@@ -17,6 +17,7 @@ import java.io.File
 import java.io.IOException
 import java.io.InputStream
 import java.security.MessageDigest
+import kotlin.coroutines.cancellation.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
@@ -61,6 +62,8 @@ object Updater {
     /** AllowedAPKSigningKeys of tools/fdroid/am.cyberhayq.chat.yml. */
     const val RELEASE_CERT = "3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b"
     private const val DAY_MS = 24 * 60 * 60 * 1000L
+    /** The dialog's install attempt, in the installer's status: a late status of an older attempt is not delivered. */
+    const val EXTRA_ATTEMPT = "am.cyberhayq.chat.update.ATTEMPT"
 
     /** `v1.2.3` or `1.2.3+playstore` as numbers; null when it is not a plain dotted version. */
     fun version(text: String): List<Int>? =
@@ -218,8 +221,14 @@ object Updater {
     }
 
     private fun client(context: Context) =
-        // https only, also behind GitHub's redirect to its object storage
-        HttpConnectionManager.okHttpClient(context).newBuilder().followSslRedirects(false).build()
+        try {
+            HttpConnectionManager.okHttpClient(context)
+        } catch (e: RuntimeException) {
+            // a failed TLS setup comes wrapped in RuntimeException
+            throw UpdateException(R.string.tatrak_update_error_network, e)
+        }
+            // https only, also behind GitHub's redirect to its object storage
+            .newBuilder().followSslRedirects(false).build()
 
     /** Blocking: the latest release (or pre-release, with betas on) if it is newer than this app, also stored for the chat list's notice. */
     fun check(context: Context): Release? {
@@ -276,9 +285,14 @@ object Updater {
     /** Whether this install is release-signed and so can take updates (debug and benchmark builds are not). */
     fun canInstall(context: Context) = RELEASE_CERT in signers(installed(context))
 
+    /** The APK's package info with its signers; API 28 collects an archive's certificates only for GET_SIGNATURES. */
+    @Suppress("DEPRECATION")
+    internal fun archive(context: Context, file: File): PackageInfo? =
+        context.packageManager.getPackageArchiveInfo(file.path, signatureFlag or PackageManager.GET_SIGNATURES)
+
     /** Throws with the reason, after deleting [file], unless the APK passes [refusal]. */
     fun verify(context: Context, file: File) {
-        val apk = context.packageManager.getPackageArchiveInfo(file.path, signatureFlag)
+        val apk = archive(context, file)
         val installed = installed(context)
         val reason =
             refusal(
@@ -295,31 +309,53 @@ object Updater {
         }
     }
 
-    /** Verifies [file], hands it to the system installer and deletes it; the result comes to [UpdateActivity]. */
-    fun install(context: Context, file: File) {
+    /** Verifies [file], hands it to the system installer and deletes it; the result comes to [UpdateStatusReceiver] with [attempt]. */
+    fun install(context: Context, file: File, attempt: Long) {
         try {
             verify(context, file)
-            val installer = context.packageManager.packageInstaller
+            commit(context, file, attempt)
+        } finally {
+            file.delete()
+        }
+    }
+
+    /** Writes [file] into an installer session and commits it; a session left uncommitted is abandoned, as Android limits open ones. */
+    internal fun commit(context: Context, file: File, attempt: Long) {
+        val installer = context.packageManager.packageInstaller
+        var id = -1
+        var committed = false
+        try {
             val params = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL)
             params.setAppPackageName(context.packageName)
-            val id = installer.createSession(params)
+            id = installer.createSession(params)
             installer.openSession(id).use { session ->
                 session.openWrite("tatrak.apk", 0, file.length()).use { out ->
                     file.inputStream().use { it.copyTo(out) }
                     session.fsync(out)
                 }
-                val status = Intent(context, UpdateActivity::class.java).setAction(UpdateActivity.ACTION_STATUS)
+                // a broadcast, not an activity: Android 15+ blocks a PendingIntent's activity start while we are in the background
+                val status = Intent(context, UpdateStatusReceiver::class.java).putExtra(EXTRA_ATTEMPT, attempt)
                 // mutable: the installer adds its status extras; the intent is explicit
                 val flags = PendingIntent.FLAG_UPDATE_CURRENT or (if (Build.VERSION.SDK_INT >= 31) PendingIntent.FLAG_MUTABLE else 0)
-                session.commit(PendingIntent.getActivity(context, 0, status, flags).intentSender)
+                // one PendingIntent per session: a shared one would be updated to carry the newest attempt also for older sessions
+                session.commit(PendingIntent.getBroadcast(context, id, status, flags).intentSender)
+                committed = true
             }
         } catch (e: IOException) {
             throw UpdateException(R.string.tatrak_update_failed, e)
-        } catch (e: SecurityException) {
-            // the installer refuses the session (a device policy, a revoked install permission): show it, don't crash
+        } catch (e: RuntimeException) {
+            // SecurityException (a device policy, a revoked install permission), IllegalStateException (too many
+            // sessions), IllegalArgumentException from the installer: show it, don't crash
+            if (e is CancellationException || (e !is SecurityException && e !is IllegalStateException && e !is IllegalArgumentException)) throw e
             throw UpdateException(R.string.tatrak_update_failed, e)
         } finally {
-            file.delete()
+            // a failing abandon must not hide the original error
+            if (id != -1 && !committed) abandon(context, id)
         }
+    }
+
+    /** Frees a waiting installer session; a failure (already gone) is ignored. */
+    fun abandon(context: Context, session: Int) {
+        runCatching { context.packageManager.packageInstaller.abandonSession(session) }
     }
 }

@@ -24,6 +24,16 @@
 - In-app update: if the system refuses to start the installation (a device policy, a revoked
   permission to install apps), Tatrak says the update failed instead of closing.
 - Backup import refuses a backup file with anything after its contents.
+- In-app update on Android 9: a genuine update was always refused as "wrong signature", because
+  Android 9 reads a downloaded file's signature only when asked the old way; it is now asked both
+  ways.
+- In-app update on Android 15 and later: if you left Tatrak while the update was being prepared,
+  the system's confirmation never appeared and the dialog kept waiting. The installer's answer now
+  comes to Tatrak in the background and the confirmation opens when you return.
+- In-app update: a failed installation no longer leaves an unfinished installer session behind
+  (enough of them made later attempts fail), and more installer and connection errors, a missing
+  system screen for allowing installs, or a missing confirmation now show "Update failed" instead
+  of closing Tatrak or waiting forever.
 
 ## 0.5.1
 

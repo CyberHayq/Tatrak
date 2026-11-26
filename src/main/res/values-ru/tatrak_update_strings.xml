@@ -28,4 +28,5 @@
     <string name="tatrak_update_error_not_release_build">Это тестовая сборка, не подписанная ключом релиза, поэтому она не может устанавливать обновления. Загруженный файл удалён.</string>
     <string name="tatrak_update_error_version">Загруженный файл не новее установленного приложения; файл удалён.</string>
     <string name="tatrak_update_error_install">Системный установщик отклонил обновление: %s</string>
+    <string name="tatrak_update_error_no_installer">Не удалось открыть системный установщик. Попробуйте снова.</string>
 </resources>

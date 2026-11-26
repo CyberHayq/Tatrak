@@ -2,6 +2,9 @@ package am.cyberhayq.chat.update
 
 import android.app.Application
 import android.content.Context
+import android.content.pm.Signature
+import android.content.pm.SigningInfo
+import androidx.core.content.pm.PackageInfoCompat
 import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import eu.siacs.conversations.AppSettings
@@ -210,6 +213,37 @@ class UpdaterTest {
         // the automatic check does nothing at all, not even note the attempt
         Updater.checkIfDue(context)
         assertFalse(prefs.contains("tatrak_update_checked_at"))
+    }
+
+    /** The test's plain Application makes HttpConnectionManager.okHttpClient() throw, as a failed TLS setup does. */
+    @Test
+    fun clientSetupFailureIsANetworkError() = runBlocking {
+        expect(R.string.tatrak_update_error_network) { Updater.check(context) }
+        try {
+            Updater.download(context, Release("9.9.9", "", "${prefix}v9.9.9/am.cyberhayq.chat-9.9.9-x86.apk", 10)) {}
+            fail("downloaded without a client")
+        } catch (e: UpdateException) {
+            assertEquals(R.string.tatrak_update_error_network, e.text)
+        }
+    }
+
+    /**
+     * Android 9's archive parser with an actually signed APK (tools/update-test-apk/make.sh): it
+     * collects an archive's certificates only when GET_SIGNATURES is asked for, too. Only the
+     * certificate reading is replaced ([ShadowApkSignatureVerifier]).
+     */
+    @Test
+    @Config(sdk = [28], shadows = [ShadowApkSignatureVerifier::class])
+    fun archiveSignersFromTheRealParser() {
+        val file = File(context.cacheDir, "signed.apk")
+        javaClass.getResourceAsStream("/update-test-apk/signed-apk.bin")!!.use { input -> file.outputStream().use { input.copyTo(it) } }
+        val apk = Updater.archive(context, file)
+        assertEquals("am.cyberhayq.chat.updatetest", apk?.packageName)
+        assertEquals(7L, apk?.let(PackageInfoCompat::getLongVersionCode))
+        // Robolectric's SigningInfo shadow drops the parser's SigningDetails: read them as getApkContentsSigners() does on a device
+        val details = SigningInfo::class.java.getDeclaredField("mSigningDetails").apply { isAccessible = true }.get(apk?.signingInfo ?: fail("no signers"))
+        @Suppress("UNCHECKED_CAST") val signatures = details.javaClass.getField("signatures").get(details) as Array<Signature>
+        assertEquals(setOf("8ac2eaadc696b11785cd93ec47ccd8c46834c23ff9d70f20ec3646893bca62b6"), signatures.map { Updater.sha256(it.toByteArray()) }.toSet())
     }
 
     @Test

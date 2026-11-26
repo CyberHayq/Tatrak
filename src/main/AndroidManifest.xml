@@ -168,7 +168,7 @@
         <!-- Tatrak: local database migration/recovery, not an exported entry point. -->
         <activity android:name="am.cyberhayq.chat.storage.DatabaseStorageActivity"
             android:exported="false" />
-        <!-- Tatrak: update dialogs over the calling screen; singleTop takes the installer's status -->
+        <!-- Tatrak: update dialogs over the calling screen -->
         <activity android:name="am.cyberhayq.chat.update.UpdateActivity"
             android:exported="false"
             android:launchMode="singleTop"
@@ -185,6 +185,9 @@
             </intent-filter>
         </receiver>
 
+        <!-- Tatrak: the system installer's status for the update dialog -->
+        <receiver android:name="am.cyberhayq.chat.update.UpdateStatusReceiver"
+            android:exported="false" />
         <activity
             android:name=".ui.UnifiedPushDistributor"
             android:enabled="false"

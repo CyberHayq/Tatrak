@@ -1,6 +1,10 @@
 package am.cyberhayq.chat.update
 
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import android.annotation.SuppressLint
+import android.content.ActivityNotFoundException
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageInstaller
 import android.net.Uri
@@ -32,10 +36,12 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.IntentCompat
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import eu.siacs.conversations.BuildConfig
 import eu.siacs.conversations.R
 import eu.siacs.conversations.ui.BaseActivity
+import kotlin.random.Random
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
@@ -53,16 +59,25 @@ sealed interface UpdateState {
 
 /**
  * Tatrak: the update flow as dialogs over the calling screen: release notes, download with
- * progress, then the system installer, whose result comes back here ([ACTION_STATUS]).
+ * progress, then the system installer, whose result comes back here through [UpdateStatusReceiver].
  * Opened with [EXTRA_CHECK] by "Check now", without it by the chat list's notice.
  */
 class UpdateActivity : BaseActivity() {
 
-    private var state by mutableStateOf<UpdateState>(UpdateState.Checking)
+    internal var state by mutableStateOf<UpdateState>(UpdateState.Checking)
+        private set
     private var job: Job? = null
+    /** This dialog's install attempt; the installer's status of any other attempt is not delivered here. */
+    internal var attempt = 0L
+        private set
+    /** The installer's confirmation screen and its session, kept until this dialog is in the foreground. */
+    private var confirmation: Pair<Int, Intent>? = null
+    /** The last confirmation opened and its session, so a repeated status does not open it again. */
+    private var confirmed: Pair<Int, Intent>? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        open = this
         val testBuild = !Updater.canInstall(this)
         setContent {
             TatrakTheme { UpdateDialog(state, testBuild, ::download, ::later, ::finish) }
@@ -76,9 +91,20 @@ class UpdateActivity : BaseActivity() {
         handle(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        confirm()
+    }
+
+    override fun onDestroy() {
+        if (open === this) open = null
+        // the confirmation goes with this dialog: free its waiting session
+        confirmation?.let { Updater.abandon(this, it.first) }
+        super.onDestroy()
+    }
+
     private fun handle(intent: Intent) {
         when {
-            intent.action == ACTION_STATUS -> status(intent)
             intent.getBooleanExtra(EXTRA_CHECK, false) -> check()
             else -> Updater.pending(this)?.let { state = UpdateState.Available(it) } ?: finish()
         }
@@ -97,14 +123,19 @@ class UpdateActivity : BaseActivity() {
         }
     }
 
-    private fun download() {
+    internal fun download() {
         val release = (state as? UpdateState.Available)?.release ?: return
         if (!packageManager.canRequestPackageInstalls()) {
             Toast.makeText(this, R.string.tatrak_update_allow_installs, Toast.LENGTH_LONG).show()
-            startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            try {
+                startActivity(Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:$packageName")))
+            } catch (e: ActivityNotFoundException) {
+                state = UpdateState.Failed(getString(R.string.tatrak_update_allow_installs))
+            }
             return
         }
         state = UpdateState.Downloading(release, 0f)
+        val thisAttempt = Random.nextLong().also { attempt = it }
         job = lifecycleScope.launch {
             try {
                 val file =
@@ -120,7 +151,7 @@ class UpdateActivity : BaseActivity() {
                         }
                     }
                 state = UpdateState.Installing
-                withContext(Dispatchers.IO) { Updater.install(applicationContext, file) }
+                withContext(Dispatchers.IO) { Updater.install(applicationContext, file, thisAttempt) }
             } catch (e: UpdateException) {
                 state = UpdateState.Failed(getString(e.text))
             }
@@ -132,11 +163,25 @@ class UpdateActivity : BaseActivity() {
         finish()
     }
 
-    private fun status(intent: Intent) {
-        when (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)) {
+    /** The installer's status of this dialog's [attempt], from [UpdateStatusReceiver]. */
+    internal fun status(intent: Intent) {
+        val session = intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1)
+        val status = intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE)
+        // a final status: nothing is left to confirm
+        if (status != PackageInstaller.STATUS_PENDING_USER_ACTION) confirmation = null
+        when (status) {
             PackageInstaller.STATUS_PENDING_USER_ACTION -> {
-                state = UpdateState.Installing
-                IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)?.let(::startActivity)
+                val screen = IntentCompat.getParcelableExtra(intent, Intent.EXTRA_INTENT, Intent::class.java)
+                // the same screen opens once; another one for the session (Android 17's developer verification after CONFIRM_INSTALL) still opens
+                if (screen != null && session == confirmed?.first && screen.filterEquals(confirmed?.second)) return
+                if (screen == null) {
+                    Updater.abandon(this, session)
+                    state = UpdateState.Failed(getString(R.string.tatrak_update_error_no_installer))
+                } else {
+                    confirmation = session to screen
+                    state = UpdateState.Installing
+                    if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) confirm()
+                }
             }
             PackageInstaller.STATUS_SUCCESS -> finish()
             else ->
@@ -146,14 +191,44 @@ class UpdateActivity : BaseActivity() {
         }
     }
 
+    private fun confirm() {
+        val (session, screen) = confirmation ?: return
+        confirmation = null
+        confirmed = session to screen
+        try {
+            startActivity(screen)
+        } catch (e: ActivityNotFoundException) {
+            Updater.abandon(this, session)
+            state = UpdateState.Failed(getString(R.string.tatrak_update_error_no_installer))
+        }
+    }
+
     override fun finish() {
         job?.cancel()
         super.finish()
     }
 
     companion object {
-        const val ACTION_STATUS = "am.cyberhayq.chat.update.STATUS"
         const val EXTRA_CHECK = "check"
+
+        /** The updater dialog that takes the installer's status; null while none is open. */
+        @SuppressLint("StaticFieldLeak") // cleared in onDestroy
+        internal var open: UpdateActivity? = null
+    }
+}
+
+/**
+ * Tatrak: the installer's status for [Updater.install], an explicit broadcast to this non-exported
+ * receiver, so it arrives also while Tatrak is in the background (an activity start would be blocked).
+ */
+class UpdateStatusReceiver : BroadcastReceiver() {
+    override fun onReceive(context: Context, intent: Intent) {
+        val activity = UpdateActivity.open?.takeIf { it.attempt == intent.getLongExtra(Updater.EXTRA_ATTEMPT, -1) }
+        if (activity != null) return activity.status(intent)
+        // the attempt's dialog was closed: nobody to confirm, so free the waiting session; the chat list's notice stays for a retry
+        if (intent.getIntExtra(PackageInstaller.EXTRA_STATUS, PackageInstaller.STATUS_FAILURE) == PackageInstaller.STATUS_PENDING_USER_ACTION) {
+            Updater.abandon(context, intent.getIntExtra(PackageInstaller.EXTRA_SESSION_ID, -1))
+        }
     }
 }
 
