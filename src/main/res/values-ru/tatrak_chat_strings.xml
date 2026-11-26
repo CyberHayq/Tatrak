@@ -130,6 +130,11 @@
     </plurals>
     <!-- a text waiting for the key trust screen whose group private-message target changed meanwhile -->
     <string name="tatrak_chat_recipient_changed">Не отправлено: получатель сменился, пока оно готовилось</string>
+    <string name="tatrak_chat_changed_not_sent">Не отправлено: чат сменился, пока оно готовилось</string>
+    <!-- a picker (or the camera) was tapped while the same one, opened earlier, has not answered yet -->
+    <string name="tatrak_chat_picker_busy">Предыдущий выбор ещё не завершён</string>
+    <!-- a send needs the key trust screen while it is still open for an earlier send -->
+    <string name="tatrak_chat_trust_busy">Не отправлено: предыдущая проверка ключей ещё не завершена</string>
     <!-- something other than text (a file, a sticker, a share) arrived while writing a group private message -->
     <string name="tatrak_chat_private_cancelled">Личное сообщение отменено: это уйдёт всей группе</string>
 </resources>

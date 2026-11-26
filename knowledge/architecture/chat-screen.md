@@ -86,6 +86,23 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   are processed in `onStart`; picker results that arrive before the service is bound (process
   death) are kept until `onBackendConnected`; a chat that no longer exists after a restore
   closes the screen like `ConversationFragment` does.
+- Deferred work is bound to the chat it started in, by conversation UUID: picker, camera,
+  contact, location and wallpaper results (`resultFor`, one UUID per launcher, set by `launchFor`
+  before a permission request and checked again after it; one open request per launcher, which
+  keeps its chat until its result or cancellation arrives, while a new tap opens nothing and
+  shows "The previous selection has not finished yet"), the
+  share's "Send N files?" question (`confirmFor`), the key-trust retries (`AfterTrust.chat`; the
+  text retry also keeps the text, reply and edit it confirmed and refuses if previews appeared;
+  one trust request at a time through its result and its replay after a bind, a second send that
+  needs the trust screen meanwhile is not sent and says so),
+  the device chooser's answer, sends queued until the service binds (`pendingFor`) and composer
+  previews (restored ones and results that came before the chat was bound wait in
+  `ChatViewModel.held` / `heldFor`). Everything held is saved with its UUID and run or dropped in
+  `bind`, the path every binding takes; a trust approval that comes before the chat is bound
+  waits there too. When it completes while another chat is shown (the fragment is rebound by a
+  two-pane switch, an intent), it is dropped with "Not sent: the chat changed before it was
+  ready", never sent to the shown chat; a view model that switches chats drops its previews.
+  Telegram does the same by construction (a `ChatActivity` per dialog with a fixed `dialog_id`).
 - File actions follow `ConversationFragment`: "Save" (`saveInternalToExternal`) for local
   files outside shared storage, "Cancel transmission" in the menu and on the file bubble's
   close icon while a transfer is cancelable.

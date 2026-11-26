@@ -41,12 +41,14 @@ import eu.siacs.conversations.ui.interfaces.OnSearchResultsAvailable
 import eu.siacs.conversations.xmpp.Jid
 import eu.siacs.conversations.xmpp.XmppConnection
 import eu.siacs.conversations.ui.util.Attachment
+import eu.siacs.conversations.ui.util.PresenceSelector
 import im.conversations.android.xmpp.model.stanza.Presence
 import java.io.File
 import java.time.Duration
 import org.junit.After
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNotSame
 import org.junit.Assert.assertNull
@@ -104,6 +106,13 @@ class ReviewFlowsTest {
         override fun isOptimizingBattery() = false
 
         fun deliver(intent: Intent) = onNewIntent(intent)
+
+        /** The device chooser's answer, held for the test to give instead of the dialog. */
+        var chosen: PresenceSelector.OnPresenceSelected? = null
+
+        override fun selectPresence(conversation: Conversation, listener: PresenceSelector.OnPresenceSelected) {
+            chosen = listener
+        }
 
         override fun onStop() {
             // The fake backend is injected directly. No Android ServiceConnection was registered.
@@ -180,6 +189,11 @@ class ReviewFlowsTest {
 
         val sent = ArrayList<Message>()
         val attached = ArrayList<android.net.Uri>()
+        val resent = ArrayList<Message>()
+
+        override fun resendFailedMessages(message: Message, forceP2P: Boolean) {
+            resent += message
+        }
 
         override fun sendMessage(message: Message) {
             sent += message
@@ -658,7 +672,7 @@ class ReviewFlowsTest {
         sendPrivateMessageFromTheMenu(guest)
         typeInto(chat, "psst")
         // a picker result (a gallery or file pick lands in the preview strip)
-        ReflectionHelpers.callInstanceMethod<Unit>(chat, "addPreviews", ClassParameter.from(List::class.java, generatedFile("photo.txt")))
+        ReflectionHelpers.callInstanceMethod<Unit>(chat, "addPreviews", ClassParameter.from(List::class.java, generatedFile("photo.txt")), ClassParameter.from(String::class.java, room.uuid))
         assertNull(room.nextCounterpart)
         assertNull(model(chat).privateTo)
         assertEquals("", model(chat).input.text)
@@ -990,6 +1004,396 @@ class ReviewFlowsTest {
         assertTrue(location.body.startsWith("geo:"))
         assertEquals(room.address, location.counterpart)
         assertFalse(location.isPrivateMessage)
+    }
+
+    /** Two-pane: the open pane's fragment shows [first]; [second] replaces it in the same fragment later. */
+    private fun twoChats(
+        encryption: Int = Message.ENCRYPTION_NONE,
+        secondEncryption: Int = Message.ENCRYPTION_NONE,
+    ): Triple<ChatFragment, Conversation, Conversation> {
+        val first = service.chat(service.a, peer, encryption = encryption)
+        val second = service.chat(service.a, Jid.of("other@example.com"), encryption = secondEncryption)
+        activity.switchToConversation(first)
+        fm.executePendingTransactions()
+        drainStartedActivities()
+        return Triple(secondary as ChatFragment, first, second)
+    }
+
+    private fun switchTo(chat: ChatFragment, c: Conversation) {
+        activity.switchToConversation(c)
+        fm.executePendingTransactions()
+        assertSame(chat, secondary)
+        assertSame(c, chat.getConversation())
+    }
+
+    private fun pickLocation(chat: ChatFragment): Intent {
+        chat.attachLocation()
+        return checkNotNull(shadowOf(activity).nextStartedActivityForResult).intent
+    }
+
+    private fun location() = Intent().putExtra("latitude", 40.18).putExtra("longitude", 44.51)
+
+    /** An OMEMO account whose only contact asks for a trust decision until [trusted]. */
+    private fun keysToTrust(): () -> Unit {
+        var trusted = false
+        service.a.axolotl = object : AxolotlService(service.a, service) {
+            override fun getCryptoTargets(conversation: Conversation) = com.google.common.collect.ImmutableSet.of(conversation.address.asBareJid())
+
+            override fun getKeysWithTrust(status: eu.siacs.conversations.crypto.axolotl.FingerprintStatus) =
+                emptySet<org.whispersystems.libsignal.IdentityKey>()
+
+            override fun getKeysWithTrust(status: eu.siacs.conversations.crypto.axolotl.FingerprintStatus, jids: Collection<Jid>) =
+                emptySet<org.whispersystems.libsignal.IdentityKey>()
+
+            override fun findDevicesWithoutSession(conversation: Conversation) =
+                emptySet<org.whispersystems.libsignal.SignalProtocolAddress>()
+
+            override fun anyTargetHasNoTrustedKeys(jids: Collection<Jid>) = !trusted
+
+            override fun hasPendingKeyFetches(jids: Collection<Jid>) = false
+
+            override fun createSessionsIfNeeded(conversation: Conversation) = false
+        }
+        return { trusted = true }
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun aLocationPickedInOneChatIsNotSentToTheChatOpenedMeanwhile() {
+        val (chat, first, second) = twoChats()
+        val picker = pickLocation(chat)
+        switchTo(chat, second)
+        shadowOf(activity).receiveResult(picker, android.app.Activity.RESULT_OK, location())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Message>(), service.sent)
+        // the chat it was picked in still takes it
+        switchTo(chat, first)
+        shadowOf(activity).receiveResult(pickLocation(chat), android.app.Activity.RESULT_OK, location())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(first), service.sent.map { it.conversation })
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun attachmentsWaitingForKeyTrustAreNotSentToTheChatOpenedMeanwhile() {
+        val trust = keysToTrust()
+        val (chat, first, second) = twoChats(Message.ENCRYPTION_AXOLOTL)
+        fun trustScreenAfterLocation(): Intent {
+            shadowOf(activity).receiveResult(pickLocation(chat), android.app.Activity.RESULT_OK, location())
+            shadowOf(Looper.getMainLooper()).idle()
+            val screen = checkNotNull(shadowOf(activity).nextStartedActivityForResult).intent
+            assertEquals(TrustKeysActivity::class.java.name, screen.component?.className)
+            return screen
+        }
+        val screen = trustScreenAfterLocation()
+        switchTo(chat, second)
+        trust()
+        shadowOf(activity).receiveResult(screen, android.app.Activity.RESULT_OK, null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Message>(), service.sent)
+        // without a switch the retry sends to the chat it started in
+        switchTo(chat, first)
+        val trustAgain = keysToTrust()
+        val again = trustScreenAfterLocation()
+        trustAgain()
+        shadowOf(activity).receiveResult(again, android.app.Activity.RESULT_OK, null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(first), service.sent.map { it.conversation })
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textWaitingForKeyTrustDoesNotSendTheDraftOfTheChatOpenedMeanwhile() {
+        val trust = keysToTrust()
+        val (chat, _, second) = twoChats(Message.ENCRYPTION_AXOLOTL)
+        // the same text in both: only the chat tells them apart
+        second.setNextMessage("same text")
+        typeInto(chat, "same text")
+        val screen = trustScreenAfterSend(chat)
+        switchTo(chat, second)
+        trust()
+        shadowOf(activity).receiveResult(screen, android.app.Activity.RESULT_OK, null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Message>(), service.sent)
+        assertEquals("same text", model(chat).input.text)
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textChangedWhileTheKeyTrustScreenWasOpenIsNotSent() {
+        val trust = keysToTrust()
+        val (chat, _, _) = twoChats(Message.ENCRYPTION_AXOLOTL)
+        typeInto(chat, "one")
+        val screen = trustScreenAfterSend(chat)
+        typeInto(chat, "two")
+        trust()
+        shadowOf(activity).receiveResult(screen, android.app.Activity.RESULT_OK, null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Message>(), service.sent)
+        assertEquals("two", model(chat).input.text)
+    }
+
+    private fun trustScreenAfterSend(chat: ChatFragment): Intent {
+        chat.send()
+        val screen = checkNotNull(shadowOf(activity).nextStartedActivityForResult).intent
+        assertEquals(TrustKeysActivity::class.java.name, screen.component?.className)
+        return screen
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun aCameraPermissionGrantedAfterAChatSwitchOpensNoCamera() {
+        am.cyberhayq.chat.testing.FileProviderCache.clear()
+        val (chat, _, second) = twoChats()
+        chat.takePhoto()
+        val request = checkNotNull(shadowOf(activity).lastRequestedPermission)
+        switchTo(chat, second)
+        drainStartedActivities()
+        shadowOf(activity.application).grantPermissions(*request.requestedPermissions)
+        activity.onRequestPermissionsResult(request.requestCode, request.requestedPermissions, IntArray(request.requestedPermissions.size))
+        shadowOf(Looper.getMainLooper()).idle()
+        assertNull(shadowOf(activity).nextStartedActivityForResult)
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun aPickerOpenedInTheNextChatDoesNotTakeOverAnOpenLocationRequest() {
+        val (chat, _, second) = twoChats()
+        val location = pickLocation(chat)
+        switchTo(chat, second)
+        chat.attachFile()
+        assertNotNull(shadowOf(activity).nextStartedActivityForResult)
+        shadowOf(activity).receiveResult(location, android.app.Activity.RESULT_OK, location())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Message>(), service.sent)
+    }
+
+    /** The same launcher tapped in the next chat while the first chat's request is open: it keeps the first one. */
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun anOpenLocationRequestKeepsItsChatWhenTheNextChatTapsTheSamePicker() {
+        val (chat, _, second) = twoChats()
+        val location = pickLocation(chat)
+        switchTo(chat, second)
+        repeat(2) {
+            chat.attachLocation()
+            assertNull(shadowOf(activity).nextStartedActivityForResult)
+            assertEquals(activity.getString(R.string.tatrak_chat_picker_busy), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        }
+        shadowOf(activity).receiveResult(location, android.app.Activity.RESULT_OK, location())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(emptyList<Message>(), service.sent)
+        // answered: the picker opens again, now for the chat shown
+        shadowOf(activity).receiveResult(pickLocation(chat), android.app.Activity.RESULT_OK, location())
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(second), service.sent.map { it.conversation })
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun anOpenCameraKeepsItsPhotoPathWhenTheNextChatTapsTheCamera() {
+        am.cyberhayq.chat.testing.FileProviderCache.clear()
+        shadowOf(activity.application).grantPermissions(Manifest.permission.CAMERA)
+        val (chat, _, second) = twoChats()
+        chat.takePhoto()
+        assertNotNull(shadowOf(activity).nextStartedActivityForResult)
+        val photo = checkNotNull(ReflectionHelpers.getField<android.net.Uri?>(chat, "pendingPhotoUri"))
+        switchTo(chat, second)
+        chat.takePhoto()
+        assertNull(shadowOf(activity).nextStartedActivityForResult)
+        assertEquals(photo, ReflectionHelpers.getField<android.net.Uri?>(chat, "pendingPhotoUri"))
+    }
+
+    /** A trust-gated send in the first chat; the next chat's trust-gated send waits until that one is answered. */
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun aSecondKeyTrustRequestWaitsForTheFirstOneToBeAnswered() {
+        val trust = keysToTrust()
+        val (chat, _, second) = twoChats(Message.ENCRYPTION_AXOLOTL, Message.ENCRYPTION_AXOLOTL)
+        typeInto(chat, "for the first")
+        val first = trustScreenAfterSend(chat)
+        switchTo(chat, second)
+        typeInto(chat, "for the second")
+        chat.send()
+        assertNull(shadowOf(activity).nextStartedActivityForResult)
+        assertEquals(activity.getString(R.string.tatrak_chat_trust_busy), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        assertEquals("for the second", model(chat).input.text)
+        // the first one's cancellation does not take the second one's retry
+        shadowOf(activity).receiveResult(first, android.app.Activity.RESULT_CANCELED, null)
+        shadowOf(Looper.getMainLooper()).idle()
+        val again = trustScreenAfterSend(chat)
+        trust()
+        shadowOf(activity).receiveResult(again, android.app.Activity.RESULT_OK, null)
+        shadowOf(Looper.getMainLooper()).idle()
+        assertEquals(listOf(second to "for the second"), service.sent.map { it.conversation to it.body })
+    }
+
+    /** A failed file's resend asks for the device; the answer comes after another chat opened. */
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun aResendDeviceChoiceAnsweredAfterAChatSwitchResendsNothing() {
+        val (chat, first, second) = twoChats()
+        val failed = Message(first, "9", Message.ENCRYPTION_NONE, Message.STATUS_SEND_FAILED).apply {
+            type = Message.TYPE_FILE
+            setRelativeFilePath(Message.StorageLocation(File(activity.cacheDir, "failed.txt").apply { writeText("generated") }, false))
+        }
+        first.add(failed)
+        fun chooserAfterRetry(): PresenceSelector.OnPresenceSelected {
+            activity.chosen = null
+            chat.retry(failed.uuid)
+            return checkNotNull(activity.chosen)
+        }
+        val chooser = chooserAfterRetry()
+        switchTo(chat, second)
+        chooser.onPresenceSelected()
+        assertEquals(emptyList<Message>(), service.resent)
+        assertEquals(activity.getString(R.string.tatrak_chat_changed_not_sent), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        // answered in its own chat it resends
+        switchTo(chat, first)
+        chooserAfterRetry().onPresenceSelected()
+        assertEquals(listOf(failed), service.resent)
+    }
+
+    /**
+     * A draft in the first chat waits for the key-trust screen; the activity is recreated (a configuration change, or
+     * process death) while it is open. Returns the request code the restored launcher answers to.
+     */
+    private fun trustScreenThenRecreate(processDeath: Boolean, otherDraft: String? = null): Triple<Int, Conversation, Conversation> {
+        val (chat, first, second) = twoChats(Message.ENCRYPTION_AXOLOTL)
+        otherDraft?.let(second::setNextMessage)
+        typeInto(chat, "same text")
+        chat.send()
+        val started = checkNotNull(shadowOf(activity).nextStartedActivityForResult)
+        assertEquals(TrustKeysActivity::class.java.name, started.intent.component?.className)
+        if (processDeath) {
+            restoreProcess()
+        } else {
+            controller.recreate()
+            fm.executePendingTransactions()
+        }
+        return Triple(started.requestCode, first, second)
+    }
+
+    /** The answer as the restored activity gets it: its registry routes the request code to the fragment's launcher. */
+    private fun approve(requestCode: Int, data: Intent? = null) {
+        activity.activityResultRegistry.dispatchResult(requestCode, android.app.Activity.RESULT_OK, data)
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private fun backendConnected() {
+        // the fake Host binds without the ServiceConnection callback a real one gets
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "onBackendConnected")
+        shadowOf(Looper.getMainLooper()).idle()
+    }
+
+    private fun trustRetrySentInItsChat(processDeath: Boolean) {
+        val trust = keysToTrust()
+        val (requestCode, first, _) = trustScreenThenRecreate(processDeath)
+        backendConnected()
+        trust()
+        approve(requestCode)
+        assertEquals(listOf(first to "same text"), service.sent.map { it.conversation to it.body })
+    }
+
+    private fun trustRetryNotSentToTheOtherChat(processDeath: Boolean) {
+        val trust = keysToTrust()
+        // the same draft in both: only the chat tells them apart
+        val (requestCode, _, second) = trustScreenThenRecreate(processDeath, otherDraft = "same text")
+        switchTo(secondary as ChatFragment, second)
+        trust()
+        approve(requestCode)
+        assertEquals(emptyList<Message>(), service.sent)
+        assertEquals(activity.getString(R.string.tatrak_chat_changed_not_sent), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+    }
+
+    private fun trustRetryApprovedBeforeTheChatIsBound(processDeath: Boolean) {
+        val trust = keysToTrust()
+        val (requestCode, first, _) = trustScreenThenRecreate(processDeath)
+        trust()
+        approve(requestCode)
+        assertEquals(emptyList<Message>(), service.sent)
+        backendConnected()
+        assertEquals(listOf(first to "same text"), service.sent.map { it.conversation to it.body })
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textTrustApprovedAfterARotationIsSentInItsChat() = trustRetrySentInItsChat(processDeath = false)
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textTrustApprovedAfterProcessDeathIsSentInItsChat() = trustRetrySentInItsChat(processDeath = true)
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textTrustApprovedAfterARotationIsNotSentToTheChatOpenedMeanwhile() = trustRetryNotSentToTheOtherChat(processDeath = false)
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textTrustApprovedAfterProcessDeathIsNotSentToTheChatOpenedMeanwhile() = trustRetryNotSentToTheOtherChat(processDeath = true)
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textTrustApprovedBeforeTheRotatedChatIsBoundWaitsForIt() = trustRetryApprovedBeforeTheChatIsBound(processDeath = false)
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun textTrustApprovedBeforeTheRestoredChatIsBoundWaitsForIt() = trustRetryApprovedBeforeTheChatIsBound(processDeath = true)
+
+    /**
+     * A location picked in the first chat comes back after process death, before the service found that chat: the
+     * send is queued for it. A notification binds the other chat first: the queue is dropped there with the notice
+     * (cleared before anything is sent), so binding the first chat later sends nothing either.
+     */
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun aSendQueuedForTheRestoredChatIsDroppedWhenAnotherChatBindsFirst() {
+        val (chat, first, second) = twoChats()
+        chat.attachLocation()
+        val requestCode = checkNotNull(shadowOf(activity).nextStartedActivityForResult).requestCode
+        restoreProcess()
+        approve(requestCode, location())
+        assertEquals(emptyList<Message>(), service.sent)
+        // queued for the restored chat, not dropped on arrival: the notice comes with the other chat's bind
+        assertNotEquals(activity.getString(R.string.tatrak_chat_changed_not_sent), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        switchTo(secondary as ChatFragment, second)
+        assertEquals(emptyList<Message>(), service.sent)
+        assertEquals(activity.getString(R.string.tatrak_chat_changed_not_sent), org.robolectric.shadows.ShadowToast.getTextOfLatestToast())
+        switchTo(secondary as ChatFragment, first)
+        assertEquals(emptyList<Message>(), service.sent)
+    }
+
+    /** As after process death: a new activity, view model and fragments from the saved state, the service not bound yet. */
+    private fun restoreProcess() {
+        val state = android.os.Bundle()
+        controller.saveInstanceState(state)
+        controller.pause().stop().destroy()
+        controller = Robolectric.buildActivity(Host::class.java).setup(state)
+        fm.executePendingTransactions()
+    }
+
+    @Test
+    @Config(qualifiers = "w1100dp-h760dp")
+    fun restoredPreviewsStayWithTheirChat() {
+        val (chat, first, second) = twoChats()
+        model(chat).previews = generatedFile("a.txt")
+        // its own chat gets them back
+        restoreProcess()
+        ReflectionHelpers.callInstanceMethod<Unit>(activity, "onBackendConnected")
+        shadowOf(Looper.getMainLooper()).idle()
+        assertSame(first, (secondary as ChatFragment).getConversation())
+        assertEquals(1, model(secondary as ChatFragment).previews.size)
+        // another chat bound first (an intent processed before the restore) does not
+        restoreProcess()
+        switchTo(secondary as ChatFragment, second)
+        assertEquals(emptyList<Attachment>(), model(secondary as ChatFragment).previews)
+        // a configuration change keeps the view model, and with it the composer's files
+        switchTo(secondary as ChatFragment, first)
+        model(secondary as ChatFragment).previews = generatedFile("b.txt")
+        controller.recreate()
+        fm.executePendingTransactions()
+        switchTo(secondary as ChatFragment, second)
+        assertEquals(emptyList<Attachment>(), model(secondary as ChatFragment).previews)
     }
 
     private fun drainStartedActivities() {

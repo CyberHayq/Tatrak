@@ -60,6 +60,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.view.animation.DecelerateInterpolator
 import android.widget.Toast
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.LaunchedEffect
@@ -153,11 +154,14 @@ import okhttp3.Request
  */
 class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
+    /** [chat]: the uuid of the chat the send started in; the retry runs only while that chat is shown. */
     private sealed interface AfterTrust {
-        /** [to]: the group private-message target the text was written for; a changed target drops the send. */
-        data class Text(val to: Jid?) : AfterTrust
+        val chat: String?
 
-        data class Attachments(val attachments: List<Attachment>) : AfterTrust
+        /** [to]: the group private-message target; [text], [reply], [editing]: the composer it confirmed (uuids). */
+        data class Text(override val chat: String?, val to: Jid?, val text: String, val reply: String?, val editing: String?) : AfterTrust
+
+        data class Attachments(val attachments: List<Attachment>, override val chat: String?) : AfterTrust
     }
 
     private val viewModelLazy = lazy { ViewModelProvider(this)[ChatViewModel::class.java] }
@@ -173,14 +177,20 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     private var conversation: Conversation? = null
     private var pendingUuid: String? = null
-    /** Picker results that arrived before the service was bound (process death). */
+    /** Picker results that arrived before the service was bound (process death), and the chat they are for. */
     private var pendingAttachments: List<Attachment>? = null
+    private var pendingFor: String? = null
+    /** Per launcher ([RESULT_GALLERY], …): the chat it was opened in; its result goes nowhere else. */
+    private var resultFor = Bundle()
 
     /** Files whose "Send N files?" question is open, or restored after a recreation that took the dialog away. */
     private var confirming: List<Attachment>? = null
+    private var confirmFor: String? = null
     private var confirmShown = false
     private var pendingExtras: Bundle? = null
     private var afterTrust: AfterTrust? = null
+    /** The trust screen said yes before the chat and its composer were bound again (recreation): [bind] runs it. */
+    private var trustApproved = false
     private var afterPermissions: (() -> Unit)? = null
     private var userTyping = false
     private var typingTimeout: Job? = null
@@ -191,31 +201,45 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     private val trustKeysLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
-            val pending = afterTrust
-            afterTrust = null
-            if (result.resultCode == Activity.RESULT_OK) {
-                when (pending) {
-                    is AfterTrust.Text ->
-                        if (privateTarget(conversation) == pending.to) sendMessage()
-                        else Toast.makeText(requireContext(), R.string.tatrak_chat_recipient_changed, Toast.LENGTH_LONG).show()
-                    is AfterTrust.Attachments -> commitAttachments(pending.attachments)
-                    null -> Unit
-                }
+            if (result.resultCode != Activity.RESULT_OK) {
+                afterTrust = null
+                return@registerForActivityResult
             }
+            val c = conversation
+            if (c == null || xmppConnectionService == null || !showing(c)) trustApproved = true else runAfterTrust()
         }
+
+    /** The send the trust screen confirmed, only into the chat and composer state it was confirmed for. */
+    private fun runAfterTrust() {
+        val pending = afterTrust
+        afterTrust = null
+        trustApproved = false
+        when (pending) {
+            is AfterTrust.Text ->
+                when {
+                    !stillShowing(pending.chat) -> Unit
+                    privateTarget(conversation) != pending.to ->
+                        Toast.makeText(requireContext(), R.string.tatrak_chat_recipient_changed, Toast.LENGTH_LONG).show()
+                    // sendMessage would send previews first, or another reply or edit
+                    viewModel.input.text != pending.text || viewModel.previews.isNotEmpty() ||
+                        viewModel.reply?.uuid != pending.reply || conversation?.correctingMessage?.uuid != pending.editing -> notSent()
+                    else -> sendMessage()
+                }
+            is AfterTrust.Attachments -> if (stillShowing(pending.chat)) commitAttachments(pending.attachments)
+            null -> Unit
+        }
+    }
 
     private val pickMediaLauncher =
         registerForActivityResult(ActivityResultContracts.PickMultipleVisualMedia()) { uris ->
-            if (uris.isNotEmpty()) {
-                addPreviews(Attachment.of(requireContext(), uris, null))
-            }
+            val chat = resultChat(RESULT_GALLERY)
+            if (uris.isNotEmpty()) addPreviews(Attachment.of(requireContext(), uris, null), chat)
         }
 
     private val openDocumentsLauncher =
         registerForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris ->
-            if (uris.isNotEmpty()) {
-                addPreviews(uris.flatMap { Attachment.of(requireContext(), it, Attachment.Type.FILE) })
-            }
+            val chat = resultChat(RESULT_FILES)
+            if (uris.isNotEmpty()) addPreviews(uris.flatMap { Attachment.of(requireContext(), it, Attachment.Type.FILE) }, chat)
         }
 
     /** Where the camera app writes the photo; kept across recreation like the classic STATE_PHOTO_URI. */
@@ -225,22 +249,18 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val uri = pendingPhotoUri
             pendingPhotoUri = null
+            val chat = resultChat(RESULT_PHOTO)
             if (result.resultCode == Activity.RESULT_OK && uri != null) {
                 // the draft is the encrypted capture; the plain one only if encrypting failed. The view
                 // model's scope, not the fragment: a rotation while encrypting must not lose the photo
                 val context = requireContext().applicationContext
-                val chat = conversation?.uuid
                 viewModel.viewModelScope.launch {
                     val stored = withContext(Dispatchers.IO) { uri.path?.let { TemporaryMedia.encryptCapture(context, File(it)) } }
-                    // another chat opened meanwhile: the capture was for the one left, a discarded draft (the composer
-                    // shown is the view model's, also when this fragment was recreated in between)
-                    if (viewModel.conversation?.uuid != chat) {
-                        stored?.delete()
-                        return@launch
-                    }
                     val added = Attachment.of(context, stored?.let(Uri::fromFile) ?: uri, Attachment.Type.IMAGE)
                     if (stored != null) viewModel.cameraDrafts += added.map { it.uuid }
-                    addPreviews(added)
+                    // another chat opened meanwhile: addPreviews deletes the draft (the composer shown is the view
+                    // model's, also when this fragment was recreated in between)
+                    addPreviews(added, chat)
                 }
             }
         }
@@ -249,8 +269,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private val recordVideoLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val data = result.data
+            val chat = resultChat(RESULT_VIDEO)
             if (result.resultCode == Activity.RESULT_OK && data != null) {
-                addPreviews(Attachment.extractAttachments(requireContext(), data, Attachment.Type.FILE))
+                addPreviews(Attachment.extractAttachments(requireContext(), data, Attachment.Type.FILE), chat)
             }
         }
 
@@ -258,6 +279,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private val pickContactLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val data = result.data
+            val chat = resultChat(RESULT_CONTACT)
             if (result.resultCode != Activity.RESULT_OK || data == null) {
                 return@registerForActivityResult
             }
@@ -269,13 +291,14 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                     Log.d(Config.LOGTAG, "could not find vcf uri", e)
                     return@registerForActivityResult
                 }
-            addPreviews(Attachment.of(vCard, "text/x-vcard"))
+            addPreviews(Attachment.of(vCard, "text/x-vcard"), chat)
         }
 
     private val shareLocationLauncher =
         registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
             val data = result.data
-            if (result.resultCode != Activity.RESULT_OK || data == null) {
+            val chat = resultChat(RESULT_LOCATION)
+            if (result.resultCode != Activity.RESULT_OK || data == null || !stillShowing(chat)) {
                 return@registerForActivityResult
             }
             // same geo URI as ConversationFragment.handlePositiveActivityResult
@@ -293,13 +316,15 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     private val wallpaperPicker =
         registerForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-            if (uri == null) return@registerForActivityResult
+            val chat = resultChat(RESULT_WALLPAPER)
+            if (uri == null || chat != shownUuid()) return@registerForActivityResult
             val context = appLanguageContext(requireContext())
             lifecycleScope.launch {
                 val spec = Wallpapers.importPhoto(context, uri)
                 if (spec == null) {
                     Toast.makeText(context, R.string.tatrak_wallpaper_failed, Toast.LENGTH_SHORT).show()
-                } else {
+                } else if (chat == conversation?.uuid) {
+                    // the import takes a while: only the chat it was picked for
                     setWallpaper(spec)
                 }
             }
@@ -348,18 +373,31 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             pendingUuid = savedInstanceState?.getString(STATE_CONVERSATION_UUID)
         }
         // the trust screen's result can arrive in a recreated fragment (rotation, process death)
-        savedInstanceState
-            ?.let { BundleCompat.getParcelableArrayList(it, STATE_TRUST_ATTACHMENTS, Attachment::class.java) }
-            ?.let { afterTrust = AfterTrust.Attachments(it) }
+        savedInstanceState?.let { state ->
+            val chat = state.getString(STATE_TRUST_CHAT)
+            afterTrust =
+                BundleCompat.getParcelableArrayList(state, STATE_TRUST_ATTACHMENTS, Attachment::class.java)
+                    ?.let { AfterTrust.Attachments(it, chat) }
+                    ?: state.getStringArray(STATE_TRUST_TEXT)?.let { (text, to, reply, editing) ->
+                        AfterTrust.Text(chat, to?.let { Jid.of(it) }, text.orEmpty(), reply, editing)
+                    }
+            trustApproved = state.getBoolean(STATE_TRUST_APPROVED)
+            state.getBundle(STATE_RESULT_CHAT)?.let { resultFor = it }
+            pendingAttachments = BundleCompat.getParcelableArrayList(state, STATE_PENDING_ATTACHMENTS, Attachment::class.java)
+            pendingFor = state.getString(STATE_PENDING_CHAT)
+        }
         pendingPhotoUri = savedInstanceState?.getString(STATE_PHOTO_URI)?.let(Uri::parse)
         // a share's question outlives a recreation (rotation, a changed style) as the classic previews do
         confirming = savedInstanceState?.let { BundleCompat.getParcelableArrayList(it, STATE_CONFIRM_ATTACHMENTS, Attachment::class.java) }
-        // a rotation keeps them in the view model; this is for a recreated process
+        confirmFor = savedInstanceState?.getString(STATE_CONFIRM_CHAT)
+        // a rotation keeps them in the view model; this is for a recreated process. Held for their chat until it
+        // binds: another chat may be bound first (an intent processed before the restore)
         savedInstanceState
             ?.let { BundleCompat.getParcelableArrayList(it, STATE_MEDIA_PREVIEWS, Attachment::class.java) }
             ?.let {
-                if (viewModel.previews.isEmpty()) {
-                    viewModel.previews = it
+                if (viewModel.previews.isEmpty() && viewModel.held.isEmpty()) {
+                    viewModel.held = it
+                    viewModel.heldFor = savedInstanceState.getString(STATE_MEDIA_PREVIEWS_CHAT)
                     savedInstanceState.getStringArrayList(STATE_CAMERA_DRAFTS)?.mapTo(viewModel.cameraDrafts, UUID::fromString)
                 }
             }
@@ -438,14 +476,31 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
-        conversation?.let { outState.putString(STATE_CONVERSATION_UUID, it.uuid) }
-        (afterTrust as? AfterTrust.Attachments)?.let {
-            outState.putParcelableArrayList(STATE_TRUST_ATTACHMENTS, ArrayList(it.attachments))
+        // also before the service found the chat again (a second recreation)
+        shownUuid()?.let { outState.putString(STATE_CONVERSATION_UUID, it) }
+        when (val trust = afterTrust) {
+            is AfterTrust.Attachments -> outState.putParcelableArrayList(STATE_TRUST_ATTACHMENTS, ArrayList(trust.attachments))
+            is AfterTrust.Text -> outState.putStringArray(STATE_TRUST_TEXT, arrayOf(trust.text, trust.to?.toString(), trust.reply, trust.editing))
+            null -> Unit
+        }
+        afterTrust?.let { outState.putString(STATE_TRUST_CHAT, it.chat) }
+        outState.putBoolean(STATE_TRUST_APPROVED, trustApproved)
+        outState.putBundle(STATE_RESULT_CHAT, Bundle(resultFor))
+        pendingAttachments?.let {
+            outState.putParcelableArrayList(STATE_PENDING_ATTACHMENTS, ArrayList(it))
+            outState.putString(STATE_PENDING_CHAT, pendingFor)
         }
         pendingPhotoUri?.let { outState.putString(STATE_PHOTO_URI, it.toString()) }
-        confirming?.let { outState.putParcelableArrayList(STATE_CONFIRM_ATTACHMENTS, ArrayList(it)) }
-        if (viewModel.previews.isNotEmpty()) {
-            outState.putParcelableArrayList(STATE_MEDIA_PREVIEWS, ArrayList(viewModel.previews))
+        confirming?.let {
+            outState.putParcelableArrayList(STATE_CONFIRM_ATTACHMENTS, ArrayList(it))
+            outState.putString(STATE_CONFIRM_CHAT, confirmFor)
+        }
+        val (previews, previewsFor) =
+            if (viewModel.previews.isNotEmpty()) viewModel.previews to viewModel.conversation?.uuid
+            else viewModel.held to viewModel.heldFor
+        if (previews.isNotEmpty()) {
+            outState.putParcelableArrayList(STATE_MEDIA_PREVIEWS, ArrayList(previews))
+            outState.putString(STATE_MEDIA_PREVIEWS_CHAT, previewsFor)
             outState.putStringArrayList(STATE_CAMERA_DRAFTS, viewModel.cameraDrafts.mapTo(ArrayList()) { it.toString() })
         }
     }
@@ -539,7 +594,6 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val extras = pendingExtras
         pendingExtras = null
         bind(service, c, extras)
-        commitPendingAttachments()
     }
 
     override fun refresh() {
@@ -559,6 +613,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             return
         }
         if (viewModel.conversation !== c) {
+            // the files in the composer are its chat's (a configuration change keeps them in the view model)
+            if (viewModel.conversation?.uuid != c.uuid) dropPreviews()
             // a new view model is a new entry (a configuration change keeps the old one): no private message carries over
             if (c.mode == Conversation.MODE_MULTI) c.nextCounterpart = null
             viewModel.bind(c, service)
@@ -572,7 +628,22 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         c.messagesLoaded.set(true)
         service.notificationService.setOpenConversation(c)
         extras?.let { processExtras(c, it) }
-        if (!confirmShown) confirming?.let(::confirmAttachments)
+        if (!confirmShown) confirming?.let { if (stillShowing(confirmFor)) confirmAttachments(it) else confirming = null }
+        // work held until its chat is bound (a recreation): run in that chat, dropped in another; cleared first
+        val held = viewModel.held
+        if (held.isNotEmpty()) {
+            val chat = viewModel.heldFor
+            viewModel.held = emptyList()
+            viewModel.heldFor = null
+            addPreviews(held, chat)
+        }
+        pendingAttachments?.let {
+            val chat = pendingFor
+            pendingAttachments = null
+            pendingFor = null
+            if (stillShowing(chat)) commitAttachments(it, c)
+        }
+        if (trustApproved) runAfterTrust()
         fetchDevicesIfUnknown(c)
     }
 
@@ -686,7 +757,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             openClassic()
             return
         }
-        if (trustKeysIfNeeded(c, AfterTrust.Text(privateTarget(c)))) return
+        if (trustKeysIfNeeded(c, AfterTrust.Text(c.uuid, privateTarget(c), typed, reply?.uuid, c.correctingMessage?.uuid))) return
         val message: Message
         // a private message is never an edit (entering PM clears it; this also covers a correction not loaded yet)
         val correcting = if (privateTarget(c) != null) null else c.correctingMessage
@@ -754,6 +825,11 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     private fun trustKeysIfNeeded(c: Conversation, then: AfterTrust): Boolean {
         if (c.nextEncryption != Message.ENCRYPTION_AXOLOTL) return false
         val intent = TrustKeysGate.intentIfTrustNeeded(requireActivity(), c) ?: return false
+        // one request through its result and its replay after a bind: the screen's answer cannot say which of two it is
+        if (afterTrust != null) {
+            Toast.makeText(requireContext(), R.string.tatrak_chat_trust_busy, Toast.LENGTH_LONG).show()
+            return true
+        }
         afterTrust = then
         trustKeysLauncher.launch(intent)
         return true
@@ -763,19 +839,22 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     override fun attachGallery() {
         if (requireClassicForPgp() || privateMode()) return
-        pickMediaLauncher.launch(
-            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo)
+        launchFor(
+            conversation?.uuid, RESULT_GALLERY, pickMediaLauncher,
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageAndVideo),
         )
     }
 
     /** ConversationFragment.attachFile + invokeAttachFileIntent for ATTACHMENT_CHOICE_TAKE_PHOTO. */
     override fun takePhoto() {
         if (requireClassicForPgp() || privateMode()) return
+        // the permission screen may return with another chat shown: the camera opens only for this one
+        val chat = conversation?.uuid
         withPermissions(
             listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA)
         ) {
-            // the permission screen may return after a private message started
-            if (privateMode()) return@withPermissions
+            // the permission screen may return after a private message started; an open camera keeps its photo's path
+            if (privateMode() || slotBusy(RESULT_PHOTO)) return@withPermissions
             val context = requireContext()
             val file = FileBackend.Cache(context).takePicture()
             val intent =
@@ -784,50 +863,39 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                     .addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
                     .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             pendingPhotoUri = Uri.fromFile(file)
-            try {
-                takePhotoLauncher.launch(intent)
-            } catch (e: ActivityNotFoundException) {
-                pendingPhotoUri = null
-                Toast.makeText(context, R.string.no_application_found, Toast.LENGTH_LONG).show()
-            }
+            if (!launchFor(chat, RESULT_PHOTO, takePhotoLauncher, intent)) pendingPhotoUri = null
         }
     }
 
     /** ConversationFragment.attachFile + invokeAttachFileIntent for ATTACHMENT_CHOICE_RECORD_VIDEO. */
     override fun recordVideo() {
         if (requireClassicForPgp() || privateMode()) return
+        val chat = conversation?.uuid
         withPermissions(
             listOf(Manifest.permission.WRITE_EXTERNAL_STORAGE, Manifest.permission.CAMERA)
         ) {
             if (privateMode()) return@withPermissions
-            try {
-                recordVideoLauncher.launch(Intent(MediaStore.ACTION_VIDEO_CAPTURE))
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(requireContext(), R.string.no_application_found, Toast.LENGTH_LONG).show()
-            }
+            launchFor(chat, RESULT_VIDEO, recordVideoLauncher, Intent(MediaStore.ACTION_VIDEO_CAPTURE))
         }
     }
 
     override fun attachFile() {
         if (requireClassicForPgp() || privateMode()) return
-        openDocumentsLauncher.launch(arrayOf(ViewUtil.WILDCARD))
+        launchFor(conversation?.uuid, RESULT_FILES, openDocumentsLauncher, arrayOf(ViewUtil.WILDCARD))
     }
 
     override fun attachLocation() {
         if (requireClassicForPgp() || privateMode()) return
-        shareLocationLauncher.launch(Intent(requireContext(), ShareLocationActivity::class.java))
+        launchFor(conversation?.uuid, RESULT_LOCATION, shareLocationLauncher, Intent(requireContext(), ShareLocationActivity::class.java))
     }
 
     /** ConversationFragment.attachFile + invokeAttachFileIntent for ATTACHMENT_CHOICE_CONTACT. */
     override fun attachContact() {
         if (requireClassicForPgp() || privateMode()) return
+        val chat = conversation?.uuid
         withPermissions(listOf(Manifest.permission.READ_CONTACTS)) {
             if (privateMode()) return@withPermissions
-            try {
-                pickContactLauncher.launch(ConversationFragment.contactPickIntent(requireContext()))
-            } catch (e: ActivityNotFoundException) {
-                Toast.makeText(requireContext(), R.string.no_application_found, Toast.LENGTH_LONG).show()
-            }
+            launchFor(chat, RESULT_CONTACT, pickContactLauncher, ConversationFragment.contactPickIntent(requireContext()))
         }
     }
 
@@ -920,13 +988,54 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         return false
     }
 
-    /** ConversationFragment.commitAttachments without the preview strip. */
-    private fun commitPendingAttachments() {
-        pendingAttachments?.let {
-            pendingAttachments = null
-            commitAttachments(it)
-        }
+    /** The chat shown, also while a recreated fragment waits for the service to find it again. */
+    private fun shownUuid(): String? = conversation?.uuid ?: pendingUuid
+
+    /**
+     * Deferred work (a picker result, a key-trust retry, a share's question) belongs to the chat it started in
+     * ([chat]); when another chat is shown by now it is dropped with a notice, never sent to the shown one.
+     */
+    private fun stillShowing(chat: String?): Boolean {
+        if (chat != null && chat == shownUuid()) return true
+        notSent()
+        return false
     }
+
+    private fun notSent() {
+        context?.let { Toast.makeText(it, R.string.tatrak_chat_changed_not_sent, Toast.LENGTH_LONG).show() }
+    }
+
+    /**
+     * Opens [launcher] for [chat], the chat shown when the user asked (checked again here, after a permission
+     * screen); its result is taken only by that chat ([resultChat]). Returns whether it was opened.
+     */
+    private fun <I> launchFor(chat: String?, key: String, launcher: ActivityResultLauncher<I>, input: I): Boolean {
+        if (chat == null || chat != conversation?.uuid || slotBusy(key)) return false
+        resultFor.putString(key, chat)
+        try {
+            launcher.launch(input)
+        } catch (e: ActivityNotFoundException) {
+            resultFor.remove(key)
+            Toast.makeText(requireContext(), R.string.no_application_found, Toast.LENGTH_LONG).show()
+            return false
+        }
+        return true
+    }
+
+    /**
+     * One request per launcher: a result cannot say which of two it answers, so an open one keeps its chat until its
+     * result or cancellation arrives, and a new tap meanwhile opens nothing and says so.
+     * shortcut: a result Android never delivers keeps that button busy until the app starts without saved state;
+     * upgrade (a timeout) if that is ever seen.
+     */
+    private fun slotBusy(key: String): Boolean {
+        if (!resultFor.containsKey(key)) return false
+        Toast.makeText(requireContext(), R.string.tatrak_chat_picker_busy, Toast.LENGTH_LONG).show()
+        return true
+    }
+
+    /** The chat [key]'s request was opened in; taken once, also for a cancelled request. */
+    private fun resultChat(key: String): String? = resultFor.getString(key).also { resultFor.remove(key) }
 
     private fun commitAttachments(attachments: List<Attachment>, target: Conversation? = conversation) {
         if (attachments.isEmpty()) return
@@ -934,6 +1043,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val service = xmppConnectionService
         if (c == null || service == null) {
             pendingAttachments = attachments
+            pendingFor = c?.uuid ?: shownUuid()
             return
         }
         // a private message is text only: whatever else arrives (a result, a sticker, a share, a voice note, a trust
@@ -947,7 +1057,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                 return
             }
         }
-        if (trustKeysIfNeeded(c, AfterTrust.Attachments(attachments))) return
+        if (trustKeysIfNeeded(c, AfterTrust.Attachments(attachments, c.uuid))) return
         val callback =
             PresenceSelector.OnPresenceSelected {
                 for (attachment in attachments) {
@@ -977,7 +1087,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         ) {
             callback.onPresenceSelected()
         } else {
-            (activity as? XmppActivity)?.selectPresence(c, callback)
+            // the chooser may be answered after another chat opened
+            (activity as? XmppActivity)?.selectPresence(c) { if (stillShowing(c.uuid)) callback.onPresenceSelected() }
         }
     }
 
@@ -1061,7 +1172,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             if (asQuote) {
                 if (requireClassicForPgp()) return
                 text?.let(::quote)
-                addPreviews(attachments)
+                addPreviews(attachments, c.uuid)
             } else {
                 confirmAttachments(attachments)
             }
@@ -1136,6 +1247,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         if (attachments.isEmpty()) return
         if (requireClassicForPgp()) return
         confirming = attachments
+        confirmFor = conversation?.uuid
+        val chat = confirmFor
         confirmShown = true
         MaterialAlertDialogBuilder(requireActivity())
             .setTitle(conversation?.name)
@@ -1148,7 +1261,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             )
             .setPositiveButton(R.string.tatrak_chat_send) { _, _ ->
                 confirming = null
-                commitAttachments(attachments)
+                if (stillShowing(chat)) commitAttachments(attachments)
             }
             .setNegativeButton(R.string.cancel) { _, _ -> confirming = null }
             // not onDismiss: a recreation dismisses the dialog too, and the question must come back then
@@ -1658,7 +1771,9 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                             .getManager(HttpUploadManager::class.java)
                             .isAvailableForSize(message.fileParams.size)
                 ) {
+                    // the chooser may be answered after another chat opened, as in commitAttachments
                     requireXmppActivity().selectPresence(c) {
+                        if (!stillShowing(c.uuid)) return@selectPresence
                         message.counterpart = c.nextCounterpart
                         service.resendFailedMessages(message, false)
                     }
@@ -1894,7 +2009,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     }
 
     override fun pickWallpaperPhoto() {
-        wallpaperPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+        launchFor(
+            conversation?.uuid, RESULT_WALLPAPER, wallpaperPicker,
+            PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly),
+        )
     }
 
     override fun delete(uuid: String) {
@@ -2117,13 +2235,28 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         TemporaryMedia.deleteDrafts(viewModel.cameraDrafts, removed)
     }
 
-    /** Picked files wait in the strip above the keyboard until Send, like the classic screen. */
-    private fun addPreviews(attachments: List<Attachment>) {
-        val c = conversation ?: return
-        // only into the composer of the chat they were picked in (see endPrivate)
-        if (attachments.isEmpty() || !showing(c)) return
-        endPrivate(c, notice = true)
-        viewModel.previews = viewModel.previews + attachments
+    /**
+     * Picked files wait in the strip above the keyboard until Send, like the classic screen; only in the composer of
+     * [chat], the chat they were picked in (see endPrivate). Before that chat is bound again (a recreation) they are
+     * held for it in the view model; in another chat they are dropped, their camera drafts deleted.
+     */
+    private fun addPreviews(attachments: List<Attachment>, chat: String?) {
+        if (attachments.isEmpty()) return
+        val c = conversation
+        if (c != null && c.uuid == chat && showing(c)) {
+            endPrivate(c, notice = true)
+            viewModel.previews = viewModel.previews + attachments
+        } else if (chat != null && chat == shownUuid()) {
+            if (viewModel.heldFor != chat) {
+                TemporaryMedia.deleteDrafts(viewModel.cameraDrafts, viewModel.held)
+                viewModel.held = emptyList()
+            }
+            viewModel.heldFor = chat
+            viewModel.held = viewModel.held + attachments
+        } else {
+            TemporaryMedia.deleteDrafts(viewModel.cameraDrafts, attachments)
+            notSent()
+        }
     }
 
     // --- list -------------------------------------------------------------------------------
@@ -2442,6 +2575,23 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         private const val STATE_MEDIA_PREVIEWS = "tatrak_chat_media_previews"
         private const val STATE_CAMERA_DRAFTS = "tatrak_chat_camera_drafts"
         private const val STATE_CONFIRM_ATTACHMENTS = "tatrak_chat_confirm_attachments"
+        private const val STATE_CONFIRM_CHAT = "tatrak_chat_confirm_chat"
+        private const val STATE_TRUST_CHAT = "tatrak_chat_trust_chat"
+        private const val STATE_RESULT_CHAT = "tatrak_chat_result_chat"
+        private const val STATE_TRUST_TEXT = "tatrak_chat_trust_text"
+        private const val STATE_TRUST_APPROVED = "tatrak_chat_trust_approved"
+        private const val STATE_PENDING_ATTACHMENTS = "tatrak_chat_pending_attachments"
+        private const val STATE_PENDING_CHAT = "tatrak_chat_pending_chat"
+        private const val STATE_MEDIA_PREVIEWS_CHAT = "tatrak_chat_media_previews_chat"
+
+        // keys of [resultFor], one per result launcher
+        private const val RESULT_GALLERY = "gallery"
+        private const val RESULT_FILES = "files"
+        private const val RESULT_PHOTO = "photo"
+        private const val RESULT_VIDEO = "video"
+        private const val RESULT_CONTACT = "contact"
+        private const val RESULT_LOCATION = "location"
+        private const val RESULT_WALLPAPER = "wallpaper"
 
         /** Set by [ChatListFragment] around its [openChat] call when a preview card became the chat; taken by [reInit]. */
         internal var previewHandOff: PreviewHandOff? = null

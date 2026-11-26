@@ -86,9 +86,13 @@ class ChatViewModel(application: Application) : AndroidViewModel(application) {
     /** The [previews] that are camera captures encrypted into the store: deleted when discarded unsent. */
     val cameraDrafts = HashSet<UUID>()
 
+    /** Previews for chat [heldFor] that is not bound yet (restored, or a result that came first); see ChatFragment.bind. */
+    var held: List<Attachment> = emptyList()
+    var heldFor: String? = null
+
     // the chat screen is gone for good (Back to the list): its unsent camera drafts go with it
     override fun onCleared() {
-        am.cyberhayq.chat.storage.media.TemporaryMedia.deleteDrafts(cameraDrafts, previews)
+        am.cyberhayq.chat.storage.media.TemporaryMedia.deleteDrafts(cameraDrafts, previews + held)
     }
 
     /** A message to scroll to once the list has it; cleared by the screen when done. */

@@ -125,6 +125,11 @@
     </plurals>
     <!-- a text waiting for the key trust screen whose group private-message target changed meanwhile -->
     <string name="tatrak_chat_recipient_changed">Not sent: the recipient changed before it was ready</string>
+    <string name="tatrak_chat_changed_not_sent">Not sent: the chat changed before it was ready</string>
+    <!-- a picker (or the camera) was tapped while the same one, opened earlier, has not answered yet -->
+    <string name="tatrak_chat_picker_busy">The previous selection has not finished yet</string>
+    <!-- a send needs the key trust screen while it is still open for an earlier send -->
+    <string name="tatrak_chat_trust_busy">Not sent: the previous key check has not finished yet</string>
     <!-- something other than text (a file, a sticker, a share) arrived while writing a group private message -->
     <string name="tatrak_chat_private_cancelled">Private message cancelled: this goes to the whole group</string>
 </resources>

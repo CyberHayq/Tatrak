@@ -34,6 +34,14 @@
   (enough of them made later attempts fail), and more installer and connection errors, a missing
   system screen for allowing installs, or a missing confirmation now show "Update failed" instead
   of closing Tatrak or waiting forever.
+- Work that finishes after a delay (a picked photo, file, contact or location, a camera shot, the
+  "Send N files?" question of a share, a send waiting for the key-trust screen) could go to another
+  chat if one opened meanwhile, for example from a notification in the two-pane layout. It now
+  belongs to the chat it started in; when another chat is open by then, it is not sent and a
+  notice says so. The same holds for files waiting in the composer when Android restarts the app,
+  and for a camera, video or contact request answered after a permission question. Tapping the
+  same picker again, or sending another message that needs the key check, while the earlier one
+  has not answered yet now says so instead of replacing it.
 
 ## 0.5.1
 
