@@ -147,6 +147,8 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
   fix batch once replaced the legacy Settings intent and lost the profile media fallback).
 - A non-trivial change is reviewed by the other vendor's model than the one that wrote it
   (Claude's by Codex `gpt-6.2-sol` high, Codex's by the main session).
+- Before starting any Codex review (EGM Goldfish reviewers included), ask the owner which Codex
+  model and effort to use, with the table's choice as the recommendation (owner, 2026-11-26).
 - When Codex is out of limits, do not start an Opus instance in its place: run the Claude
   reviewers that are due, mark the Codex one "deferred (Codex limit)" and tell the owner. A Claude
   review runs instead only when the owner asks for it, and is recorded as a Claude review.
