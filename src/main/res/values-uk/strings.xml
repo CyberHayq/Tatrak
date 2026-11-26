@@ -300,7 +300,7 @@
     <string name="confirm">Підтвердити</string>
     <string name="try_again">Спробуйте ще</string>
     <string name="pref_keep_foreground_service">Процес на передньому плані</string>
-    <string name="pref_keep_foreground_service_summary">Не дає операційній системі припиняти Ваш зв’язок</string>
+    <string name="pref_keep_foreground_service_summary">Не дозволяє операційній системі переривати Ваше з’єднання</string>
     <string name="pref_create_backup">Створити резервну копію</string>
     <string name="pref_create_backup_summary">Резервні копії зберігатимуться до %s</string>
     <string name="notification_create_backup_title">Створення резервних копій</string>
@@ -1037,7 +1037,7 @@
     <string name="pref_category_sending">Надсилання</string>
     <string name="pref_category_receiving">Отримання</string>
     <string name="pref_automatic_download">Автоматичне завантаження</string>
-    <string name="appearance">Зовнішній вигляд</string>
+    <string name="appearance">Вигляд</string>
     <string name="pref_allow_screenshots">Дозволити знімки екрана</string>
     <string name="pref_category_e2ee">Наскрізне шифрування</string>
     <string name="pref_title_trust_system_ca_store">Центри сертифікації</string>
@@ -1266,4 +1266,9 @@
     <string name="show_attachment_options">Показати налаштування вкладень</string>
     <string name="collapsed">Згорнуто</string>
     <string name="expanded">Розгорнуто</string>
+    <string name="account_status_pending_oauth_authorization">Очікується авторизація</string>
+    <string name="could_not_process_oauth_redirect">Не вдалося обробити перенаправлення OAuth</string>
+    <string name="could_not_redirect_to_identity_provider">Не вдалося перенаправити до постачальника ідентифікації</string>
+    <string name="pref_google_push">Google Push як запасний варіант</string>
+    <string name="pref_google_push_summary">Активує застосунок, якщо режим інтенсивного енергозбереження перериває фонове з’єднання. Дані повідомлень не надсилаються до Google.</string>
 </resources>

@@ -740,7 +740,7 @@ public class ImportBackupWorkerTest {
         final AEADBlockCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
         cipher.init(false, new AEADParameters(new KeyParameter(KEY), 128, IV));
         final InputStream cipherInputStream =
-                new CipherInputStream(new ByteArrayInputStream(sealed), cipher);
+                ImportBackupWorker.keepingReadFailure(new CipherInputStream(new ByteArrayInputStream(sealed), cipher));
         final JsonReader jsonReader =
                 new JsonReader(
                         new InputStreamReader(
@@ -1124,13 +1124,17 @@ public class ImportBackupWorkerTest {
 
     /** An encrypted backup file as the apps write it: header, then AES-GCM over the gzipped JSON rows. */
     private static byte[] backupFile(final String app, final List<String> rows) throws Exception {
+        return backupFile(app, "[" + String.join(",", rows) + "]");
+    }
+
+    private static byte[] backupFile(final String app, final String json) throws Exception {
         final byte[] salt = new byte[16];
         final var out = new ByteArrayOutputStream();
         new eu.siacs.conversations.utils.BackupFileHeader(eu.siacs.conversations.utils.BackupFileHeader.LEGACY_VERSION,
                 app, Jid.of("tester@example.com"), 1L, IV, salt).write(new java.io.DataOutputStream(out));
         final var gzip = new ByteArrayOutputStream();
         try (final var gzipOut = new GZIPOutputStream(gzip)) {
-            gzipOut.write(("[" + String.join(",", rows) + "]").getBytes(StandardCharsets.UTF_8));
+            gzipOut.write(json.getBytes(StandardCharsets.UTF_8));
         }
         final byte[] plain = gzip.toByteArray();
         final AEADBlockCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
@@ -1617,6 +1621,53 @@ public class ImportBackupWorkerTest {
                 backup.length, PASSWORD, com.google.common.base.Stopwatch.createStarted()));
         assertFalse(worker.previewWritten);
         assertEquals(0, DatabaseUtils.queryNumEntries(db, "identities"));
+    }
+
+    /** Imports [json] sealed as a backup through the production path; true when a preview was written. */
+    private boolean previewOf(final String json, final boolean badTag) throws Exception {
+        final byte[] backup = backupFile("monocles chat", json);
+        if (badTag) backup[backup.length - 1] ^= 1;
+        final var worker = new StagingWorker(ImportBackupWorker.data(PASSWORD, URI, ImportBackupWorker.OmemoImport.FULL));
+        for (final String table : new String[] {"messages", "identities", "sessions", "prekeys", "signed_prekeys"}) {
+            db.execSQL("drop table if exists " + table);
+        }
+        db.execSQL("delete from accounts"); // what a missed bad tag committed
+        createBackupSchema();
+        try {
+            worker.importBackup(supportDb, new ByteArrayInputStream(backup), backup.length, PASSWORD,
+                    com.google.common.base.Stopwatch.createStarted());
+        } catch (final IOException rejected) {
+            assertFalse(worker.previewWritten);
+            return false;
+        }
+        return worker.previewWritten;
+    }
+
+    @Test
+    public void contentAfterTheArrayWritesNoPreview() throws Exception {
+        final String rows = "[" + String.join(",", omemoBackup(false).subList(0, 2)) + "]";
+        for (final String trailing : new String[] {"[]", " {\"table\":\"t\"}", "x", "]"}) {
+            assertFalse(trailing, previewOf(rows + trailing, false));
+        }
+        assertTrue(previewOf(rows + " \n", false));
+    }
+
+    /**
+     * A bad GCM tag is caught whatever the compressed length: gzip's check for a second member
+     * reads into the tag and swallows its failure (sizes swept as for the 2.21.5 merge).
+     */
+    @Test
+    public void aBadTagIsCaughtAtEveryLength() throws Exception {
+        final String rows = "[" + String.join(",", omemoBackup(false).subList(0, 2)) + "]";
+        final var missed = new java.util.ArrayList<Integer>();
+        long seed = 1;
+        final var padding = new StringBuilder();
+        for (int length = 0; length < 1114; ++length) {
+            if (previewOf(rows + padding, true)) missed.add(length);
+            seed = seed * 6364136223846793005L + 1442695040888963407L;
+            padding.append(" \n\t\r".charAt((int) (seed >>> 62))); // whitespace that does not compress away
+        }
+        assertEquals(java.util.List.of(), missed);
     }
 
     @Test

@@ -26,13 +26,11 @@ public class BlocklistActivity extends AbstractSearchableListItemActivity
     public void onCreate(final Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         getListView()
-                .setOnItemLongClickListener(
-                        (parent, view, position, id) -> {
-                            BlockContactDialog.show(
-                                    BlocklistActivity.this,
-                                    (Blockable) getListItems().get(position));
-                            return true;
-                        });
+                .setOnItemLongClickListener((parent, view, position, id) -> {
+                    BlockContactDialog.show(
+                            BlocklistActivity.this, (Blockable) getListItems().get(position));
+                    return true;
+                });
         this.binding.fab.show();
         this.binding.fab.setOnClickListener((v) -> showEnterJidDialog());
         // Tatrak: the Compose list over the hidden classic layout; see BlocklistCompose
@@ -97,18 +95,17 @@ public class BlocklistActivity extends AbstractSearchableListItemActivity
                         true,
                         false);
 
-        dialog.setOnEnterJidDialogPositiveListener(
-                (accountJid, contactJid) -> {
-                    Blockable blockable = new RawBlockable(account, contactJid);
-                    if (xmppConnectionService.sendBlockRequest(blockable, false, null)) {
-                        Toast.makeText(
-                                        BlocklistActivity.this,
-                                        R.string.corresponding_chats_closed,
-                                        Toast.LENGTH_SHORT)
-                                .show();
-                    }
-                    return true;
-                });
+        dialog.setOnEnterJidDialogPositiveListener((accountJid, contactJid) -> {
+            Blockable blockable = new RawBlockable(account, contactJid);
+            if (xmppConnectionService.sendBlockRequest(blockable, false, null)) {
+                Toast.makeText(
+                                BlocklistActivity.this,
+                                R.string.corresponding_chats_closed,
+                                Toast.LENGTH_SHORT)
+                        .show();
+            }
+            return true;
+        });
 
         dialog.show(ft, "dialog");
     }

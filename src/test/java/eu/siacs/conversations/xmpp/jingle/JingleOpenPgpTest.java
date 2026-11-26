@@ -208,13 +208,15 @@ public class JingleOpenPgpTest {
     @Test
     public void aPgpFileThatCannotBeCreatedFailsWithoutItsPath() {
         final File impossible = new File(new File(cache, "missing-folder-file"), "x.pgp");
+        final File partial = new File(cache, "partial-of-x");
         try {
             new File(cache, "missing-folder-file").createNewFile(); // a file where the folder should be
-            JingleReceiveTest.receive(impossible, null, armored(10), 10, true);
+            JingleReceiveTest.receive(impossible, null, armored(10), 10, partial);
             org.junit.Assert.fail();
         } catch (final Exception e) {
             assertFalse(String.valueOf(e.getMessage()).contains(cache.getPath()));
         }
+        assertFalse(partial.exists()); // the failed move removes the received ciphertext too
     }
 
     private static String[] names(final File folder) {

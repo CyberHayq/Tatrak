@@ -404,7 +404,6 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         Activities.setStatusAndNavigationBarColors(this, binding.getRoot());
         // fragments handle insets themselves so the chat list header can extend under the status bar
         WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
-        ;
         this.getSupportFragmentManager()
                 .addOnBackStackChangedListener(this::showDialogsIfMainIsOverview);
         this.initializeFragments();

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+### Upstream
+- Tatrak now includes the fixes of Conversations 2.21.1-2.21.5 (OMEMO, TLS trust, Jingle file
+  transfer and SOCKS5, group chat join, backup import, partial downloads in the cache).
+- Login with OAuth: on a server that asks for it, the account screen opens the server's login page
+  in the browser and comes back to Tatrak.
+- New opt-in setting "Use Google push as fallback" (Settings → Privacy), off by default and
+  available only with Google Play services: wakes the app through Google's push service if
+  battery saving stops the background connection.
+- An "always" decision to trust a server certificate is now kept on the first connection too.
+
 ### Developer tooling
 - Add the Appium/pytest QA suite under `tools/qa/`: nine regression cases, three smoke cases,
   fixture helpers, pinned test-tool dependencies, run instructions and recorded emulator results.
@@ -13,6 +23,7 @@
 - Message previews in the chat list and notifications no longer fail on some sender names.
 - In-app update: if the system refuses to start the installation (a device policy, a revoked
   permission to install apps), Tatrak says the update failed instead of closing.
+- Backup import refuses a backup file with anything after its contents.
 
 ## 0.5.1
 

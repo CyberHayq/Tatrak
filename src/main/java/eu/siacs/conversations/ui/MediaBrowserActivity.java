@@ -196,19 +196,17 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
                 this.appliedFilter = EnumSet.copyOf(test);
             }
         }
-        this.mMediaAdapter.setOnAttachmentClicked(
-                attachment -> {
-                    if (actionMode == null) {
-                        ViewUtil.view(this, attachment);
-                    } else {
-                        toggleSelection(attachment);
-                    }
-                });
-        this.mMediaAdapter.setOnAttachmentLongClicked(
-                attachment -> {
-                    toggleSelection(attachment);
-                    return true;
-                });
+        this.mMediaAdapter.setOnAttachmentClicked(attachment -> {
+            if (actionMode == null) {
+                ViewUtil.view(this, attachment);
+            } else {
+                toggleSelection(attachment);
+            }
+        });
+        this.mMediaAdapter.setOnAttachmentLongClicked(attachment -> {
+            toggleSelection(attachment);
+            return true;
+        });
         binding.media.setAdapter(mMediaAdapter);
         GridManager.setupLayoutManager(this, binding.media, R.dimen.browser_media_size);
         // Tatrak: Compose screen with tabs over the hidden classic grid; the actions below are
@@ -267,16 +265,15 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
             filterItemBinding
                     .getRoot()
                     .setOnClickListener(v -> filterItemBinding.checkbox.toggle());
-            filterItemBinding.checkbox.setOnCheckedChangeListener(
-                    (buttonView, isChecked) -> {
-                        final var button = positiveButton.get();
-                        if (isChecked) {
-                            current.add(filterType);
-                        } else {
-                            current.remove(filterType);
-                        }
-                        button.setEnabled(!current.isEmpty());
-                    });
+            filterItemBinding.checkbox.setOnCheckedChangeListener((buttonView, isChecked) -> {
+                final var button = positiveButton.get();
+                if (isChecked) {
+                    current.add(filterType);
+                } else {
+                    current.remove(filterType);
+                }
+                button.setEnabled(!current.isEmpty());
+            });
         }
         dialogBuilder.setView(dialogViewBinding.getRoot());
         dialogBuilder.setPositiveButton(
@@ -287,12 +284,11 @@ public class MediaBrowserActivity extends XmppActivity implements OnMediaLoaded 
                 });
         dialogBuilder.setNegativeButton(R.string.cancel, null);
         final var dialog = dialogBuilder.create();
-        dialog.setOnShowListener(
-                d -> {
-                    if (d instanceof AlertDialog ad) {
-                        positiveButton.set(ad.getButton(AlertDialog.BUTTON_POSITIVE));
-                    }
-                });
+        dialog.setOnShowListener(d -> {
+            if (d instanceof AlertDialog ad) {
+                positiveButton.set(ad.getButton(AlertDialog.BUTTON_POSITIVE));
+            }
+        });
         dialog.show();
     }
 

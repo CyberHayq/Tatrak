@@ -66,6 +66,7 @@
     <queries>
         <package android:name="org.sufficientlysecure.keychain" />
         <package android:name="org.torproject.android" />
+        <package android:name="com.google.android.gms" />
 
         <intent>
             <action android:name="eu.siacs.conversations.location.request" />
@@ -85,6 +86,9 @@
         <intent>
             <action android:name="android.intent.action.PICK" />
             <data android:mimeType="vnd.android.cursor.dir/contact" />
+        </intent>
+        <intent>
+            <action android:name="com.google.android.c2dm.intent.REGISTER" />
         </intent>
     </queries>
 
@@ -169,6 +173,18 @@
             android:exported="false"
             android:launchMode="singleTop"
             android:theme="@style/Theme.Tatrak.Viewer" />
+        <receiver
+            android:name=".receiver.PushMessageReceiver"
+            android:exported="true"
+            android:permission="com.google.android.c2dm.permission.SEND">
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.RECEIVE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.google.android.c2dm.intent.REGISTRATION" />
+            </intent-filter>
+        </receiver>
+
         <activity
             android:name=".ui.UnifiedPushDistributor"
             android:enabled="false"
@@ -238,7 +254,9 @@
             android:windowSoftInputMode="stateAlwaysHidden" />
         <activity
             android:name=".ui.YuriLauncherActivity"
-            android:exported="true">
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
 
@@ -303,6 +321,24 @@
 
                 <data android:scheme="imto" />
                 <data android:host="xmpp" />
+            </intent-filter>
+        </activity>
+        <activity
+            android:name=".ui.OAuthRedirectActivity"
+            android:excludeFromRecents="true"
+            android:exported="true"
+            android:noHistory="true"
+            android:taskAffinity="">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+
+                <!-- Tatrak: the build's own id (OAuthManager registers BuildConfig.APPLICATION_ID, with the benchmark suffix) -->
+                <data
+                    android:host="oauth-redirect"
+                    android:scheme="${applicationId}" />
             </intent-filter>
         </activity>
         <activity
@@ -407,7 +443,9 @@
         </activity>
         <activity
             android:name="com.canhub.cropper.CropImageActivity"
-            android:theme="@style/Base.Theme.AppCompat" />
+            android:exported="false"
+            android:theme="@style/Base.Theme.AppCompat"
+            tools:replace="android:exported" />
         <activity android:name=".ui.MemorizingActivity" />
 
         <activity

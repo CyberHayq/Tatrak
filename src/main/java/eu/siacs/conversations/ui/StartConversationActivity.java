@@ -125,21 +125,18 @@ public class StartConversationActivity extends XmppActivity
 
                 @Override
                 public boolean onMenuItemActionExpand(@NonNull final MenuItem item) {
-                    mSearchEditText.post(
-                            () -> {
-                                updateSearchViewHint();
-                                mSearchEditText.requestFocus();
-                                if (oneShotKeyboardSuppress.compareAndSet(true, false)) {
-                                    return;
-                                }
-                                InputMethodManager imm =
-                                        (InputMethodManager)
-                                                getSystemService(Context.INPUT_METHOD_SERVICE);
-                                if (imm != null) {
-                                    imm.showSoftInput(
-                                            mSearchEditText, InputMethodManager.SHOW_IMPLICIT);
-                                }
-                            });
+                    mSearchEditText.post(() -> {
+                        updateSearchViewHint();
+                        mSearchEditText.requestFocus();
+                        if (oneShotKeyboardSuppress.compareAndSet(true, false)) {
+                            return;
+                        }
+                        InputMethodManager imm =
+                                (InputMethodManager) getSystemService(Context.INPUT_METHOD_SERVICE);
+                        if (imm != null) {
+                            imm.showSoftInput(mSearchEditText, InputMethodManager.SHOW_IMPLICIT);
+                        }
+                    });
                     if (binding.speedDial.isOpen()) {
                         binding.speedDial.close();
                     }

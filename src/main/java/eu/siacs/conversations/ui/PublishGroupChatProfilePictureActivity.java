@@ -102,9 +102,9 @@ public class PublishGroupChatProfilePictureActivity extends XmppActivity
         Activities.setStatusAndNavigationBarColors(this, binding.getRoot());
         setSupportActionBar(this.binding.toolbar);
         configureActionBar(getSupportActionBar());
-        this.binding.cancelButton.setOnClickListener((v) -> this.finish());
+        this.binding.cancelButton.setOnClickListener(v -> this.finish());
         this.binding.secondaryHint.setVisibility(View.GONE);
-        this.binding.accountImage.setOnClickListener((v) -> pickAvatar());
+        this.binding.accountImage.setOnClickListener(v -> pickAvatar());
 
         final var intent = getIntent();
         final var uuid = intent == null ? null : intent.getStringExtra("uuid");

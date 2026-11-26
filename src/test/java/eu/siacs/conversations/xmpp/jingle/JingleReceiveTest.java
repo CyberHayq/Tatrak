@@ -95,12 +95,20 @@ public class JingleReceiveTest {
 
     /** Runs the receiver on [wire]; true when it found [target] published at the moment it reported success. */
     static boolean receive(final File target, final TransportSecurity security, final byte[] wire, final long size, final boolean openPgp) throws Exception {
+        // as setupTransceiver: a partial file only for OpenPGP, apart from the target as cache/partial/ is
+        final File partial = openPgp ? File.createTempFile("jingle", ".partial") : null;
+        if (partial != null) partial.deleteOnExit();
+        return receive(target, security, wire, size, partial);
+    }
+
+    /** Receives through [partial] (OpenPGP) or, without one, through the media store's writer. */
+    static boolean receive(final File target, final TransportSecurity security, final byte[] wire, final long size, final File partial) throws Exception {
         final Class<?> type = Class.forName(JingleFileTransferConnection.class.getName() + "$FileReceiver");
         final var constructor = type.getDeclaredConstructor(
-                File.class, TransportSecurity.class, InputStream.class, CountDownLatch.class, long.class, Runnable.class, boolean.class);
+                File.class, File.class, TransportSecurity.class, InputStream.class, CountDownLatch.class, long.class, Runnable.class, boolean.class);
         constructor.setAccessible(true);
         final Runnable receiver = (Runnable) constructor.newInstance(
-                target, security, new ByteArrayInputStream(wire), new CountDownLatch(0), size, (Runnable) () -> {}, openPgp);
+                partial, target, security, new ByteArrayInputStream(wire), new CountDownLatch(0), size, (Runnable) () -> {}, partial != null);
         final var field = type.getSuperclass().getDeclaredField("complete");
         field.setAccessible(true);
         final ListenableFuture<?> complete = (ListenableFuture<?>) field.get(receiver);

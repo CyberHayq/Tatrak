@@ -27,6 +27,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.List;
 import java.util.Locale;
 import javax.net.ssl.SSLHandshakeException;
 import okhttp3.Call;
@@ -36,6 +37,7 @@ import okhttp3.Request;
 import okhttp3.Response;
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.io.CipherOutputStream;
+import org.bouncycastle.crypto.io.InvalidCipherTextIOException;
 import org.bouncycastle.crypto.modes.GCMBlockCipher;
 import org.bouncycastle.crypto.params.AEADParameters;
 import org.bouncycastle.crypto.params.KeyParameter;
@@ -132,25 +134,38 @@ public class HttpDownloadConnection implements Transferable {
     private void setupFile() {
         final String reference = mUrl.fragment();
         if (reference != null && AesGcmURL.IV_KEY.matcher(reference).matches()) {
-            // TODO create a folder for partial downloads (because camera and recorder will also
-            // write to sub directories)
-            this.file = new File(mXmppConnectionService.getCacheDir(), message.getUuid());
             this.transportSecurity = TransportSecurity.ofAnchor(CryptoHelper.hexToBytes(reference));
-            Log.d(
-                    Config.LOGTAG,
-                    "create temporary OMEMO encrypted file: "
-                            + this.file.getAbsolutePath()
-                            + "("
-                            + message.getMimeType()
-                            + ")");
         } else {
-            this.file = mXmppConnectionService.getFileBackend().getFile(message, false);
             this.transportSecurity = null;
         }
+        this.file = mXmppConnectionService.getFileBackend().getFile(message, false);
+    }
+
+    // Tatrak: a plain download into the media store (not OMEMO ciphertext, not an OpenPGP file)
+    private boolean isStoredAttachment() {
+        return transportSecurity == null
+                && am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().isEncrypted(file);
     }
 
     private void download(final boolean interactive) {
+        // Tatrak: one worker per message owns its partial file, from here until the worker ended
+        if (mHttpConnectionManager.claimDownloadWorker(this) != null) {
+            Log.d(Config.LOGTAG, "a download of " + message.getUuid() + " is still running");
+            return;
+        }
         EXECUTOR.execute(new FileDownloader(interactive));
+    }
+
+    // Tatrak: a partial file is bound to the message, the transfer mode and the URL (with its key)
+    private File partialFile() {
+        final String mode = transportSecurity != null ? "aesgcm" : "raw";
+        return new FileBackend.Cache(mXmppConnectionService)
+                .partial(message.getUuid() + '\n' + mode + '\n' + mUrl);
+    }
+
+    // Tatrak: the strong ETag and the effective URL (after redirects) the partial file came from
+    private static File validatorFile(final File partial) {
+        return new File(partial.getPath() + ".validator");
     }
 
     private void checkFileSize(final boolean interactive) {
@@ -171,7 +186,9 @@ public class HttpDownloadConnection implements Transferable {
         this.mXmppConnectionService.updateConversationUi();
     }
 
-    private void decryptFile(final TransportSecurity transportSecurity) throws IOException {
+    // Tatrak: decrypted straight into the media store, not into cache/decrypted (no plaintext on disk)
+    private void decryptFile(final File partial, final TransportSecurity transportSecurity)
+            throws IOException {
         final var outputFile = mXmppConnectionService.getFileBackend().getFile(message);
 
         final var directory = outputFile.getParentFile();
@@ -189,20 +206,28 @@ public class HttpDownloadConnection implements Transferable {
         final var writer =
                 am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().createAttachment(outputFile);
         try {
-            try (final InputStream is = new FileInputStream(this.file);
-                    final CipherOutputStream outputStream =
+            try (final var is = new FileInputStream(partial);
+                    final var outputStream =
                             new CipherOutputStream(writer.getOutputStream(), cipher)) {
                 ByteStreams.copy(is, outputStream);
             }
             writer.commit();
+        } catch (final InvalidCipherTextIOException e) {
+            if (partial.delete()) {
+                Log.d(
+                        Config.LOGTAG,
+                        "deleted encrypted file with invalid authentication tag "
+                                + partial.getAbsolutePath());
+            }
+            throw e;
         } finally {
             writer.abort(); // nothing after a commit; otherwise the partial output is gone
         }
 
-        if (file.delete()) {
+        if (partial.delete()) {
             Log.w(
                     Config.LOGTAG,
-                    "deleted temporary OMEMO encrypted file " + file.getAbsolutePath());
+                    "deleted temporary OMEMO encrypted file " + partial.getAbsolutePath());
         }
     }
 
@@ -231,13 +256,6 @@ public class HttpDownloadConnection implements Transferable {
                         });
     }
 
-    private void decryptIfNeeded() throws IOException {
-        final var transportSecurity = this.transportSecurity;
-        if (transportSecurity != null) {
-            decryptFile(transportSecurity);
-        }
-    }
-
     private void changeStatus(final int status) {
         this.mStatus = status;
         this.mXmppConnectionService.updateConversationUi();
@@ -259,7 +277,7 @@ public class HttpDownloadConnection implements Transferable {
         } else if (e instanceof FileWriterException) {
             mXmppConnectionService.showErrorToastInUi(
                     R.string.download_failed_could_not_write_file);
-        } else if (e instanceof InvalidFileException) {
+        } else if (e instanceof InvalidFileException | e instanceof InvalidCipherTextIOException) {
             mXmppConnectionService.showErrorToastInUi(R.string.download_failed_invalid_file);
         } else {
             mXmppConnectionService.showErrorToastInUi(R.string.download_failed_file_not_found);
@@ -421,10 +439,29 @@ public class HttpDownloadConnection implements Transferable {
 
         @Override
         public void run() {
+            // Tatrak: the claim taken in download(boolean) ends only after the partial file closed
+            try {
+                downloadAndFinish();
+            } finally {
+                mHttpConnectionManager.releaseDownloadWorker(HttpDownloadConnection.this);
+            }
+        }
+
+        private void downloadAndFinish() {
             try {
                 changeStatus(STATUS_DOWNLOADING);
-                download();
-                decryptIfNeeded();
+                // Tatrak: no partial file for a media store attachment (written in place)
+                final var partial = isStoredAttachment() ? null : partialFile();
+                download(partial);
+                final var transportSecurity = HttpDownloadConnection.this.transportSecurity;
+                if (transportSecurity != null) {
+                    decryptFile(partial, transportSecurity);
+                } else if (partial != null) {
+                    FileBackend.move(partial, HttpDownloadConnection.this.file);
+                }
+                if (partial != null && validatorFile(partial).delete()) {
+                    Log.d(Config.LOGTAG, "deleted the validator of the used partial file");
+                }
                 if (message.getEncryption() == Message.ENCRYPTION_DECRYPTED) {
                     message.setEncryption(Message.ENCRYPTION_PGP);
                 }
@@ -451,25 +488,27 @@ public class HttpDownloadConnection implements Transferable {
             }
         }
 
-        private void download() throws Exception {
+        private void download(@Nullable final File partial) throws Exception {
             final long expected = expectedSize;
-            final var fileExists = file.exists();
-            final var existingFileSize = fileExists ? file.length() : -1L;
-            // Tatrak: a media store file exists only once complete, and its size is not the plain
-            // size: it is never resumed, and an existing one is kept
-            final boolean stored =
-                    am.cyberhayq.chat.storage.media.EncryptedMediaStore.get().isEncrypted(file);
-
-            if (fileExists) {
-                if (stored) {
-                    Log.d(Config.LOGTAG, "attachment already downloaded");
-                    return;
-                }
-                if (expected > 0 && existingFileSize == expected) {
-                    Log.d(Config.LOGTAG, "file already exits (presumably decryption failure)");
-                    return;
-                }
+            // Tatrak: a plain attachment of the media store is written straight into it, without
+            // resume (no plaintext in the cache); one that exists is complete and kept
+            final boolean stored = partial == null;
+            if (stored && file.exists()) {
+                Log.d(Config.LOGTAG, "attachment already downloaded");
+                return;
             }
+            // Tatrak: a partial file is resumed only with the validator it came with (ETag, URL);
+            // one of full length is fetched again, its length alone does not prove it complete
+            final File validatorFile = stored ? null : validatorFile(partial);
+            final List<String> validator =
+                    validatorFile != null && validatorFile.exists()
+                            ? com.google.common.io.Files.asCharSource(
+                                            validatorFile, java.nio.charset.StandardCharsets.UTF_8)
+                                    .readLines()
+                            : null;
+            final var fileExists =
+                    !stored && partial.exists() && validator != null && validator.size() == 2;
+            final var existingFileSize = fileExists ? partial.length() : -1L;
             final OkHttpClient client =
                     mHttpConnectionManager.buildHttpClient(
                             mUrl, message.getConversation().getAccount(), interactive);
@@ -478,7 +517,7 @@ public class HttpDownloadConnection implements Transferable {
                     new Request.Builder().url(URL.stripFragment(mUrl));
 
             final boolean tryResume =
-                    !stored && fileExists && existingFileSize > 0 && existingFileSize < expected;
+                    fileExists && existingFileSize > 0 && existingFileSize < expected;
             final long resumeSize;
             if (tryResume) {
                 resumeSize = existingFileSize;
@@ -487,6 +526,8 @@ public class HttpDownloadConnection implements Transferable {
                         "http download trying resume after " + resumeSize + " of " + expected);
                 requestBuilder.addHeader(
                         "Range", String.format(Locale.ENGLISH, "bytes=%d-", resumeSize));
+                // Tatrak: the server sends the whole file instead if the object changed
+                requestBuilder.addHeader("If-Range", validator.get(0));
             } else {
                 resumeSize = 0;
             }
@@ -495,20 +536,34 @@ public class HttpDownloadConnection implements Transferable {
             try (final Response response = mostRecentCall.execute()) {
                 throwOnInvalidCode(response);
                 final String contentRange = response.header("Content-Range");
-                final boolean serverResumed =
-                        tryResume
-                                && contentRange != null
-                                && contentRange.startsWith("bytes " + resumeSize + "-");
-                final var body = response.body();
-                if (body == null) {
-                    throw new IOException("response body was null");
+                // Tatrak: a 206 counts only as exactly the rest of this file, from the same object
+                final boolean serverResumed = response.code() == 206;
+                if (serverResumed
+                        && !(tryResume
+                                && String.format(
+                                                Locale.ENGLISH,
+                                                "bytes %d-%d/%d",
+                                                resumeSize,
+                                                expected - 1,
+                                                expected)
+                                        .equals(contentRange)
+                                && validator.get(0).equals(response.header("ETag"))
+                                && validator.get(1).equals(response.request().url().toString()))) {
+                    if (!stored) {
+                        final boolean discarded = validatorFile.delete() & partial.delete();
+                        Log.d(Config.LOGTAG, "partial discarded: " + discarded);
+                    }
+                    throw new IOException("Unexpected partial content " + contentRange);
                 }
+                final var body = response.body();
                 final InputStream inputStream = body.byteStream();
-                if (tryResume && serverResumed) {
+                if (serverResumed) {
                     Log.d(Config.LOGTAG, "server resumed");
-                    final var offset = file.length();
-                    try (final OutputStream os = new FileOutputStream(file, true)) {
-                        copy(inputStream, os, offset, expected);
+                    final var offset = partial.length();
+                    try (final OutputStream os = new FileOutputStream(partial, true)) {
+                        if (copy(inputStream, os, offset, expected) != expected) {
+                            throw new IOException("Response body shorter than expected size");
+                        }
                     }
                 } else {
                     final String contentLength = response.header("Content-Length");
@@ -527,13 +582,13 @@ public class HttpDownloadConnection implements Transferable {
                                     "Content-Length in GET response did not match expected size");
                         }
                     }
-                    final var directory = file.getParentFile();
+                    final var directory = stored ? null : partial.getParentFile(); // Tatrak: none in the store
                     if (directory != null && directory.mkdirs()) {
                         Log.d(Config.LOGTAG, "create directory " + directory.getAbsolutePath());
                     }
                     Log.d(Config.LOGTAG, "creating file for " + message.getUuid()); // Tatrak: no stored name in logs
                     // Tatrak: an attachment is written through the media store, without resume;
-                    // the OMEMO ciphertext and an OpenPGP file in the cache stay plain files
+                    // the OMEMO ciphertext and an OpenPGP file go through the plain partial file
                     if (stored) {
                         final var writer =
                                 am.cyberhayq.chat.storage.media.EncryptedMediaStore.get()
@@ -548,11 +603,26 @@ public class HttpDownloadConnection implements Transferable {
                             writer.abort();
                         }
                     } else {
-                        if (!file.exists() && !file.createNewFile()) {
-                            throw new FileWriterException(file);
+                        if (!partial.exists() && !partial.createNewFile()) {
+                            throw new FileWriterException(partial);
                         }
-                        try (final OutputStream os = new FileOutputStream(file)) {
-                            copy(inputStream, os, 0, expected);
+                        try (final OutputStream os = new FileOutputStream(partial)) {
+                            // Tatrak: the validator after the truncation, so it never stands next
+                            // to bytes of another response
+                            final String etag = response.header("ETag");
+                            if (etag == null || etag.startsWith("W/")) {
+                                if (validatorFile.delete()) {
+                                    Log.d(Config.LOGTAG, "no strong ETag: no resume");
+                                }
+                            } else {
+                                com.google.common.io.Files.asCharSink(
+                                                validatorFile,
+                                                java.nio.charset.StandardCharsets.UTF_8)
+                                        .write(etag + '\n' + response.request().url());
+                            }
+                            if (copy(inputStream, os, 0, expected) != expected) {
+                                throw new IOException("Response body shorter than expected size");
+                            }
                         }
                     }
                 }
@@ -574,7 +644,7 @@ public class HttpDownloadConnection implements Transferable {
                 try {
                     outputStream.write(buffer, 0, count);
                 } catch (final IOException e) {
-                    throw new FileWriterException(file);
+                    throw new FileWriterException();
                 }
                 if (transmitted > expected) {
                     throw new InvalidFileException(

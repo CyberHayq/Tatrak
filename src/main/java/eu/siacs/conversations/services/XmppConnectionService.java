@@ -93,7 +93,6 @@ import eu.siacs.conversations.utils.ConversationsFileObserver;
 import eu.siacs.conversations.utils.CryptoHelper;
 import eu.siacs.conversations.utils.MimeUtils;
 import eu.siacs.conversations.utils.NetworkManager;
-import eu.siacs.conversations.utils.PhoneHelper;
 import eu.siacs.conversations.utils.QuickLoader;
 import eu.siacs.conversations.utils.ReplacingSerialSingleThreadExecutor;
 import eu.siacs.conversations.utils.Resolver;
@@ -133,6 +132,7 @@ import eu.siacs.conversations.xmpp.manager.RosterManager;
 import eu.siacs.conversations.xmpp.manager.VCardManager;
 import im.conversations.android.model.Bookmark;
 import im.conversations.android.model.ImmutableBookmark;
+import im.conversations.android.xmpp.StreamElementWriter;
 import im.conversations.android.xmpp.model.delay.Delay;
 import im.conversations.android.xmpp.model.stanza.Iq;
 import im.conversations.android.xmpp.model.up.Push;
@@ -500,42 +500,36 @@ public class XmppConnectionService extends Service {
                 logoutAndSave(true);
                 return START_NOT_STICKY;
             case ACTION_CLEAR_MESSAGE_NOTIFICATION:
-                mNotificationExecutor.execute(
-                        () -> {
-                            try {
-                                final Conversation c = findConversationByUuid(uuid);
-                                if (c != null) {
-                                    mNotificationService.clearMessages(c);
-                                } else {
-                                    mNotificationService.clearMessages();
-                                }
-                                restoredFromDatabaseLatch.await();
+                mNotificationExecutor.execute(() -> {
+                    try {
+                        final Conversation c = findConversationByUuid(uuid);
+                        if (c != null) {
+                            mNotificationService.clearMessages(c);
+                        } else {
+                            mNotificationService.clearMessages();
+                        }
+                        restoredFromDatabaseLatch.await();
 
-                            } catch (InterruptedException e) {
-                                Log.d(
-                                        Config.LOGTAG,
-                                        "unable to process clear message notification");
-                            }
-                        });
+                    } catch (InterruptedException e) {
+                        Log.d(Config.LOGTAG, "unable to process clear message notification");
+                    }
+                });
                 break;
             case ACTION_CLEAR_MISSED_CALL_NOTIFICATION:
-                mNotificationExecutor.execute(
-                        () -> {
-                            try {
-                                final Conversation c = findConversationByUuid(uuid);
-                                if (c != null) {
-                                    mNotificationService.clearMissedCalls(c);
-                                } else {
-                                    mNotificationService.clearMissedCalls();
-                                }
-                                restoredFromDatabaseLatch.await();
+                mNotificationExecutor.execute(() -> {
+                    try {
+                        final Conversation c = findConversationByUuid(uuid);
+                        if (c != null) {
+                            mNotificationService.clearMissedCalls(c);
+                        } else {
+                            mNotificationService.clearMissedCalls();
+                        }
+                        restoredFromDatabaseLatch.await();
 
-                            } catch (InterruptedException e) {
-                                Log.d(
-                                        Config.LOGTAG,
-                                        "unable to process clear missed call notification");
-                            }
-                        });
+                    } catch (InterruptedException e) {
+                        Log.d(Config.LOGTAG, "unable to process clear missed call notification");
+                    }
+                });
                 break;
             case ACTION_DISMISS_CALL:
                 {
@@ -583,63 +577,54 @@ public class XmppConnectionService extends Service {
                 if (body == null || body.length() <= 0) {
                     break;
                 }
-                mNotificationExecutor.execute(
-                        () -> {
-                            try {
-                                restoredFromDatabaseLatch.await();
-                                final Conversation c = findConversationByUuid(uuid);
-                                if (c != null) {
-                                    directReply(
-                                            c,
-                                            body.toString(),
-                                            lastMessageUuid,
-                                            dismissNotification);
-                                }
-                            } catch (InterruptedException e) {
-                                Log.d(Config.LOGTAG, "unable to process direct reply");
-                            }
-                        });
+                mNotificationExecutor.execute(() -> {
+                    try {
+                        restoredFromDatabaseLatch.await();
+                        final Conversation c = findConversationByUuid(uuid);
+                        if (c != null) {
+                            directReply(c, body.toString(), lastMessageUuid, dismissNotification);
+                        }
+                    } catch (InterruptedException e) {
+                        Log.d(Config.LOGTAG, "unable to process direct reply");
+                    }
+                });
                 break;
             case ACTION_MARK_AS_READ:
-                mNotificationExecutor.execute(
-                        () -> {
-                            final Conversation c = findConversationByUuid(uuid);
-                            if (c == null) {
-                                Log.d(
-                                        Config.LOGTAG,
-                                        "received mark read intent for unknown conversation ("
-                                                + uuid
-                                                + ")");
-                                return;
-                            }
-                            try {
-                                restoredFromDatabaseLatch.await();
-                                sendReadMarker(c, null);
-                            } catch (InterruptedException e) {
-                                Log.d(
-                                        Config.LOGTAG,
-                                        "unable to process notification read marker for"
-                                                + " conversation "
-                                                + c.getName());
-                            }
-                        });
+                mNotificationExecutor.execute(() -> {
+                    final Conversation c = findConversationByUuid(uuid);
+                    if (c == null) {
+                        Log.d(
+                                Config.LOGTAG,
+                                "received mark read intent for unknown conversation ("
+                                        + uuid
+                                        + ")");
+                        return;
+                    }
+                    try {
+                        restoredFromDatabaseLatch.await();
+                        sendReadMarker(c, null);
+                    } catch (InterruptedException e) {
+                        Log.d(
+                                Config.LOGTAG,
+                                "unable to process notification read marker for"
+                                        + " conversation "
+                                        + c.getName());
+                    }
+                });
                 break;
             case ACTION_SNOOZE:
-                mNotificationExecutor.execute(
-                        () -> {
-                            final Conversation c = findConversationByUuid(uuid);
-                            if (c == null) {
-                                Log.d(
-                                        Config.LOGTAG,
-                                        "received snooze intent for unknown conversation ("
-                                                + uuid
-                                                + ")");
-                                return;
-                            }
-                            c.setMutedTill(Instant.now().plus(Duration.ofMinutes(30)));
-                            mNotificationService.clearMessages(c);
-                            updateConversation(c);
-                        });
+                mNotificationExecutor.execute(() -> {
+                    final Conversation c = findConversationByUuid(uuid);
+                    if (c == null) {
+                        Log.d(
+                                Config.LOGTAG,
+                                "received snooze intent for unknown conversation (" + uuid + ")");
+                        return;
+                    }
+                    c.setMutedTill(Instant.now().plus(Duration.ofMinutes(30)));
+                    mNotificationService.clearMessages(c);
+                    updateConversation(c);
+                });
             case AudioManager.RINGER_MODE_CHANGED_ACTION:
             case NotificationManager.ACTION_INTERRUPTION_FILTER_CHANGED:
                 if (appSettings.isDndSyncSystem() && appSettings.isAutomaticAvailability()) {
@@ -703,8 +688,20 @@ public class XmppConnectionService extends Service {
                 return START_NOT_STICKY;
         }
         final var extras = intent == null ? null : intent.getExtras();
+        final var accountExtra = extras == null ? null : extras.getString("account");
         try {
-            internalPingExecutor.execute(() -> manageAccountConnectionStates(action, extras));
+            internalPingExecutor.execute(() -> {
+                if (ACTION_FCM_MESSAGE_RECEIVED.equals(action) && accountExtra != null) {
+                    try {
+                        manageAccountConnectionStates(action, Jid.of(accountExtra));
+                        return;
+                    } catch (final IllegalArgumentException e) {
+                        Log.e(Config.LOGTAG, "push contained invalid account");
+                        return;
+                    }
+                }
+                manageAccountConnectionStates(action, null);
+            });
         } catch (final RejectedExecutionException e) {
             Log.e(Config.LOGTAG, "can not schedule connection states manager");
         }
@@ -763,8 +760,7 @@ public class XmppConnectionService extends Service {
     }
 
     private synchronized void manageAccountConnectionStates(
-            final String action, final Bundle extras) {
-        final String pushedAccountHash = extras == null ? null : extras.getString("account");
+            final String action, final Jid pushedAccount) {
         final boolean interactive = java.util.Objects.equals(ACTION_TRY_AGAIN, action);
         WakeLockHelper.acquire(wakeLock);
         boolean pingNow =
@@ -772,12 +768,9 @@ public class XmppConnectionService extends Service {
                         || (Config.POST_CONNECTIVITY_CHANGE_PING_INTERVAL > 0
                                 && ACTION_POST_CONNECTIVITY_CHANGE.equals(action));
         final HashSet<Account> pingCandidates = new HashSet<>();
-        final String androidId = pushedAccountHash == null ? null : PhoneHelper.getAndroidId(this);
         for (final Account account : accounts) {
             final boolean pushWasMeantForThisAccount =
-                    androidId != null
-                            && CryptoHelper.getAccountFingerprint(account, androidId)
-                                    .equals(pushedAccountHash);
+                    account.getJid().asBareJid().equals(pushedAccount);
             if (pushWasMeantForThisAccount) {
                 final var manager =
                         account.getXmppConnection().getManager(PushNotificationManager.class);
@@ -1116,6 +1109,7 @@ public class XmppConnectionService extends Service {
         final boolean hasEnabledAccounts = hasEnabledAccounts();
         toggleSetProfilePictureActivity(hasEnabledAccounts);
         reconfigurePushDistributor();
+        reconfigurePushMessageReceiver();
 
         if (CallIntegration.hasSystemFeature(this)) {
             CallIntegrationConnectionService.togglePhoneAccountsAsync(this, this.accounts);
@@ -1193,13 +1187,12 @@ public class XmppConnectionService extends Service {
                 this::manageAccountConnectionStatesInternal, 10, 10, TimeUnit.SECONDS);
         final SharedPreferences sharedPreferences =
                 androidx.preference.PreferenceManager.getDefaultSharedPreferences(this);
-        sharedPreferences.registerOnSharedPreferenceChangeListener(
-                (sp, key) -> {
-                    Log.d(Config.LOGTAG, "preference '" + key + "' has changed");
-                    if (AppSettings.KEEP_FOREGROUND_SERVICE.equals(key)) {
-                        toggleForegroundService();
-                    }
-                });
+        sharedPreferences.registerOnSharedPreferenceChangeListener((sp, key) -> {
+            Log.d(Config.LOGTAG, "preference '" + key + "' has changed");
+            if (AppSettings.KEEP_FOREGROUND_SERVICE.equals(key)) {
+                toggleForegroundService();
+            }
+        });
     }
 
     private void checkForDeletedFiles() {
@@ -1788,6 +1781,7 @@ public class XmppConnectionService extends Service {
                             chatStateManager.getOutgoingChatStateExtension(conversation));
                 }
             }
+            Log.d(Config.LOGTAG, StreamElementWriter.asStringUnchecked(packet));
             sendMessagePacket(account, packet);
         }
     }
@@ -1929,40 +1923,35 @@ public class XmppConnectionService extends Service {
     }
 
     public void loadPhoneContacts() {
-        mContactMergerExecutor.execute(
-                () -> {
-                    final Map<Jid, JabberIdContact> contacts = JabberIdContact.load(this);
-                    Log.d(Config.LOGTAG, "start merging phone contacts with roster");
-                    // TODO if we do this merge this only on enabled accounts we need to trigger
-                    // this upon enable
-                    for (final Account account : accounts) {
-                        final var remaining =
-                                new ArrayList<>(
-                                        account.getRoster()
-                                                .getWithSystemAccounts(JabberIdContact.class));
-                        for (final JabberIdContact jidContact : contacts.values()) {
-                            final Contact contact =
-                                    account.getRoster().getContact(jidContact.getJid());
-                            boolean needsCacheClean = contact.setPhoneContact(jidContact);
-                            if (needsCacheClean) {
-                                getAvatarService().clear(contact);
-                            }
-                            remaining.remove(contact);
-                        }
-                        for (final Contact contact : remaining) {
-                            boolean needsCacheClean =
-                                    contact.unsetPhoneContact(JabberIdContact.class);
-                            if (needsCacheClean) {
-                                getAvatarService().clear(contact);
-                            }
-                        }
+        mContactMergerExecutor.execute(() -> {
+            final Map<Jid, JabberIdContact> contacts = JabberIdContact.load(this);
+            Log.d(Config.LOGTAG, "start merging phone contacts with roster");
+            // TODO if we do this merge this only on enabled accounts we need to trigger
+            // this upon enable
+            for (final Account account : accounts) {
+                final var remaining =
+                        new ArrayList<>(
+                                account.getRoster().getWithSystemAccounts(JabberIdContact.class));
+                for (final JabberIdContact jidContact : contacts.values()) {
+                    final Contact contact = account.getRoster().getContact(jidContact.getJid());
+                    boolean needsCacheClean = contact.setPhoneContact(jidContact);
+                    if (needsCacheClean) {
+                        getAvatarService().clear(contact);
                     }
-                    Log.d(Config.LOGTAG, "finished merging phone contacts");
-                    mShortcutService.refresh(
-                            mInitialAddressbookSyncCompleted.compareAndSet(false, true));
-                    updateRosterUi();
-                    mQuickConversationsService.considerSync();
-                });
+                    remaining.remove(contact);
+                }
+                for (final Contact contact : remaining) {
+                    boolean needsCacheClean = contact.unsetPhoneContact(JabberIdContact.class);
+                    if (needsCacheClean) {
+                        getAvatarService().clear(contact);
+                    }
+                }
+            }
+            Log.d(Config.LOGTAG, "finished merging phone contacts");
+            mShortcutService.refresh(mInitialAddressbookSyncCompleted.compareAndSet(false, true));
+            updateRosterUi();
+            mQuickConversationsService.considerSync();
+        });
     }
 
     public List<Conversation> getConversations() {
@@ -2224,10 +2213,9 @@ public class XmppConnectionService extends Service {
                 loadMessagesFromDb = false;
             }
             if (async) {
-                DATABASE_READER.execute(
-                        () ->
-                                postProcessConversation(
-                                        conversation, loadMessagesFromDb, joinAfterCreate, query));
+                DATABASE_READER.execute(() ->
+                        postProcessConversation(
+                                conversation, loadMessagesFromDb, joinAfterCreate, query));
             } else {
                 postProcessConversation(conversation, loadMessagesFromDb, joinAfterCreate, query);
             }
@@ -2256,13 +2244,12 @@ public class XmppConnectionService extends Service {
         }
         existing.setAccount(account);
         final var loadMessagesFromDb = restoreFromArchive(existing);
-        DATABASE_READER.execute(
-                () ->
-                        postProcessConversation(
-                                existing,
-                                loadMessagesFromDb,
-                                existing.getMode() == Conversational.MODE_MULTI,
-                                null));
+        DATABASE_READER.execute(() ->
+                postProcessConversation(
+                        existing,
+                        loadMessagesFromDb,
+                        existing.getMode() == Conversational.MODE_MULTI,
+                        null));
         this.conversations.add(existing);
         if (existing.getMode() == Conversational.MODE_MULTI) {
             account.getXmppConnection()
@@ -2275,10 +2262,7 @@ public class XmppConnectionService extends Service {
 
     private boolean restoreFromArchive(
             final Conversation conversation, final Jid jid, final boolean muc) {
-        if (muc) {
-            conversation.setMode(Conversation.MODE_MULTI);
-            conversation.setContactJid(jid);
-        } else {
+        if (!muc) {
             conversation.setMode(Conversation.MODE_SINGLE);
             conversation.setContactJid(jid.asBareJid());
         }
@@ -2406,6 +2390,29 @@ public class XmppConnectionService extends Service {
 
     public boolean reconfigurePushDistributor() {
         return this.unifiedPushBroker.reconfigurePushDistributor();
+    }
+
+    public void reconfigurePushMessageReceiver() {
+        reconfigurePushMessageReceiver(new AppSettings(this).isGooglePush());
+    }
+
+    public void reconfigurePushMessageReceiver(final boolean enabled) {
+        final var packageManager = this.getPackageManager();
+        final var componentName =
+                new ComponentName(
+                        this.getApplicationContext(),
+                        eu.siacs.conversations.receiver.PushMessageReceiver.class);
+        if (enabled) {
+            packageManager.setComponentEnabledSetting(
+                    componentName,
+                    PackageManager.COMPONENT_ENABLED_STATE_ENABLED,
+                    PackageManager.DONT_KILL_APP);
+        } else {
+            packageManager.setComponentEnabledSetting(
+                    componentName,
+                    PackageManager.COMPONENT_ENABLED_STATE_DISABLED,
+                    PackageManager.DONT_KILL_APP);
+        }
     }
 
     private Optional<UnifiedPushBroker.Transport> renewUnifiedPushEndpoints(
@@ -2896,6 +2903,7 @@ public class XmppConnectionService extends Service {
         }
     }
 
+    // TODO get rid of this. Call Manager
     public void joinMuc(final Conversation conversation) {
         final var account = conversation.getAccount();
         account.getXmppConnection().getManager(MultiUserChatManager.class).join(conversation);
@@ -3001,12 +3009,10 @@ public class XmppConnectionService extends Service {
             final Jid jid,
             final int limit,
             final OnMediaLoaded onMediaLoaded) {
-        new Thread(
-                        () ->
-                                onMediaLoaded.onMediaLoaded(
-                                        fileBackend.convertToAttachments(
-                                                databaseBackend.getRelativeFilePaths(
-                                                        account, jid, limit))))
+        new Thread(() ->
+                onMediaLoaded.onMediaLoaded(
+                        fileBackend.convertToAttachments(
+                                databaseBackend.getRelativeFilePaths(account, jid, limit))))
                 .start();
     }
 
@@ -3739,11 +3745,40 @@ public class XmppConnectionService extends Service {
         }
     }
 
-    private void refreshAllFcmTokens() {
+    public void refreshAllFcmTokens() {
         final var pushManagementService = new PushManagementService(this.getApplicationContext());
         for (final var account : getAccounts()) {
-            if (account.isConnectionEnabled() && pushManagementService.available(account)) {
+            if (account.isConnectionEnabled()
+                    && pushManagementService.isEnabledAvailable(account)) {
                 pushManagementService.registerPushTokenOnServer(account);
+            }
+        }
+    }
+
+    public void disableAllFcmTokens() {
+        for (final var account : getAccounts()) {
+            if (account.isConnectionEnabled()) {
+                final var future =
+                        account.getXmppConnection()
+                                .getManager(PushNotificationManager.class)
+                                .disableAndUnregister();
+                Futures.addCallback(
+                        future,
+                        new FutureCallback<>() {
+                            @Override
+                            public void onSuccess(Void result) {
+                                Log.d(
+                                        Config.LOGTAG,
+                                        account.getJid().asBareJid()
+                                                + ": successfully disabled push");
+                            }
+
+                            @Override
+                            public void onFailure(@NonNull Throwable t) {
+                                Log.d(Config.LOGTAG, "could not disable push", t);
+                            }
+                        },
+                        MoreExecutors.directExecutor());
             }
         }
     }

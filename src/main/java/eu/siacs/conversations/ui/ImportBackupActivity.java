@@ -346,7 +346,7 @@ public class ImportBackupActivity extends ActionBarActivity
         builder.setPositiveButton(R.string.restore, null);
         builder.setCancelable(false);
         final AlertDialog dialog = builder.create();
-        dialog.setOnShowListener((d) -> onDialogShow(backupFile, d, enterPasswordBinding));
+        dialog.setOnShowListener(d -> onDialogShow(backupFile, d, enterPasswordBinding));
         dialog.show();
         if (dialog.getWindow() != null) {
             dialog.getWindow().setLayout(

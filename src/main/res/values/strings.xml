@@ -136,6 +136,8 @@
     <string name="pref_advanced_options">Advanced</string>
     <string name="pref_send_crash_reports">Send crash reports</string>
     <string name="pref_never_send_crash_summary">By sending in stack traces you are helping the development</string>
+    <string name="pref_google_push">Use Google push as fallback</string>
+    <string name="pref_google_push_summary">Wakes the app if aggressive battery saving kills the background connection. No message data is sent to Google.</string>
     <string name="pref_confirm_messages">Read receipts</string>
     <string name="pref_confirm_messages_summary">When enabled, your contacts will see when you’ve read their messages.</string>
     <string name="pref_prevent_screenshots">Prevent Screenshots</string>
@@ -164,6 +166,7 @@
     <string name="account_status_connecting">Connecting\u2026</string>
     <string name="account_status_offline">Offline</string>
     <string name="account_status_unauthorized">Unauthorized</string>
+    <string name="account_status_pending_oauth_authorization">Pending authorization</string>
     <string name="account_status_not_found">Server not found</string>
     <string name="account_status_no_internet">No internet</string>
     <string name="account_status_airplane_mode">Airplane mode</string>
@@ -1205,4 +1208,6 @@
     <string name="show_attachment_options">Show attachment options</string>
     <string name="collapsed">Collapsed</string>
     <string name="expanded">Expanded</string>
+    <string name="could_not_process_oauth_redirect">Could not process OAuth redirect</string>
+    <string name="could_not_redirect_to_identity_provider">Could not redirect to identity provider</string>
 </resources>

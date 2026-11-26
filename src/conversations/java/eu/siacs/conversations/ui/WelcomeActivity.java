@@ -182,13 +182,9 @@ public class WelcomeActivity extends QrCodeProcessingActivity
     @Override
     public void alias(final String alias) {
         if (Strings.isNullOrEmpty(alias)) {
-            runOnUiThread(
-                    () ->
-                            Toast.makeText(
-                                            this,
-                                            R.string.no_certificate_selected,
-                                            Toast.LENGTH_LONG)
-                                    .show());
+            runOnUiThread(() ->
+                    Toast.makeText(this, R.string.no_certificate_selected, Toast.LENGTH_LONG)
+                            .show());
             return;
         }
         xmppConnectionService.createAccountFromKey(alias, this);

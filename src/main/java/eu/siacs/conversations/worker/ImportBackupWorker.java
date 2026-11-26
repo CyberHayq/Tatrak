@@ -70,6 +70,7 @@ import java.util.regex.Pattern;
 import java.util.zip.GZIPInputStream;
 import java.util.zip.ZipException;
 import javax.crypto.BadPaddingException;
+import org.bouncycastle.crypto.InvalidCipherTextException;
 import org.bouncycastle.crypto.engines.AESEngine;
 import org.bouncycastle.crypto.io.CipherInputStream;
 import org.bouncycastle.crypto.modes.AEADBlockCipher;
@@ -212,7 +213,9 @@ public class ImportBackupWorker extends Worker {
         } catch (final Exception e) {
             Log.d(Config.LOGTAG, "error restoring backup");
             final Throwable throwable = e.getCause();
-            if (throwable instanceof BadPaddingException || e instanceof ZipException) {
+            if (throwable instanceof BadPaddingException
+                    || throwable instanceof InvalidCipherTextException
+                    || e instanceof ZipException) {
                 return failure(Reason.DECRYPTION_FAILED);
             } else {
                 return failure(Reason.GENERIC);
@@ -314,30 +317,31 @@ public class ImportBackupWorker extends Worker {
         final AEADBlockCipher cipher = GCMBlockCipher.newInstance(AESEngine.newInstance());
         cipher.init(
                 false, new AEADParameters(new KeyParameter(key), 128, backupFileHeader.getIv()));
-        final CipherInputStream cipherInputStream =
-                new CipherInputStream(countingInputStream, cipher);
-
-        final GZIPInputStream gzipInputStream = new GZIPInputStream(cipherInputStream);
-        final BufferedReader reader =
-                new BufferedReader(new InputStreamReader(gzipInputStream, StandardCharsets.UTF_8));
-        final JsonReader jsonReader = new JsonReader(reader);
-        if (jsonReader.peek() == JsonToken.BEGIN_ARRAY) {
+        try (final InputStream cipherInputStream =
+                keepingReadFailure(new CipherInputStream(countingInputStream, cipher))) {
+            final GZIPInputStream gzipInputStream = new GZIPInputStream(cipherInputStream);
+            final JsonReader jsonReader =
+                    new JsonReader(
+                            new BufferedReader(
+                                    new InputStreamReader(
+                                            gzipInputStream, StandardCharsets.UTF_8)));
+            if (jsonReader.peek() != JsonToken.BEGIN_ARRAY) {
+                throw new IllegalStateException("Backup file did not begin with array");
+            }
             jsonReader.beginArray();
-        } else {
-            throw new IllegalStateException("Backup file did not begin with array");
-        }
-        try {
-            importRows(
-                    db,
-                    jsonReader,
-                    cipherInputStream,
-                    () -> {
-                        importRow(db, jsonReader, backupFileHeader.getJid(), password);
-                        updateImportBackupNotification(fileSize, countingInputStream.getCount());
-                    });
-            finishStagedFile();
-        } finally {
-            abortStagedFile(); // a failed import publishes no file
+            try {
+                importRows(
+                        db,
+                        jsonReader,
+                        cipherInputStream,
+                        () -> {
+                            importRow(db, jsonReader, backupFileHeader.getJid(), password);
+                            updateImportBackupNotification(fileSize, countingInputStream.getCount());
+                        });
+                finishStagedFile();
+            } finally {
+                abortStagedFile(); // a failed import publishes no file
+            }
         }
         if (!skippedRows.isEmpty()) {
             Log.w(Config.LOGTAG, "skipped rows that could not be inserted: " + skippedRows);
@@ -1068,11 +1072,58 @@ public class ImportBackupWorker extends Worker {
                 rowImporter.importRow();
             }
             jsonReader.endArray();
+            // Tatrak: nothing after the array; then the cipher stream is read to its end, where a
+            // failure gzip swallowed comes again (keepingReadFailure) and a bad tag shows
+            if (jsonReader.peek() != JsonToken.END_DOCUMENT) {
+                throw new IOException("Content after the backup's rows");
+            }
             ByteStreams.exhaust(cipherInputStream);
             db.setTransactionSuccessful();
         } finally {
             db.endTransaction();
         }
+    }
+
+    /**
+     * Tatrak: [in] (the cipher stream) with its first read failure thrown again by every later
+     * read. GZIPInputStream swallows a failure while it looks for a second member after the
+     * first, and a bad GCM tag shows exactly there for some backup sizes.
+     */
+    @VisibleForTesting
+    static InputStream keepingReadFailure(final InputStream in) {
+        return new java.io.FilterInputStream(in) {
+            private IOException failure;
+
+            @Override
+            public int read() throws IOException {
+                if (failure != null) throw failure;
+                try {
+                    return super.read();
+                } catch (final IOException e) {
+                    throw failure = e;
+                }
+            }
+
+            @Override
+            public int read(final byte[] b, final int off, final int len) throws IOException {
+                if (failure != null) throw failure;
+                try {
+                    return super.read(b, off, len);
+                } catch (final IOException e) {
+                    throw failure = e;
+                }
+            }
+
+            @Override
+            public long skip(final long n) throws IOException {
+                if (failure != null) throw failure;
+                try {
+                    return super.skip(n);
+                } catch (final IOException e) {
+                    throw failure = e;
+                }
+            }
+        };
     }
 
     @VisibleForTesting

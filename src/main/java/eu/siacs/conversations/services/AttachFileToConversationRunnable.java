@@ -118,10 +118,6 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
                 selectedVideoTranscoderStrategy = TranscoderStrategies.VIDEO_360P;
                 derivedAudioTranscoderStrategy = TranscoderStrategies.AUDIO_MQ;
                 break;
-            case "480":
-                selectedVideoTranscoderStrategy = TranscoderStrategies.VIDEO_480P;
-                derivedAudioTranscoderStrategy = TranscoderStrategies.AUDIO_MQ;
-                break;
             case "720":
                 selectedVideoTranscoderStrategy = TranscoderStrategies.VIDEO_720P;
                 derivedAudioTranscoderStrategy = TranscoderStrategies.AUDIO_HQ;
@@ -130,6 +126,7 @@ public class AttachFileToConversationRunnable implements Runnable, TranscoderLis
                 selectedVideoTranscoderStrategy = TranscoderStrategies.VIDEO_1080P;
                 derivedAudioTranscoderStrategy = TranscoderStrategies.AUDIO_HQ;
                 break;
+            case "480":
             default:
                 selectedVideoTranscoderStrategy = TranscoderStrategies.VIDEO_480P;
                 derivedAudioTranscoderStrategy = TranscoderStrategies.AUDIO_MQ;

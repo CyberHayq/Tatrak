@@ -1571,17 +1571,15 @@ public class RtpSessionActivity extends XmppActivity
                 return;
             }
             resetVisibilityToggleExecutor();
-            runOnUiThread(
-                    () -> {
-                        updateStateDisplay(state, media, contentAddition);
-                        updateVerifiedShield(
-                                verified && STATES_SHOWING_SWITCH_TO_CHAT.contains(state));
-                        updateButtonConfiguration(state, media, contentAddition);
-                        updateVideoViews(state);
-                        updateIncomingCallScreen(state, contact);
-                        updateSupportWarning(state, contact);
-                        invalidateOptionsMenu();
-                    });
+            runOnUiThread(() -> {
+                updateStateDisplay(state, media, contentAddition);
+                updateVerifiedShield(verified && STATES_SHOWING_SWITCH_TO_CHAT.contains(state));
+                updateButtonConfiguration(state, media, contentAddition);
+                updateVideoViews(state);
+                updateIncomingCallScreen(state, contact);
+                updateSupportWarning(state, contact);
+                invalidateOptionsMenu();
+            });
             if (END_CARD.contains(state)) {
                 final JingleRtpConnection rtpConnection = requireRtpConnection();
                 resetIntent(account, with, state, rtpConnection.getMedia());

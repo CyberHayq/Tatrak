@@ -91,13 +91,10 @@ public class HttpDownloadDecryptTest {
         final File target = service.getFileBackend().getFile(message);
         Files.write(downloaded.toPath(), wire);
         final var connection = new HttpDownloadConnection(message, service.getHttpConnectionManager());
-        final var file = HttpDownloadConnection.class.getDeclaredField("file");
-        file.setAccessible(true);
-        file.set(connection, downloaded);
-        final var decryptFile = HttpDownloadConnection.class.getDeclaredMethod("decryptFile", TransportSecurity.class);
+        final var decryptFile = HttpDownloadConnection.class.getDeclaredMethod("decryptFile", File.class, TransportSecurity.class);
         decryptFile.setAccessible(true);
         try {
-            decryptFile.invoke(connection, security);
+            decryptFile.invoke(connection, downloaded, security);
         } catch (final InvocationTargetException e) {
             assertFalse(target.exists());
             throw e.getCause();
@@ -130,7 +127,7 @@ public class HttpDownloadDecryptTest {
         assertThrows(IOException.class, () -> decrypt(downloaded, bad));
         assertEquals(0, left("attachments").length);
         assertEquals(0, left("tatrak_tmp").length);
-        assertTrue(downloaded.exists()); // upstream keeps the ciphertext for another try
+        assertFalse(downloaded.exists()); // upstream dfeb4bc3e deletes the ciphertext on a bad tag
         assertFalse(plaintextOnDisk());
 
         final File target = decrypt(downloaded, seal(plain));

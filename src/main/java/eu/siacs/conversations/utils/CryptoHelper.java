@@ -7,10 +7,8 @@ import android.util.Base64;
 import android.util.Pair;
 import androidx.annotation.StringRes;
 import eu.siacs.conversations.R;
-import eu.siacs.conversations.entities.Account;
 import eu.siacs.conversations.entities.Message;
 import eu.siacs.conversations.xmpp.Jid;
-import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
@@ -21,7 +19,6 @@ import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
-import java.util.regex.Pattern;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.asn1.x500.style.IETFUtils;
@@ -29,8 +26,6 @@ import org.bouncycastle.cert.jcajce.JcaX509CertificateHolder;
 
 public final class CryptoHelper {
 
-    public static final Pattern UUID_PATTERN =
-            Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
     public static final byte[] ONE = new byte[] {0, 0, 0, 1};
     private static final char[] CHARS =
             "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz123456789+-/#$!?".toCharArray();
@@ -234,23 +229,6 @@ public final class CryptoHelper {
         MessageDigest md = MessageDigest.getInstance("SHA-1");
         byte[] fingerprint = md.digest(input);
         return prettifyFingerprintCert(bytesToHex(fingerprint));
-    }
-
-    public static String getFingerprint(Jid jid, String androidId) {
-        return getFingerprint(jid.toString() + "\00" + androidId);
-    }
-
-    public static String getAccountFingerprint(Account account, String androidId) {
-        return getFingerprint(account.getJid().asBareJid(), androidId);
-    }
-
-    public static String getFingerprint(String value) {
-        try {
-            MessageDigest md = MessageDigest.getInstance("SHA-1");
-            return bytesToHex(md.digest(value.getBytes(StandardCharsets.UTF_8)));
-        } catch (Exception e) {
-            return "";
-        }
     }
 
     public static @StringRes int encryptionTypeToText(final int encryption) {

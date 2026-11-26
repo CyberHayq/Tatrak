@@ -21,11 +21,11 @@ public class PresenceParser extends AbstractParser
         final var multiUserChatManager = getManager(MultiUserChatManager.class);
         final var type = presence.getType();
         if ((type == null || type == Presence.Type.UNAVAILABLE)
-                && presence.hasExtension(MucUser.class)) {
+                && presence.hasSingleExtension(MucUser.class)) {
             multiUserChatManager.handlePresence(presence);
         } else if (type == Presence.Type.ERROR
                 && (presence.hasExtension(MultiUserChat.class)
-                        || multiUserChatManager.isMuc(presence.getFrom()))) {
+                        || multiUserChatManager.isOpenMultiUserChat(presence.getFrom()))) {
             multiUserChatManager.handleErrorPresence(presence);
         } else {
             getManager(PresenceManager.class).handlePresence(presence);

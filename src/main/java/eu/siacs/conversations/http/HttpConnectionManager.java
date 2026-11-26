@@ -55,20 +55,19 @@ public class HttpConnectionManager extends AbstractConnectionManager {
 
     public static final Executor EXECUTOR = Executors.newFixedThreadPool(4);
 
-    private static final OkHttpClient OK_HTTP_CLIENT;
+    public static final OkHttpClient OK_HTTP_CLIENT;
 
     static {
         OK_HTTP_CLIENT =
                 new OkHttpClient.Builder()
-                        .addInterceptor(
-                                chain -> {
-                                    final Request original = chain.request();
-                                    final Request modified =
-                                            original.newBuilder()
-                                                    .header("User-Agent", getUserAgent())
-                                                    .build();
-                                    return chain.proceed(modified);
-                                })
+                        .addInterceptor(chain -> {
+                            final Request original = chain.request();
+                            final Request modified =
+                                    original.newBuilder()
+                                            .header("User-Agent", getUserAgent())
+                                            .build();
+                            return chain.proceed(modified);
+                        })
                         .build();
     }
 
@@ -109,6 +108,11 @@ public class HttpConnectionManager extends AbstractConnectionManager {
                     return;
                 }
             }
+            // Tatrak: a cancelled attempt leaves the list before its worker ended
+            if (isDownloadWorkerRunning(message)) {
+                Log.d(Config.LOGTAG, "the previous download of " + message.getUuid() + " still ends");
+                return;
+            }
             final HttpDownloadConnection connection = new HttpDownloadConnection(message, this);
             connection.init(interactive);
             this.downloadConnections.add(connection);
@@ -135,6 +139,31 @@ public class HttpConnectionManager extends AbstractConnectionManager {
     void finishConnection(HttpDownloadConnection connection) {
         synchronized (this.downloadConnections) {
             this.downloadConnections.remove(connection);
+        }
+    }
+
+    // Tatrak: message uuid -> the connection whose worker owns the message's partial file, from
+    // scheduling until the worker closed it (a cancelled connection leaves downloadConnections
+    // earlier)
+    private final java.util.Map<String, HttpDownloadConnection> downloadWorkers =
+            new java.util.HashMap<>();
+
+    /** Tatrak: null when [connection] now owns its message's worker, else the current owner. */
+    HttpDownloadConnection claimDownloadWorker(final HttpDownloadConnection connection) {
+        synchronized (this.downloadWorkers) {
+            return this.downloadWorkers.putIfAbsent(connection.getMessage().getUuid(), connection);
+        }
+    }
+
+    private boolean isDownloadWorkerRunning(final Message message) {
+        synchronized (this.downloadWorkers) {
+            return this.downloadWorkers.containsKey(message.getUuid());
+        }
+    }
+
+    void releaseDownloadWorker(final HttpDownloadConnection connection) {
+        synchronized (this.downloadWorkers) {
+            this.downloadWorkers.remove(connection.getMessage().getUuid(), connection);
         }
     }
 

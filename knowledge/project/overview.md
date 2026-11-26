@@ -27,7 +27,7 @@ sources:
 | Display name | Tatrak (`appName` in `build.gradle`)[^build-gradle] |
 | applicationId | `am.cyberhayq.chat` (was `eu.siacs.conversations`)[^build-gradle] |
 | Gradle `namespace` / `R` package | `eu.siacs.conversations` (unchanged, keeps upstream code compiling)[^build-gradle] |
-| Base | Conversations 2.21.0 (`versionName`), upstream remote `upstream` → `https://codeberg.org/iNPUTmice/Conversations.git`[^upstream] |
+| Base | Conversations 2.21.5 (tag `f7b56d1e5`, merged 2026-11-27; forked from 2.21.0), upstream remote `upstream` → `https://codeberg.org/iNPUTmice/Conversations.git`[^upstream] |
 | Working branch | `main` |
 | Languages | Java (upstream), Kotlin 2.4.21 + Jetpack Compose (BOM `2026.09.00`) for new UI[^build-gradle] |
 | SDK levels | `minSdk` 26 (raised from upstream's 23 on 2026-11-09), `compileSdk` 37 |

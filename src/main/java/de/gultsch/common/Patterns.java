@@ -3,19 +3,24 @@ package de.gultsch.common;
 import com.google.common.base.Joiner;
 import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
+import eu.siacs.conversations.BuildConfig;
 import java.util.Arrays;
 import java.util.List;
 import java.util.regex.Pattern;
 
 public class Patterns {
 
-    private static List<String> PUBLIC_URI_SCHEMES =
+    public static final Pattern UUID =
+            Pattern.compile("[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}");
+
+    private static final List<String> PUBLIC_URI_SCHEMES =
             Arrays.asList(
                     "tel", "xmpp", "http", "https", "geo", "mailto", "web+ap", "gemini", "magnet",
                     "taler", "mumble");
-    private static List<String> INTERNAL_URI_SCHEMES =
+    private static final List<String> INTERNAL_URI_SCHEMES =
             new ImmutableList.Builder<String>()
                     .addAll(PUBLIC_URI_SCHEMES)
+                    .add(BuildConfig.APPLICATION_ID)
                     .add("imto")
                     .add("cid")
                     .build();
