@@ -31,6 +31,7 @@ import java.util.Calendar;
 import java.util.Collection;
 import java.util.Date;
 import java.util.List;
+import java.util.regex.Matcher;
 import org.jspecify.annotations.Nullable;
 
 public class UIHelper {
@@ -229,7 +230,8 @@ public class UIHelper {
                 return new Pair<>(
                         body.replaceAll(
                                 "^" + Message.ME_COMMAND,
-                                UIHelper.getMessageDisplayName(message) + " "),
+                                // Tatrak: the display name is inserted as plain text
+                                Matcher.quoteReplacement(UIHelper.getMessageDisplayName(message) + " ")),
                         false);
             } else if (message.isGeoUri()) {
                 return new Pair<>(context.getString(R.string.location), true);
