@@ -163,6 +163,9 @@ interface ChatListActions {
     /** The call list ([eu.siacs.conversations.ui.CallsActivity]). */
     fun openCalls() {}
 
+    /** The self-chat of the filtered account, created if needed (issue #6). */
+    fun openSavedMessages() {}
+
     fun setArchived(uuids: List<String>, archived: Boolean)
 
     fun setPinned(uuids: List<String>, pinned: Boolean)
@@ -1147,6 +1150,10 @@ internal fun ChatListDrawer(
         DrawerItem(R.drawable.ic_call_24dp, stringResource(R.string.tatrak_calls)) {
             close()
             actions.openCalls()
+        }
+        DrawerItem(R.drawable.tatrak_ic_bookmark_24dp, stringResource(R.string.tatrak_saved_messages)) {
+            close()
+            actions.openSavedMessages()
         }
         DrawerDivider()
         DrawerItem(R.drawable.ic_person_24dp, stringResource(R.string.action_accounts)) {

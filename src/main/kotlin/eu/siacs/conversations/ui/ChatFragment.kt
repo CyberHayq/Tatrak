@@ -1,6 +1,7 @@
 package eu.siacs.conversations.ui
 
 import am.cyberhayq.chat.storage.media.TemporaryMedia
+import am.cyberhayq.chat.ui.chatlist.SavedMessages
 import am.cyberhayq.chat.ui.common.MenuEntry
 import am.cyberhayq.chat.ui.media.mediaDecodeDispatcher
 import am.cyberhayq.chat.ui.settings.appLanguageContext
@@ -650,6 +651,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         }
         if (trustApproved) runAfterTrust()
         fetchDevicesIfUnknown(c)
+        SavedMessages.fetchHistoryIfEmpty(c)
     }
 
     /**

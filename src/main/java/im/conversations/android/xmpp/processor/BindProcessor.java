@@ -62,6 +62,7 @@ public class BindProcessor extends XmppConnection.Delegate implements Runnable {
                                 + ": display name wasn't empty on first log in. publishing");
                 getManager(NickManager.class).publish(displayName);
             }
+            am.cyberhayq.chat.ui.chatlist.SavedMessages.pinOnFirstSignIn(service, account); // Tatrak: issue #6, pin Saved messages once
         }
 
         getManager(PresenceManager.class).clear();

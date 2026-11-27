@@ -55,6 +55,7 @@ import eu.siacs.conversations.ui.fragment.settings.settingsSections
 import kotlinx.coroutines.launch
 import am.cyberhayq.chat.ui.chatlist.ChatListScreen
 import am.cyberhayq.chat.ui.chatlist.ChatListViewModel
+import am.cyberhayq.chat.ui.chatlist.SavedMessages
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import am.cyberhayq.chat.update.Updater
 import android.animation.Animator
@@ -221,7 +222,11 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                                             CallsScreen(calls, callList, dock = dock(page), scrollToTop = scrollToTop)
                                         }
                                         MainTab.PROFILE -> {
-                                            val sections = remember(language) { settingsSections(requireContext(), ::openSettingsPage) }
+                                            val sections = remember(language) {
+                                                // only here: the classic Settings screen (SettingsHomeFragment) keeps its sections
+                                                listOf(listOf(SavedMessages.profileRow(requireContext(), ::openSavedMessages))) +
+                                                    settingsSections(requireContext(), ::openSettingsPage)
+                                            }
                                             ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop)
                                         }
                                     }
@@ -480,6 +485,14 @@ class ChatListFragment : XmppFragment(), ChatListActions {
     }
 
     override fun openCalls() = startActivity(Intent(requireContext(), CallsActivity::class.java))
+
+    /** ConversationsOverviewFragment's "Note to self", with the account filter first. */
+    override fun openSavedMessages() {
+        val service = xmppConnectionService ?: return
+        SavedMessages.open(service, AccountPickerDialog.Enabled(requireXmppActivity())::pick, { isAdded && xmppConnectionService != null }) {
+            (activity as? OnConversationSelected)?.onConversationSelected(it)
+        }
+    }
 
     override fun setArchived(uuids: List<String>, archived: Boolean) {
         val service = xmppConnectionService ?: return

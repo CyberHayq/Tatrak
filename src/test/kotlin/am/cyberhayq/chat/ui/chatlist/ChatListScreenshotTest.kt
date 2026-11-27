@@ -23,6 +23,7 @@ import androidx.compose.ui.test.junit4.StateRestorationTester
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.assertHasClickAction
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotDisplayed
 import androidx.compose.ui.test.hasText
@@ -115,6 +116,18 @@ class ChatListScreenshotTest {
         canInvite = true
         compose.onNodeWithText("Invite to server").performClick()
         assertEquals(1, invited)
+    }
+
+    /** Issue #6: Saved messages is always in the drawer and closes it on the way to the chat. */
+    @Test
+    fun drawerSavedMessages() {
+        var opened = 0
+        var closed = 0
+        val actions = object : ChatListActions by NoListActions { override fun openSavedMessages() { opened++ } }
+        compose.setContent { TatrakTheme(darkTheme = false) { ChatListDrawer(null, actions, canInvite = false) { closed++ } } }
+        compose.onNodeWithText("Saved messages").assertHasClickAction().performClick()
+        assertEquals(1, opened)
+        assertEquals(1, closed)
     }
 
     @Test

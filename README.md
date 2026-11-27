@@ -178,6 +178,7 @@ is still pending. Planned features have no committed release dates.
 | Updates from GitHub releases inside the app (beta versions optional), release signature checked | 🧪 In testing |
 | Private messages to a group participant from the chat (text and replies) | 🧪 In testing |
 | App language chosen in the settings, on every Android version | 🧪 In testing |
+| "Saved messages" always in the side menu and the Profile tab, pinned for every new account | 🧪 In testing |
 
 ### 🗺️ Roadmap
 

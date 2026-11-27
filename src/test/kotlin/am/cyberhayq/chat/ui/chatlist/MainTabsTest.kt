@@ -19,6 +19,7 @@ import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.theme.TatrakStyle
 import am.cyberhayq.chat.ui.theme.TatrakTheme
 import android.app.Application
+import androidx.test.core.app.ApplicationProvider
 import android.os.Looper
 import org.robolectric.Shadows.shadowOf
 import androidx.activity.OnBackPressedDispatcher
@@ -256,6 +257,7 @@ class MainTabsTest {
 
     private val sections =
         listOf(
+            listOf(SavedMessages.profileRow(ApplicationProvider.getApplicationContext()) {}),
             listOf(
                 SettingsRow(R.drawable.ic_palette_24dp, "Appearance", "Theme, accent colour, chat wallpaper", Color(0xFF3E88F7)) {},
                 SettingsRow(R.drawable.ic_notifications_24dp, "Notifications", "Grace period, Ringtone", Color(0xFFEB5545)) {},

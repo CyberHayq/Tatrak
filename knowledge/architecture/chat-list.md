@@ -92,7 +92,7 @@ while it is being swiped.
 
 # UI (stage 1, implemented)
 
-- Side menu (`DrawerHost`) with account header and items: Contacts, Archive, Calls, Accounts, Scan QR
+- Side menu (`DrawerHost`) with account header and items: Contacts, Archive, Calls, Saved messages, Accounts, Scan QR
   code, Invite to server (2026-11-19; shown when `AccountPickerDialog.EasyInvite.hasAnyAccounts()`,
   opens `EasyOnboardingInviteActivity` as the classic overview menu did), Settings (new chat is the pencil FAB only). The day / night toggle in the header recreates
   the activity; the open state is saved (`rememberDrawerController`), so the menu stays open. The
@@ -253,6 +253,7 @@ own.
 | Contacts: "Hide offline", contact-list permission | `ContactFlows.setHideOfflineContacts`, `ContactFlows.askForContactsPermissions` (tab shown, fragment start) |
 | Calls: open chat, call back, filter tabs | Calls tab over `CallList` |
 | Settings: account header (manage accounts), each page, About | Profile tab; pages in `SettingsActivity` |
+| "Note to self" (search suggestion: `AccountPickerDialog.Enabled`, then `findOrCreateConversation` of the self contact) | Drawer and Profile tab "Saved messages" (`SavedMessages.open`; the account filter's writable account first) |
 
 # Account switcher and account filter (2026-11-21, not yet verified on a device)
 
@@ -364,3 +365,47 @@ on an outside open, and the pause without the floating dock.[^filtertest] See
 [^filter]: AccountFilter.kt
 [^switcher]: AccountSwitcher.kt
 [^filtertest]: AccountFilterTest.kt
+
+# Saved messages always reachable (2026-11-27, public issue #6, not yet verified on a device)
+
+- A permanent "Saved messages" item in the side menu (after Calls, Telegram's order) and a first
+  section in the Profile tab (only there: `ChatListFragment` prepends
+  `SavedMessages.profileRow` to `settingsSections`, so the classic Settings home is unchanged).
+  Both call `ChatListActions.openSavedMessages`, which `ChatListFragment` implements as upstream's
+  "Note to self" (`ConversationsOverviewFragment`): `AccountFilter.writable` if the app is filtered
+  to an enabled account, otherwise `AccountPickerDialog.Enabled` (it asks only with several
+  enabled accounts); then `findOrCreateConversation(self.account, self.address, false, true)` and
+  `OnConversationSelected`. The picker's answer opens nothing if the list fragment is no longer
+  added, the service is gone, or the chosen account was removed or disabled while the dialog
+  showed (its list is a snapshot); with no enabled account the picker opens nothing, as upstream.
+- Pinned once per account: `BindProcessor.run()` calls `SavedMessages.pinOnFirstSignIn` inside its
+  `loggedInSuccessfully` branch (one upstream line, owner-approved 2026-11-27).
+  `Account.setOption(OPTION_LOGGED_IN_SUCCESSFULLY, true)` is true only when the flag was unset, so
+  it runs at the account's first successful bind; the flag is saved with the account, so later
+  binds, a reconnect after unpinning and a restored account that had signed in do not pin again.
+  A self-chat in Tatrak's own archive folder (`tatrakArchivedAt`) is taken out of it with the pin,
+  otherwise the pinned chat would stay hidden there.
+- `XmppConnection.finalizeBind` runs the bind on two paths: on the connection's thread (at once
+  without stream management, or when disco completes), and from the service when disco takes too
+  long (its wake-up calls `XmppConnection.sendDiscoTimeout`). Upstream already calls
+  `findOrCreateConversation` from the connection's thread (`MessageParser`, `BookmarkManager`); the
+  method locks `conversations` itself.
+- Archive query of the chat: `findOrCreateConversation(..., async = true)` queries MAM for a new
+  chat in `postProcessConversation` only when `MessageArchiveManager.hasFeature()` (account disco)
+  is known. With stream management the bind waits for disco (`mWaitForDisco`); without it, or after
+  the disco timeout, it may not, and the chat gets no query of its own. The account catch-up does
+  not make up for it: on a fresh install it has no message to start from (timestamp 0) and returns.
+  So `ChatFragment.bind` calls `SavedMessages.fetchHistoryIfEmpty`: for the self-chat with no
+  messages it queues on `DATABASE_READER` (behind the chat's own post-processing, so its DB load
+  and query come first) and calls `MessageArchiveManager.query(c)` with the checks of
+  `postProcessConversation` and `loadMoreMessages`: online, contact not blocked, MAM known, no
+  query running for the chat, and `hasMessagesLeftOnServer()` (false after a clear, so the clear
+  boundary holds, and after a query reached the archive's end, so it asks once). `query(c)` starts
+  at `getLastMessageTransmitted()`, which includes the clear date. Every way into the chat goes
+  through it (pinned row, drawer, Profile row, notification).
+- Tests: `SavedMessagesTest` (pin creates and pins, pins an existing archived chat, account
+  choice), `SavedMessagesFlowsTest` (the real `BindProcessor` pins at the first bind and not at
+  the second; the picker with 0, 1 and 2 enabled accounts, a late answer after the list left, an
+  account disabled while the picker shows; a click on the real Profile tab row; the empty
+  self-chat's MAM query once MAM is known, not twice, not after a clear),
+  `ChatListScreenshotTest.drawerSavedMessages`, the drawer and `MainTabsTest` Profile shots.

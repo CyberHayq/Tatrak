@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### Interface
+- "Saved messages" is always reachable: a permanent entry in the side menu (after Calls) and at
+  the top of the Profile tab opens the chat with yourself, created if needed; with several
+  accounts under "All accounts" it asks which account. Each newly added account gets this chat
+  pinned once, at its first sign-in; unpinned or deleted, it is not brought back (public issue
+  #6).
+
 ### Upstream
 - Tatrak now includes the fixes of Conversations 2.21.1-2.21.5 (OMEMO, TLS trust, Jingle file
   transfer and SOCKS5, group chat join, backup import, partial downloads in the cache).
