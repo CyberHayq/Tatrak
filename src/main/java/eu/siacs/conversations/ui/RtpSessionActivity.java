@@ -294,6 +294,19 @@ public class RtpSessionActivity extends XmppActivity
     private void endCall() {
         if (this.rtpConnectionReference == null) {
             retractSessionProposal();
+            // Tatrak: proceed may have turned the shown proposal into a call before this screen
+            // took it over; it was registered before the retract found no proposal
+            final Intent intent = getIntent();
+            final JingleRtpConnection promoted =
+                    extractAccount(intent)
+                            .getXmppConnection()
+                            .getManager(JingleManager.class)
+                            .findPromotedRtpConnection(
+                                    Jid.of(intent.getStringExtra(EXTRA_WITH)),
+                                    intent.getStringExtra(EXTRA_PROPOSED_SESSION_ID));
+            if (promoted != null) {
+                promoted.endCall();
+            }
             finish();
         } else {
             requireRtpConnection().endCall();
@@ -314,7 +327,8 @@ public class RtpSessionActivity extends XmppActivity
             resetIntent(account, with, RtpEndUserState.RETRACTED, media);
         }
         final var jingleManager = account.getXmppConnection().getManager(JingleManager.class);
-        jingleManager.retractSessionProposal(with.asBareJid());
+        jingleManager.retractSessionProposal(
+                with.asBareJid(), intent.getStringExtra(EXTRA_PROPOSED_SESSION_ID));
     }
 
     private void rejectCall(View view) {
@@ -542,15 +556,19 @@ public class RtpSessionActivity extends XmppActivity
                 invalidateOptionsMenu();
             }
             setWith(state, contact);
-            if (jingleManager.fireJingleRtpConnectionStateUpdates()) {
+            // Tatrak: a restored end card first, before the scan below can return on another call
+            if (END_CARD.contains(state)) {
+                releaseScreen();
                 return;
             }
-            if (END_CARD.contains(state)) {
+            // Tatrak: with a known proposal, the lookups below go by its session; this scan picks
+            // any call, and one ending between its check and the update leaves nothing shown
+            if (proposedSessionId == null && jingleManager.fireJingleRtpConnectionStateUpdates()) {
                 return;
             }
             final String lastAction = intent.getStringExtra(EXTRA_LAST_ACTION);
             final Set<Media> media = actionToMedia(lastAction);
-            if (jingleManager.hasMatchingProposal(with)) {
+            if (jingleManager.hasMatchingProposal(with, proposedSessionId)) {
                 putScreenInCallMode(media);
                 return;
             }
@@ -807,6 +825,10 @@ public class RtpSessionActivity extends XmppActivity
         if (currentState == RtpEndUserState.INCOMING_CALL) {
             getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         }
+        // Tatrak: its end update may have come before this screen held it
+        if (END_CARD.contains(currentState)) {
+            releaseScreen();
+        }
         if (JingleRtpConnection.STATES_SHOWING_ONGOING_CALL.contains(
                 requireRtpConnection().getState())) {
             putScreenInCallMode();
@@ -831,6 +853,8 @@ public class RtpSessionActivity extends XmppActivity
             return;
         }
         final RtpEndUserState state = terminatedRtpSession.state();
+        // Tatrak: no later update releases the screen that onCreate() kept on
+        releaseScreen();
         resetIntent(account, with, terminatedRtpSession.state(), terminatedRtpSession.media());
         updateButtonConfiguration(state);
         updateStateDisplay(state);
@@ -845,8 +869,32 @@ public class RtpSessionActivity extends XmppActivity
 
     private void reInitializeActivityWithRunningRtpSession(
             final Account account, Jid with, String sessionId) {
-        runOnUiThread(() -> initializeActivityWithRunningRtpSession(account, with, sessionId));
-        resetIntent(account, with, sessionId);
+        // Tatrak: on the UI thread, where proposal updates replace the intent too: only while the
+        // intent still shows this proposal, and the call's intent goes in before initialization,
+        // so a terminal state found there replaces it
+        runOnUiThread(
+                () -> {
+                    if (!showsProposal(account, with, sessionId)) {
+                        Log.d(Config.LOGTAG, "not taking over " + sessionId + ": not shown");
+                        return;
+                    }
+                    resetIntent(account, with, sessionId);
+                    initializeActivityWithRunningRtpSession(account, with, sessionId);
+                });
+    }
+
+    // Tatrak: UI thread; the current intent shows this account's proposal of that session
+    private boolean showsProposal(final Account account, final Jid with, final String sessionId) {
+        final Intent current = getIntent();
+        final String currentWith = current == null ? null : current.getStringExtra(EXTRA_WITH);
+        return currentWith != null
+                && extractAccount(current) == account
+                && isShownProposal(
+                        Jid.of(currentWith),
+                        current.getStringExtra(EXTRA_PROPOSED_SESSION_ID),
+                        current.getStringExtra(EXTRA_SESSION_ID),
+                        with.asBareJid(),
+                        sessionId);
     }
 
     private void resetIntent(final Account account, final Jid with, final String sessionId) {
@@ -1544,15 +1592,16 @@ public class RtpSessionActivity extends XmppActivity
             updateRtpSessionProposalState(account, with, sessionId, state);
             return;
         }
-        if (END_CARD.contains(state)) {
-            Log.d(Config.LOGTAG, "end card reached");
-            releaseProximityWakeLock();
-            runOnUiThread(
-                    () -> getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON));
-        }
         if (emptyReference(this.rtpConnectionReference)) {
             if (END_CARD.contains(state)) {
                 Log.d(Config.LOGTAG, "not reinitializing session");
+                // Tatrak: the shown proposal's call ended before this screen took it over
+                runOnUiThread(
+                        () -> {
+                            if (showsProposal(account, with, sessionId)) {
+                                releaseScreen();
+                            }
+                        });
                 return;
             }
             // this happens when going from proposed session to actual session
@@ -1581,6 +1630,9 @@ public class RtpSessionActivity extends XmppActivity
                 invalidateOptionsMenu();
             });
             if (END_CARD.contains(state)) {
+                // Tatrak: moved here from the top, after the session is checked
+                Log.d(Config.LOGTAG, "end card reached");
+                runOnUiThread(this::releaseScreen);
                 final JingleRtpConnection rtpConnection = requireRtpConnection();
                 resetIntent(account, with, state, rtpConnection.getMedia());
                 releaseVideoTracks(rtpConnection);
@@ -1659,8 +1711,7 @@ public class RtpSessionActivity extends XmppActivity
                     }
                     if (END_CARD.contains(state)) {
                         Log.d(Config.LOGTAG, "end card reached");
-                        releaseProximityWakeLock();
-                        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+                        releaseScreen();
                     }
                     final Set<Media> media =
                             actionToMedia(currentIntent.getStringExtra(EXTRA_LAST_ACTION));
@@ -1672,6 +1723,12 @@ public class RtpSessionActivity extends XmppActivity
                     invalidateOptionsMenu();
                     resetIntent(account, with, state, media);
                 });
+    }
+
+    // Tatrak: the end card's screen release (proximity wake lock, keep-screen-on), UI thread
+    private void releaseScreen() {
+        releaseProximityWakeLock();
+        getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
     }
 
     // Tatrak: an intent without a proposed session id (none was known) matches by peer, as before;

@@ -17,6 +17,8 @@
   fixture helpers, pinned test-tool dependencies, run instructions and recorded emulator results.
 
 ### Fixes
+- Calls: fixes for hanging up while the other side answers, for calls placed or cancelled during
+  a reconnect, and for the call screen keeping the display on.
 - Photo viewer: panning a zoomed photo no longer jumps to the next or previous photo when the
   pan reaches the photo's edge; the photo stops there, and a new swipe from the edge turns the
   page.

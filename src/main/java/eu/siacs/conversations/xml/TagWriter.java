@@ -80,9 +80,12 @@ public class TagWriter {
         outputStream.flush();
     }
 
-    public void writeStanzaAsync(StreamElement stanza) {
+    // Tatrak: returns whether the stanza was queued for writing (XmppConnection records written
+    // call proposals only then)
+    public boolean writeStanzaAsync(StreamElement stanza) {
         if (finished) {
             Log.d(Config.LOGTAG, "attempting to write stanza to finished TagWriter");
+            return false;
         } else {
             if (!asyncStanzaWriter.isAlive()) {
                 try {
@@ -92,6 +95,7 @@ public class TagWriter {
                 }
             }
             writeQueue.add(stanza);
+            return true;
         }
     }
 

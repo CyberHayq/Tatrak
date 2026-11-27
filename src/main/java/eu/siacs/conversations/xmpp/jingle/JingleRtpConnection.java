@@ -95,6 +95,9 @@ public class JingleRtpConnection extends AbstractJingleConnection
     private final OmemoVerification omemoVerification = new OmemoVerification();
     private final CallIntegration callIntegration;
     private final Message message;
+    // Tatrak: the stream session it was registered in, set and read under the connection's
+    // monitor, see JingleManager.register() and notifyRebound()
+    private Object streamSession;
 
     private Set<Media> proposedMedia;
     private RtpContentMap initiatorRtpContentMap;
@@ -2342,6 +2345,17 @@ public class JingleRtpConnection extends AbstractJingleConnection
             }
             return;
         }
+        // Tatrak: our proposal's call before JingleManager.processProceed delivered proceed (a
+        // screen or the ongoing-call notification can reach it then): retracted like from
+        // proceed, with the transition PROPOSED allows; the late proceed is then ignored
+        if (isInitiator() && isInState(State.PROPOSED)) {
+            id.account
+                    .getXmppConnection()
+                    .getManager(JingleMessageManager.class)
+                    .retract(id.with, id.sessionId);
+            closeTransitionLogFinish(State.RETRACTED);
+            return;
+        }
         if (isInitiator()
                 && isInState(State.SESSION_INITIALIZED, State.SESSION_INITIALIZED_PRE_APPROVED)) {
             this.webRTCWrapper.close();
@@ -2745,6 +2759,14 @@ public class JingleRtpConnection extends AbstractJingleConnection
 
     public long getCallDuration() {
         return this.sessionDuration.elapsed(TimeUnit.MILLISECONDS);
+    }
+
+    public Object getStreamSession() {
+        return this.streamSession;
+    }
+
+    public void setStreamSession(final Object streamSession) {
+        this.streamSession = streamSession;
     }
 
     @Override

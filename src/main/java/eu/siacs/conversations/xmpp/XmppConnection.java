@@ -72,10 +72,12 @@ import eu.siacs.conversations.xml.Namespace;
 import eu.siacs.conversations.xml.Tag;
 import eu.siacs.conversations.xml.TagWriter;
 import eu.siacs.conversations.xml.XmlReader;
+import eu.siacs.conversations.xmpp.jingle.JingleRtpConnection;
 import eu.siacs.conversations.xmpp.manager.AbstractManager;
 import eu.siacs.conversations.xmpp.manager.BlockingManager;
 import eu.siacs.conversations.xmpp.manager.CarbonsManager;
 import eu.siacs.conversations.xmpp.manager.DiscoManager;
+import eu.siacs.conversations.xmpp.manager.JingleManager;
 import eu.siacs.conversations.xmpp.manager.MessageArchiveManager;
 import eu.siacs.conversations.xmpp.manager.MultiUserChatManager;
 import eu.siacs.conversations.xmpp.manager.OAuthManager;
@@ -945,20 +947,23 @@ public class XmppConnection implements Runnable {
             }
             if (bound != null) {
                 clearIqCallbacks();
-                // Tatrak: a fresh bind starts a new session, see getStreamSession()
+                final Enabled streamManagementEnabled = bound.getExtension(Enabled.class);
+                // Tatrak: a fresh bind starts a new session, see getStreamSession(); the queue is
+                // reset before the stream becomes writable, so no stanza written meanwhile is lost
                 synchronized (this) {
+                    if (streamManagementEnabled != null) {
+                        resetOutboundStanzaQueue();
+                    }
                     this.isBound = true;
                     this.streamSession = new Object();
                 }
                 processNopStreamFeatures();
                 this.boundStreamFeatures = this.streamFeatures;
-                final Enabled streamManagementEnabled = bound.getExtension(Enabled.class);
                 final var carbonsEnabled =
                         bound.getOnlyExtension(
                                 im.conversations.android.xmpp.model.carbons.Enabled.class);
                 final boolean waitForDisco;
                 if (streamManagementEnabled != null) {
-                    resetOutboundStanzaQueue();
                     processEnabled(streamManagementEnabled);
                     waitForDisco = true;
                 } else {
@@ -1044,27 +1049,12 @@ public class XmppConnection implements Runnable {
 
     private void resetOutboundStanzaQueue() {
         synchronized (this.mStanzaQueue) {
-            final ImmutableList.Builder<Stanza> intermediateStanzasBuilder =
-                    new ImmutableList.Builder<>();
-            if (Config.EXTENDED_SM_LOGGING) {
-                Log.d(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid()
-                                + ": stanzas sent before auth: "
-                                + this.stanzasSentBeforeAuthentication);
-            }
-            for (int i = this.stanzasSentBeforeAuthentication + 1; i <= this.stanzasSent; ++i) {
-                final Stanza stanza = this.mStanzaQueue.get(i);
-                if (stanza != null) {
-                    intermediateStanzasBuilder.add(stanza);
-                }
-            }
+            // Tatrak: the stanzas queued after <authenticate> were never written (the stream was
+            // unbound), so the server does not count them; numbered here, an ack of the first
+            // written stanza would acknowledge one of them. Dropped, as enableStreamManagement()
+            // drops them on a classic bind; a call proposal among them is resent by notifyRebound
             this.mStanzaQueue.clear();
-            final var intermediateStanzas = intermediateStanzasBuilder.build();
-            for (int i = 0; i < intermediateStanzas.size(); ++i) {
-                this.mStanzaQueue.append(i + 1, intermediateStanzas.get(i));
-            }
-            this.stanzasSent = intermediateStanzas.size();
+            this.stanzasSent = 0;
             if (Config.EXTENDED_SM_LOGGING) {
                 Log.d(
                         Config.LOGTAG,
@@ -1258,8 +1248,6 @@ public class XmppConnection implements Runnable {
                     "server tried resume with unknown id " + prevId);
         }
         this.inSmacksSession = true;
-        this.isBound = true;
-        this.tagWriter.writeStanzaAsync(new Request());
         lastPacketReceived = SystemClock.elapsedRealtime();
         final Optional<Integer> h = resumed.getHandled();
         final int serverCount;
@@ -1270,38 +1258,60 @@ public class XmppConnection implements Runnable {
             throw new StateChangingException(
                     Account.State.INCOMPATIBLE_SERVER, "no 'h' count on resumed");
         }
+        // Tatrak: the messages the replay will resend are marked unsent before it, so a drain of
+        // waiting messages (an ONLINE from a pending discovery) does not send them a second time;
+        // outside the monitor, as the marking writes the database and refreshes the UI
+        final ArrayList<im.conversations.android.xmpp.model.stanza.Message> replayedMessages =
+                new ArrayList<>();
+        synchronized (this.mStanzaQueue) {
+            for (int i = 0; i < this.mStanzaQueue.size(); ++i) {
+                if (this.mStanzaQueue.keyAt(i) > serverCount
+                        && this.mStanzaQueue.valueAt(i)
+                                instanceof
+                                im.conversations.android.xmpp.model.stanza.Message message) {
+                    replayedMessages.add(message);
+                }
+            }
+        }
+        for (final var message : replayedMessages) {
+            mXmppConnectionService.markMessage(
+                    account, message.getTo().asBareJid(), message.getId(), Message.STATUS_UNSEND);
+        }
         final ArrayList<Stanza> failedStanzas = new ArrayList<>();
         final boolean acknowledgedMessages;
-        synchronized (this.mStanzaQueue) {
-            if (serverCount < stanzasSent) {
-                Log.d(
-                        Config.LOGTAG,
-                        account.getJid().asBareJid() + ": session resumed with lost packages");
-                stanzasSent = serverCount;
-            } else {
-                Log.d(Config.LOGTAG, account.getJid().asBareJid() + ": session resumed");
+        // Tatrak: sendPacket's monitor from opening the stream to the end of the replay, so a
+        // stanza sent meanwhile (a retract) is written after the replayed ones (its propose), and
+        // is not taken into the replay as well
+        synchronized (this) {
+            this.isBound = true;
+            this.tagWriter.writeStanzaAsync(new Request());
+            synchronized (this.mStanzaQueue) {
+                if (serverCount < stanzasSent) {
+                    Log.d(
+                            Config.LOGTAG,
+                            account.getJid().asBareJid() + ": session resumed with lost packages");
+                    stanzasSent = serverCount;
+                } else {
+                    Log.d(Config.LOGTAG, account.getJid().asBareJid() + ": session resumed");
+                }
+                acknowledgedMessages = acknowledgeStanzaUpTo(serverCount);
+                for (int i = 0; i < this.mStanzaQueue.size(); ++i) {
+                    failedStanzas.add(mStanzaQueue.valueAt(i));
+                }
+                mStanzaQueue.clear();
             }
-            acknowledgedMessages = acknowledgeStanzaUpTo(serverCount);
-            for (int i = 0; i < this.mStanzaQueue.size(); ++i) {
-                failedStanzas.add(mStanzaQueue.valueAt(i));
+            Log.d(
+                    Config.LOGTAG,
+                    account.getJid().asBareJid()
+                            + ": resending "
+                            + failedStanzas.size()
+                            + " stanzas");
+            for (final Stanza packet : failedStanzas) {
+                sendPacket(packet);
             }
-            mStanzaQueue.clear();
         }
         if (acknowledgedMessages) {
             mXmppConnectionService.updateConversationUi();
-        }
-        Log.d(
-                Config.LOGTAG,
-                account.getJid().asBareJid() + ": resending " + failedStanzas.size() + " stanzas");
-        for (final Stanza packet : failedStanzas) {
-            if (packet instanceof im.conversations.android.xmpp.model.stanza.Message message) {
-                mXmppConnectionService.markMessage(
-                        account,
-                        message.getTo().asBareJid(),
-                        message.getId(),
-                        Message.STATUS_UNSEND);
-            }
-            sendPacket(packet);
         }
         if (mWaitForDisco.get()) {
             this.lastDiscoStarted = SystemClock.elapsedRealtime();
@@ -2739,7 +2749,22 @@ public class XmppConnection implements Runnable {
         synchronized (this.mStanzaQueue) {
             // TODO should we fail IQs for unbound streams?
             if (force || isBound) {
-                tagWriter.writeStanzaAsync(packet);
+                final boolean accepted = tagWriter.writeStanzaAsync(packet);
+                // Tatrak: a call proposal the writer took now (also by a resume's replay), see
+                // JingleManager.isRebindResendCandidate
+                if (accepted
+                        && packet instanceof im.conversations.android.xmpp.model.stanza.Message message
+                        && message.getId() != null
+                        && message.getId()
+                                .startsWith(JingleRtpConnection.JINGLE_MESSAGE_PROPOSE_ID_PREFIX)) {
+                    getManager(JingleManager.class)
+                            .proposalWritten(
+                                    message.getId()
+                                            .substring(
+                                                    JingleRtpConnection
+                                                            .JINGLE_MESSAGE_PROPOSE_ID_PREFIX
+                                                            .length()));
+                }
             } else {
                 Log.d(
                         Config.LOGTAG,
@@ -2897,6 +2922,14 @@ public class XmppConnection implements Runnable {
     @Nullable
     public synchronized Object getStreamSession() {
         return streamSession;
+    }
+
+    /**
+     * Tatrak: whether stream management was enabled or resumed on the current stream (a stale
+     * resumption id from an earlier stream does not count, unlike Features.sm()).
+     */
+    public synchronized boolean isStreamManagementEnabled() {
+        return inSmacksSession;
     }
 
     public im.conversations.android.xmpp.model.streams.Features getStreamFeatures() {

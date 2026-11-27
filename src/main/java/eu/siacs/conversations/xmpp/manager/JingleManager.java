@@ -58,6 +58,7 @@ import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -79,6 +80,8 @@ public class JingleManager extends AbstractManager {
             new HashMap<>();
     private final ConcurrentHashMap<AbstractJingleConnection.Id, AbstractJingleConnection>
             connections = new ConcurrentHashMap<>();
+    // Tatrak: session ids of proposals the transport has written (one-way), see proposalWritten
+    private final Set<String> writtenProposals = ConcurrentHashMap.newKeySet();
 
     private final Cache<PersistableSessionId, TerminatedRtpSession> terminatedSessions =
             CacheBuilder.newBuilder().expireAfterWrite(24, TimeUnit.HOURS).build();
@@ -144,7 +147,7 @@ public class JingleManager extends AbstractManager {
                 this.sendErrorFor(packet, new JingleCondition.UnsupportedInfo());
                 return;
             }
-            connections.put(id, connection);
+            register(id, connection);
             this.service.updateConversationUi();
             connection.deliverPacket(packet);
             if (connection instanceof JingleRtpConnection rtpConnection) {
@@ -286,7 +289,7 @@ public class JingleManager extends AbstractManager {
                     new JingleRtpConnection(
                             this.service, id, account.getJid(), proposal.callIntegration);
             rtpConnection.setProposedMedia(proposal.media);
-            this.connections.put(id, rtpConnection);
+            register(id, rtpConnection);
             rtpConnection.transitionOrThrow(AbstractJingleConnection.State.PROPOSED);
             rtpConnection.deliveryMessage(from, proceed, serverMsgId, timestamp);
         } else {
@@ -348,7 +351,7 @@ public class JingleManager extends AbstractManager {
                     retractSessionProposal(matchingSessionProposal.get());
                     final JingleRtpConnection rtpConnection =
                             new JingleRtpConnection(this.service, id, from);
-                    this.connections.put(id, rtpConnection);
+                    register(id, rtpConnection);
                     rtpConnection.setProposedMedia(ImmutableSet.copyOf(media));
                     rtpConnection.deliveryMessage(from, propose, serverMsgId, timestamp);
                     addNewIncomingCall(rtpConnection);
@@ -390,7 +393,7 @@ public class JingleManager extends AbstractManager {
             } else {
                 final JingleRtpConnection rtpConnection =
                         new JingleRtpConnection(this.service, id, from);
-                this.connections.put(id, rtpConnection);
+                register(id, rtpConnection);
                 rtpConnection.setProposedMedia(ImmutableSet.copyOf(media));
                 rtpConnection.deliveryMessage(from, propose, serverMsgId, timestamp);
                 addNewIncomingCall(rtpConnection);
@@ -620,6 +623,20 @@ public class JingleManager extends AbstractManager {
         }
     }
 
+    // Tatrak: a call is published with the stream session current at that moment, both under the
+    // connection's monitor, which a bind takes to change the session; notifyRebound reads them
+    // under it too, so a bind cannot fall between them (a session taken in the constructor could
+    // be older than the bind the call is registered and sent on)
+    private void register(
+            final AbstractJingleConnection.Id id, final AbstractJingleConnection connection) {
+        synchronized (this.connection) {
+            this.connections.put(id, connection);
+            if (connection instanceof JingleRtpConnection rtpConnection) {
+                rtpConnection.setStreamSession(this.connection.getStreamSession());
+            }
+        }
+    }
+
     public void startJingleFileTransfer(final Message message) {
         Preconditions.checkArgument(
                 message.isFileOrImage(), "Message is not of type file or image");
@@ -725,11 +742,11 @@ public class JingleManager extends AbstractManager {
         return false;
     }
 
-    public void retractSessionProposal(final Jid with) {
+    public void retractSessionProposal(final Jid with, @Nullable final String sessionId) {
         synchronized (this.rtpSessionProposals) {
             RtpSessionProposal matchingProposal = null;
             for (final var proposal : this.rtpSessionProposals.keySet()) {
-                if (with.asBareJid().equals(proposal.with)) {
+                if (isProposal(proposal, with, sessionId)) {
                     matchingProposal = proposal;
                     break;
                 }
@@ -738,6 +755,14 @@ public class JingleManager extends AbstractManager {
                 retractSessionProposal(matchingProposal, false);
             }
         }
+    }
+
+    // Tatrak: the proposal shown with that session id; null (none known) matches any proposal to the
+    // peer, as before, so an old screen neither retracts nor shows a newer call to the same peer
+    static boolean isProposal(
+            final RtpSessionProposal proposal, final Jid with, @Nullable final String sessionId) {
+        return with.asBareJid().equals(proposal.with)
+                && (sessionId == null || sessionId.equals(proposal.sessionId));
     }
 
     private boolean retractSessionProposal(final RtpSessionProposal rtpSessionProposal) {
@@ -785,7 +810,7 @@ public class JingleManager extends AbstractManager {
                 new JingleRtpConnection(this.service, id, account.getJid());
         rtpConnection.setProposedMedia(media);
         rtpConnection.getCallIntegration().startAudioRouting();
-        this.connections.put(id, rtpConnection);
+        register(id, rtpConnection);
         rtpConnection.sendSessionInitiate();
         return rtpConnection;
     }
@@ -928,12 +953,12 @@ public class JingleManager extends AbstractManager {
         return Optional.absent();
     }
 
-    public boolean hasMatchingProposal(final Jid with) {
+    public boolean hasMatchingProposal(final Jid with, @Nullable final String sessionId) {
         synchronized (this.rtpSessionProposals) {
             for (final var entry : this.rtpSessionProposals.entrySet()) {
                 final var state = entry.getValue();
                 final RtpSessionProposal proposal = entry.getKey();
-                if (with.asBareJid().equals(proposal.with)) {
+                if (isProposal(proposal, with, sessionId)) {
                     // CallIntegrationConnectionService starts RtpSessionActivity with ACTION_VIEW
                     // and an EXTRA_LAST_REPORTED_STATE of DISCOVERING devices. however due to
                     // possible race conditions the state might have already moved on so we are
@@ -989,26 +1014,61 @@ public class JingleManager extends AbstractManager {
     }
 
     public void notifyRebound() {
-        for (final AbstractJingleConnection connection : this.connections.values()) {
-            connection.notifyRebound();
-        }
-        if (this.connection.getFeatures().sm()) {
-            // Tatrak: the proposals of the old stream, resent after the pending stream-ack updates
-            // queued before them (MessageAcknowledgedProcessor), so an acknowledged proposal or a
-            // call placed after the bind is not sent again
-            final List<RtpSessionProposal> searching = new ArrayList<>();
-            final Object session = this.connection.getStreamSession();
-            synchronized (this.rtpSessionProposals) {
-                for (final var entry : this.rtpSessionProposals.entrySet()) {
-                    if (entry.getValue() == DeviceDiscoveryState.SEARCHING) {
-                        searching.add(entry.getKey());
-                    }
+        // Tatrak: a call placed or received in the current session (after this bind, or before
+        // a resume that kept it) is still valid; a discovery that ends late must not end it. The
+        // session and the calls it judges are read together under the connection's monitor (a
+        // bind changes the session under it, a call registered later carries the new one); the
+        // calls are ended after it is released
+        final Object session;
+        final boolean sm;
+        final List<AbstractJingleConnection> carriedOver = new ArrayList<>();
+        synchronized (this.connection) {
+            session = this.connection.getStreamSession();
+            sm = this.connection.isStreamManagementEnabled();
+            for (final AbstractJingleConnection connection : this.connections.values()) {
+                if (!(connection instanceof JingleRtpConnection rtpConnection
+                        && rtpConnection.getStreamSession() == session)) {
+                    carriedOver.add(connection);
                 }
             }
-            if (!searching.isEmpty()) {
-                PROPOSAL_EXECUTOR.execute(() -> resendSessionProposals(searching, session));
-            }
         }
+        for (final AbstractJingleConnection connection : carriedOver) {
+            connection.notifyRebound();
+        }
+        // Tatrak: the proposals of the old stream, resent after the pending stream-ack updates
+        // queued before them (MessageAcknowledgedProcessor), so an acknowledged proposal or a
+        // call placed after the bind is not sent again; without stream management on the new
+        // stream only one never written, as nothing tells whether a written one arrived
+        final List<RtpSessionProposal> searching = new ArrayList<>();
+        synchronized (this.rtpSessionProposals) {
+            for (final var entry : this.rtpSessionProposals.entrySet()) {
+                if (isRebindResendCandidate(
+                        entry.getValue(),
+                        sm,
+                        !writtenProposals.contains(entry.getKey().sessionId))) {
+                    searching.add(entry.getKey());
+                }
+            }
+            final Set<String> live = new HashSet<>();
+            for (final RtpSessionProposal proposal : this.rtpSessionProposals.keySet()) {
+                live.add(proposal.sessionId);
+            }
+            writtenProposals.retainAll(live);
+        }
+        if (!searching.isEmpty()) {
+            PROPOSAL_EXECUTOR.execute(() -> resendSessionProposals(searching, session));
+        }
+    }
+
+    // Tatrak: called by XmppConnection.sendPacket when it writes a proposal (also in a resume's
+    // replay); no lock, the transport holds its own
+    public void proposalWritten(final String sessionId) {
+        writtenProposals.add(sessionId);
+    }
+
+    static boolean isRebindResendCandidate(
+            final DeviceDiscoveryState state, final boolean sm, final boolean unwritten) {
+        return state == DeviceDiscoveryState.SEARCHING && (sm || unwritten);
     }
 
     public WeakReference<JingleRtpConnection> findJingleRtpConnection(
