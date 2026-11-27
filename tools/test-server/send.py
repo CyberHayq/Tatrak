@@ -2,7 +2,7 @@
   podman exec tatrak-prosody python3 /send.py friend tester "Hi" "Second message"
   podman exec tatrak-prosody python3 /send.py friend tester --file /path/in/container.webp
 Users are <name>@10.0.2.2 with password secret123 (registered by start.sh)."""
-import asyncio, mimetypes, os, ssl, sys, urllib.request, uuid
+import asyncio, mimetypes, os, ssl, sys, urllib.parse, urllib.request, uuid
 from xml.etree import ElementTree
 import slixmpp
 
@@ -59,9 +59,16 @@ class Sender(slixmpp.ClientXMPP):
         put = slot["http_upload_slot"]["put"]
         headers = {"Content-Type": kind, "Content-Length": str(size)}
         headers.update({h["name"]: h["value"] for h in put["headers"]})
+        # 10.0.2.2 is the emulator's name for the host; inside the container (pasta networking)
+        # it does not reach Prosody, so PUT to the container's own loopback with the same Host
+        url = urllib.parse.urlsplit(put["url"])
+        headers["Host"] = url.netloc
         request = urllib.request.Request(
-            put["url"], data=open(path, "rb").read(), headers=headers, method="PUT")
+            url._replace(netloc=f"127.0.0.1:{url.port or 443}").geturl(),
+            data=open(path, "rb").read(), headers=headers, method="PUT")
+        # still only the server's own certificate is trusted; its name is 10.0.2.2, not 127.0.0.1
         context = ssl.create_default_context(cafile=CERTIFICATE)
+        context.check_hostname = False
         await asyncio.to_thread(urllib.request.urlopen, request, context=context, timeout=20)
         return slot["http_upload_slot"]["get"]["url"]
 

@@ -114,7 +114,9 @@ podman exec tatrak-prosody python3 /send.py friend tester --file /path/in/contai
 
 Copy a file into the container first with `podman cp file.webp tatrak-prosody:/tmp/`.
 `--file` uploads through `upload.10.0.2.2`, trusting only the server's own certificate (slixmpp's
-built-in upload rejects it as self-signed). A webp or png of at most 512 px shows as a sticker.
+built-in upload rejects it as self-signed). It PUTs to the container's own `127.0.0.1:5281`
+with the slot's Host header: with podman's pasta networking, `10.0.2.2` inside the container does
+not reach Prosody ("Connection refused", 2026-11-27). A webp or png of at most 512 px shows as a sticker.
 The app does not fetch it from an unknown contact by itself: tap the download button once
 (it checks the size), then once more to download. `send.py` is copied into the image at build time;
 after editing it, `podman cp tools/test-server/send.py tatrak-prosody:/send.py` or rebuild.
@@ -187,6 +189,10 @@ agent (and any brief) that runs emulator checks:
   short script that prints numbers (for example the y of an edge found by a colour change in one
   pixel column); open at most one small montage
   (`magick montage f_0{10,20,30,40}.png -tile 4x1 -geometry +4+4 -resize 25% m.png`), not every frame.
+- Playing or paused audio: `dumpsys audio`'s AudioPlaybackConfiguration state is wrong on the
+  emulators (idle while playing, paused after a resume; 2026-11-27, API 30 and 37). Use
+  `dumpsys media.audio_flinger | grep -i "tracks of which"` (1 active while playing) and a
+  position text that changes between two uiautomator dumps.
 - Cut command output: `logcat -d | grep -A20 'FATAL EXCEPTION'`, Gradle with `-q` and a grep for
   errors, `dumpsys … | grep <field>`.
 - One scenario per agent: split a long check list into several short agents (for example keyboard
