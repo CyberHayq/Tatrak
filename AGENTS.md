@@ -5,6 +5,11 @@ Telegram-style Compose UI. Goal: Telegram-level smoothness and look; Conversatio
 encryption stay as they are. Project knowledge lives in `knowledge/` (start at
 `knowledge/index.md`); this file holds the working rules the owner has given.
 
+This file stays within 300 lines: every session loads it. A rule that would pass the limit first
+makes room, proposed to the owner: merge or drop a rule that has not been needed since it was
+written, or move details only one kind of work needs to a `knowledge/` page and keep a one-line
+pointer here. When every rule earns its place, the owner raises the limit.
+
 ## Talking to the owner
 
 - Reply in Russian (the owner writes Russian). Code, code comments, commit messages and the
@@ -162,6 +167,9 @@ encryption stay as they are. Project knowledge lives in `knowledge/` (start at
   review runs instead only when the owner asks for it, and is recorded as a Claude review.
 - Nothing in this table is measured on Tatrak yet; it rests on a few tasks per model. Record in
   `knowledge/log.md` when a choice fails, and change the table.
+- So that the table can be checked against data, every `knowledge/log.md` entry for a piece of
+  work ends with one line: `Outcome: written by <model, effort>; review by <model, effort>:
+  <N findings, M fixed>; reverted: <yes/no>`.
 
 ## EGM reviews
 
