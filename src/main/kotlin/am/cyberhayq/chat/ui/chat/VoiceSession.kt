@@ -33,7 +33,7 @@ import kotlinx.coroutines.launch
 /**
  * The app-wide voice player (issue #7): playback outlives the chat that started it and shows in the mini bar
  * ([VoiceBar]). Initialised in `Conversations.onCreate`, so it counts every started activity; pauses when none is
- * started. Holds only ids, the message's time, its file and the service instance: messages and conversations are
+ * started. Holds only ids, the chat's clear marker, the message's file and the service instance: messages and conversations are
  * resolved again on each check. Main thread only.
  */
 object VoiceSession {
@@ -47,7 +47,8 @@ object VoiceSession {
     private var service: XmppConnectionService? = null
     private var conversationUuid: String? = null
     private var messageUuid: String? = null
-    private var timeSent = 0L
+    /** The chat's "Clear history" marker when the session started; a change means the chat was cleared. */
+    private var clearMarker = 0L
     private var file: File? = null
     private var sender = ""
     private var speed = 1f
@@ -141,9 +142,8 @@ object VoiceSession {
     }
 
     /** The bubble's play button: plays, pauses or resumes [messageUuid], or switches to it. */
-    fun toggle(service: XmppConnectionService, conversationUuid: String, messageUuid: String, timeSent: Long, file: File) {
-        // the old instance's lists are dead
-        if (this.service != null && this.service !== service) release()
+    fun toggle(service: XmppConnectionService, conversationUuid: String, messageUuid: String, file: File) {
+        bound(service)
         val current = player ?: return
         val switching = !mutableActive.value || this.messageUuid != messageUuid
         if (!current.toggle(messageUuid, file)) {
@@ -154,9 +154,11 @@ object VoiceSession {
         this.service = service
         this.conversationUuid = conversationUuid
         this.messageUuid = messageUuid
-        this.timeSent = timeSent
         this.file = file
-        val message = service.findConversationByUuid(conversationUuid)?.findMessageWithUuid(messageUuid)
+        val conversation = service.findConversationByUuid(conversationUuid)
+        // not compared with the message's time: the service sets the marker a second past the last message
+        clearMarker = conversation?.lastClearHistory?.timestamp() ?: 0L
+        val message = conversation?.findMessageWithUuid(messageUuid)
         sender =
             when {
                 message == null -> ""
@@ -185,6 +187,14 @@ object VoiceSession {
             }
         mutableActive.value = true
         publishBar()
+    }
+
+    /**
+     * The fragments' onBackendConnected: a session of another service instance (the service was stopped and made
+     * again in the same process, e.g. after Log out) would play against a destroyed one's lists, so it goes.
+     */
+    fun bound(service: XmppConnectionService) {
+        if (this.service != null && this.service !== service) release()
     }
 
     /** Jumps within the loaded clip; ignored for any other message. */
@@ -219,7 +229,7 @@ object VoiceSession {
         service = null
         conversationUuid = null
         messageUuid = null
-        timeSent = 0L
+        clearMarker = 0L
         file = null
         sender = ""
         mutableActive.value = false
@@ -262,7 +272,7 @@ object VoiceSession {
         if (conversation.status == Conversation.STATUS_ARCHIVED) return true
         val account = conversation.account
         if (!account.isEnabled || account !in service.accounts) return true
-        if ((conversation.lastClearHistory?.timestamp() ?: 0L) > timeSent) return true
+        if ((conversation.lastClearHistory?.timestamp() ?: 0L) != clearMarker) return true
         val message = conversation.findMessageWithUuid(messageUuid)
         if (message != null && (!message.isFileOrImage || message.isDeleted)) return true
         // a message not found may only be trimmed from memory; a removed one took its file along

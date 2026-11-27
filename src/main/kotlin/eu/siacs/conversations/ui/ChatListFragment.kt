@@ -282,7 +282,10 @@ class ChatListFragment : XmppFragment(), ChatListActions {
     override fun onCreateAnimator(transit: Int, enter: Boolean, nextAnim: Int): Animator? =
         slideAnimator(this, nextAnim, R.animator.tatrak_list_pop_enter, R.animator.tatrak_list_exit, -0.25f)
 
-    override fun onBackendConnected() = refresh()
+    override fun onBackendConnected() {
+        xmppConnectionService?.let(VoiceSession::bound)
+        refresh()
+    }
 
     // the activity only refreshes visible fragments; coming back from the chat the snapshot is stale
     // a chat opened another way (notification, share) replaces the list: its card must not come back with the view

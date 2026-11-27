@@ -62,8 +62,11 @@ class VoicePlayer(
     // called on the main looper; a call or another player takes over, we stop
     private val focusListener =
         AudioManager.OnAudioFocusChangeListener { change ->
-            if (change == AudioManager.AUDIOFOCUS_LOSS || change == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
-                pause()
+            // speech is not ducked by the system (setWillPauseWhenDucked): a duck request pauses too
+            when (change) {
+                AudioManager.AUDIOFOCUS_LOSS,
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT,
+                AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> pause()
             }
         }
 
@@ -71,6 +74,7 @@ class VoicePlayer(
         AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN_TRANSIENT)
             .setAudioAttributes(attributes)
             .setOnAudioFocusChangeListener(focusListener)
+            .setWillPauseWhenDucked(true)
             .build()
 
     private fun requestFocus(): Boolean =
@@ -92,7 +96,7 @@ class VoicePlayer(
                 return true
             }
             if (!requestFocus()) return false
-            begin(current)
+            if (!begin(current)) return false
             startTicker(current)
             return true
         }
@@ -130,8 +134,8 @@ class VoicePlayer(
         next.setOnErrorListener { _, _, _ -> release(); unavailable(); true } // a read that failed after prepare(): stop, do not go on polling
         media = opened
         player = next
+        if (!begin(next)) return false
         mutableState.value = VoicePlayback(uuid, true, 0, next.duration)
-        begin(next)
         startTicker(next)
         return true
     }
@@ -141,12 +145,31 @@ class VoicePlayer(
         this.speed = speed
         val current = player ?: return
         // a non-zero speed starts a paused, prepared or completed player: only touch a playing one
-        if (current.isPlaying) current.playbackParams = current.playbackParams.setSpeed(speed)
+        if (!current.isPlaying) return
+        // a refused speed keeps playing at the old one
+        try {
+            current.playbackParams = current.playbackParams.setSpeed(speed)
+        } catch (e: IllegalStateException) {
+            Log.w(Config.LOGTAG, "voice speed refused: ${e.javaClass.simpleName}")
+        } catch (e: IllegalArgumentException) {
+            Log.w(Config.LOGTAG, "voice speed refused: ${e.javaClass.simpleName}")
+        }
     }
 
-    // in place of start(): setPlaybackParams with a non-zero speed starts the player at that speed
-    private fun begin(current: MediaPlayer) {
-        current.playbackParams = current.playbackParams.setSpeed(speed)
+    // in place of start(): setPlaybackParams with a non-zero speed starts the player at that speed. False when the
+    // player refused (a state or parameters it does not take): then released and [unavailable] called
+    private fun begin(current: MediaPlayer): Boolean {
+        try {
+            current.playbackParams = current.playbackParams.setSpeed(speed)
+            return true
+        } catch (e: IllegalStateException) {
+            Log.w(Config.LOGTAG, "unable to play a voice message: ${e.javaClass.simpleName}")
+        } catch (e: IllegalArgumentException) {
+            Log.w(Config.LOGTAG, "unable to play a voice message: ${e.javaClass.simpleName}")
+        }
+        release()
+        unavailable()
+        return false
     }
 
     fun pause() {

@@ -50,6 +50,8 @@ class VoiceSessionTest {
     /** Prepares with a set length; plays from `setPlaybackParams` (as `VoicePlayer.begin`); ends on [finish]. */
     class FakePlayer(private val length: Int = 19_000, private val damaged: Boolean = false) : MediaPlayer() {
         var playing = false
+        /** setPlaybackParams throws, as a player in a wrong state or without the parameters. */
+        var refuseParams = false
         var position = 0
         var released = false
         private var params = PlaybackParams()
@@ -84,6 +86,7 @@ class VoiceSessionTest {
         override fun getPlaybackParams() = params
 
         override fun setPlaybackParams(params: PlaybackParams) {
+            if (refuseParams) throw IllegalArgumentException("refused")
             this.params = params
             if (params.speed > 0f) playing = true
         }
@@ -109,6 +112,7 @@ class VoiceSessionTest {
     private lateinit var store: EncryptedMediaStore
     private val players = ArrayList<FakePlayer>()
     private var damaged = false
+    private var refuse = false
     private val player get() = players.last()
 
     @Before
@@ -127,7 +131,7 @@ class VoiceSessionTest {
         EncryptedMediaStore.install(store)
         service = ReviewFlowsTest.TestService(app)
         chat = service.chat(service.a, Jid.of("friend@example.com"))
-        VoiceSession.init(app) { FakePlayer(damaged = damaged).also(players::add) }
+        VoiceSession.init(app) { FakePlayer(damaged = damaged).also { it.refuseParams = refuse; players.add(it) } }
     }
 
     @After
@@ -152,7 +156,7 @@ class VoiceSessionTest {
     }
 
     private fun play(voice: Pair<Message, File>) =
-        VoiceSession.toggle(service, voice.first.conversation.uuid, voice.first.uuid, voice.first.timeSent, voice.second)
+        VoiceSession.toggle(service, voice.first.conversation.uuid, voice.first.uuid, voice.second)
 
     private fun released() = !VoiceSession.active.value && VoiceSession.bar.value == null && VoiceSession.playback.value.uuid == null
 
@@ -278,6 +282,17 @@ class VoiceSessionTest {
     }
 
     @Test
+    fun aNoteJustAfterAClearKeepsPlaying() {
+        val v = voice()
+        // the service puts the marker a second past the last message at the clear: this note arrived inside it
+        chat.setLastClearHistory(v.first.timeSent + 1_000, null)
+        play(v)
+        idle(2_500)
+        assertTrue(VoiceSession.active.value)
+        assertTrue(player.playing)
+    }
+
+    @Test
     fun aMessageOnlyTrimmedFromMemoryKeepsPlaying() {
         val v = voice()
         play(v)
@@ -294,9 +309,48 @@ class VoiceSessionTest {
         val next = ReviewFlowsTest.TestService(app)
         val other = next.chat(next.a, Jid.of("friend@example.com"))
         val v = voice("n.m4a", other)
-        VoiceSession.toggle(next, other.uuid, v.first.uuid, v.first.timeSent, v.second)
+        VoiceSession.toggle(next, other.uuid, v.first.uuid, v.second)
         assertTrue(first.released)
         assertTrue(player.playing)
+    }
+
+    @Test
+    fun anotherServiceInstanceBoundReleases() {
+        play(voice())
+        VoiceSession.bound(service)
+        assertTrue("the same instance keeps playing", player.playing)
+        VoiceSession.bound(ReviewFlowsTest.TestService(app))
+        assertTrue(released())
+        assertTrue(player.released)
+    }
+
+    @Test
+    fun refusedPlaybackParamsRelease() {
+        refuse = true
+        play(voice())
+        assertTrue("a start the player refuses", released())
+        assertTrue(player.released)
+        refuse = false
+        val v = voice("b.m4a")
+        play(v)
+        player.refuseParams = true
+        VoiceSession.cycleSpeed()
+        assertTrue("a refused speed keeps playing", player.playing)
+        assertTrue(VoiceSession.active.value)
+        play(v) // pause
+        play(v) // a resume the player refuses
+        assertTrue(released())
+        assertTrue(player.released)
+    }
+
+    @Test
+    fun aDuckRequestPauses() {
+        play(voice())
+        val request = shadowOf(app.getSystemService(AudioManager::class.java)).lastAudioFocusRequest
+        assertTrue(request.audioFocusRequest.willPauseWhenDucked())
+        request.listener.onAudioFocusChange(AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK)
+        assertFalse(player.playing)
+        assertTrue(VoiceSession.active.value)
     }
 
     @Test

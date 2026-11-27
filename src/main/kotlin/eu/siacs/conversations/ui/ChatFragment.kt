@@ -583,6 +583,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     override fun onBackendConnected() {
         val service = xmppConnectionService ?: return
+        VoiceSession.bound(service)
         var c = conversation
         if (c == null) {
             val uuid = pendingUuid ?: return
@@ -2195,7 +2196,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val service = xmppConnectionService ?: return
         val file = service.fileBackend.getFile(message)
         if (file.exists()) {
-            VoiceSession.toggle(service, message.conversation.uuid, uuid, message.timeSent, file)
+            VoiceSession.toggle(service, message.conversation.uuid, uuid, file)
         } else {
             openMedia(uuid)
         }
