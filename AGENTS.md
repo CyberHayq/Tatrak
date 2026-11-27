@@ -142,8 +142,10 @@ pointer here. When every rule earns its place, the owner raises the limit.
 | Work | Who | Effort |
 |---|---|---|
 | Main session: plans, designs, resolving reviews, re-checking others' changes | Claude Opus 5.5 | xhigh |
-| A feature or fix with a written plan | Claude Opus 5.5 subagent | high |
+| A feature or fix with a written plan that changes state or logic (Compose state, storage, services) | Claude Opus 5.5 subagent | high |
+| A feature or fix with a written plan and no state or logic change (layout, resources, screenshot tests, plain Kotlin); a trial from 2026-11-27, judged by Codex findings against Opus | Claude Sonnet 5.5 subagent | high |
 | Mechanical work: strings and translations, screenshot tests, throwaway probes, emulator checks | Claude Sonnet 5.5 | medium |
+| Search and reading for the main session (where code is, who calls it, reference clones, long logs); never code | Claude Haiku 5.5; Claude Sonnet 5.5 when the reading must judge (how another app built a feature, its fix history) | medium |
 | Measurements on the `benchmark` build, a batch of fixes in its own worktree | Codex `gpt-6.2-sol` | high |
 | Very complex work: Tatrak's own storage and encryption code, migrations, races | Claude Opus 5.5 subagent writes, Codex `gpt-6.2-astra` reviews | high / high |
 | Small fixes to storage or encryption code from a review whose findings already give the fix | Claude Opus 5.5 (main session) | xhigh |
