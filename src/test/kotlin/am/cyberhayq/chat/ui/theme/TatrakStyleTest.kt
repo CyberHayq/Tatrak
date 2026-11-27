@@ -24,7 +24,7 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.ConscryptMode
 
-/** Precedence of the style and the night background (see knowledge/egm/style-slate-sea/design_draft.md and theming.md). */
+/** Precedence of the style and the night background (see knowledge/architecture/theming.md). */
 @RunWith(RobolectricTestRunner::class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 @Config(application = Application::class, sdk = [35])

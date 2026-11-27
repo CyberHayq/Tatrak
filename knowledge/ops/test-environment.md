@@ -64,7 +64,7 @@ the XMPP domain: no DNS, no `/etc/hosts`. Users `tester` and `friend`, password 
 registered at start. Self-signed certificate, generated once into the data volume so the app
 keeps trusting it across rebuilds. Components: `conference.10.0.2.2` (MUC with MAM),
 `upload.10.0.2.2` and `stickers.10.0.2.2` (HTTP upload on `https://10.0.2.2:5281/`, the latter
-configured like the sticker runbook).
+configured like [the sticker runbook](prosody-stickers.md)).
 
 ```sh
 cd tools/test-server

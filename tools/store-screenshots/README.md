@@ -3,7 +3,7 @@
 Six promotional cards (1080x1920) built from real emulator captures of the app, laid on Tatrak's
 own "Federation" background (ink, a hairline network of nodes, messages in flight). The capture
 procedure, demo data and per-scene settings are in the runbook
-knowledge/ops/store-screenshots.md.
+[knowledge/ops/store-screenshots.md](../../knowledge/ops/store-screenshots.md).
 
 Python 3 and Pillow only; nothing here is part of the app build.
 

@@ -1,7 +1,7 @@
 # Media format checks against Tink
 
 `SpecCheck.java` is a preliminary whole-buffer probe of
-the format spec against the real Tink
+[the format spec](../../knowledge/egm/attachment-encryption/format-spec.md) against the real Tink
 Java; it is not the app's test suite. "Our side" is an independent implementation of the spec on
 plain `javax.crypto` (HKDF written out with `HmacSHA256`); Tink is only on the other side. One
 AD helper feeds both sides, so the AD encoding is checked only against the spec's worked hex

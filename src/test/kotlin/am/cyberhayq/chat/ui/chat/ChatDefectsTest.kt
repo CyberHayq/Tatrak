@@ -8,7 +8,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** Interop defects 1, 3 and 4 (knowledge/protocol/interop-2026-11-07.md). */
+/** Defects found in the 2026-11-07 interop run: retracted placeholders, stickers, the subscription banner. */
 class ChatDefectsTest {
     private val conversation =
         Proxy.newProxyInstance(javaClass.classLoader, arrayOf(Conversational::class.java)) { _, _, _ -> null }
