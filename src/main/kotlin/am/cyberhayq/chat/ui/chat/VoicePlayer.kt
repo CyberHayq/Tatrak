@@ -4,6 +4,7 @@ import android.media.AudioAttributes
 import android.media.AudioFocusRequest
 import android.media.AudioManager
 import am.cyberhayq.chat.storage.media.EncryptedMediaStore
+import android.content.Context
 import am.cyberhayq.chat.storage.media.MediaFile
 import android.media.MediaPlayer
 import android.util.Log
@@ -30,13 +31,19 @@ data class VoicePlayback(
 
 /**
  * Plays one audio attachment at a time; the bubble of [VoicePlayback.uuid] shows the progress.
- * [unavailable] is called when a file cannot be played or a read fails while playing.
+ * [unavailable] is called when a file cannot be played or a read fails while playing; [onCompletion]
+ * with the uuid of a message that played to its end. [newPlayer] is replaced by a fake in tests.
  */
 class VoicePlayer(
+    context: Context,
     private val scope: CoroutineScope,
-    private val audioManager: AudioManager,
+    private val onCompletion: (String) -> Unit,
     private val unavailable: () -> Unit,
+    private val newPlayer: () -> MediaPlayer = ::MediaPlayer,
 ) {
+    private val audioManager = context.getSystemService(AudioManager::class.java)
+
+    private var speed = 1f
 
     private val mutableState = MutableStateFlow(VoicePlayback())
     val state: StateFlow<VoicePlayback> = mutableState.asStateFlow()
@@ -73,20 +80,25 @@ class VoicePlayer(
         audioManager.abandonAudioFocusRequest(focusRequest)
     }
 
-    fun toggle(uuid: String, file: File) {
+    /**
+     * Plays, pauses or resumes [uuid], or switches to it. False when it could not start: focus denied,
+     * or the file could not be opened (then [unavailable] was called too).
+     */
+    fun toggle(uuid: String, file: File): Boolean {
         val current = player
         if (current != null && mutableState.value.uuid == uuid) {
             if (current.isPlaying) {
                 pause()
-            } else if (requestFocus()) {
-                current.start()
-                startTicker(current)
+                return true
             }
-            return
+            if (!requestFocus()) return false
+            begin(current)
+            startTicker(current)
+            return true
         }
         release()
-        if (!requestFocus()) return
-        val next = MediaPlayer().apply { setAudioAttributes(attributes) }
+        if (!requestFocus()) return false
+        val next = newPlayer().apply { setAudioAttributes(attributes) }
         var opened: MediaFile? = null
         try {
             opened = EncryptedMediaStore.get().open(file) // through the media store, as every reader of attachments
@@ -98,14 +110,14 @@ class VoicePlayer(
             opened?.close()
             abandonFocus()
             unavailable()
-            return
+            return false
         } catch (e: IllegalStateException) {
             Log.w(Config.LOGTAG, "unable to play a voice message: ${e.javaClass.simpleName}") // the message names the stored file
             next.release()
             opened?.close()
             abandonFocus()
             unavailable()
-            return
+            return false
         }
         next.setOnCompletionListener {
             // the platform may report a file damaged in the middle as a normal end
@@ -113,13 +125,28 @@ class VoicePlayer(
             ticker?.cancel()
             abandonFocus()
             mutableState.value = VoicePlayback(uuid, false, 0, it.duration)
+            onCompletion(uuid)
         }
         next.setOnErrorListener { _, _, _ -> release(); unavailable(); true } // a read that failed after prepare(): stop, do not go on polling
         media = opened
         player = next
         mutableState.value = VoicePlayback(uuid, true, 0, next.duration)
-        next.start()
+        begin(next)
         startTicker(next)
+        return true
+    }
+
+    /** Applied at once while playing; otherwise kept for the next resume or start. */
+    fun setSpeed(speed: Float) {
+        this.speed = speed
+        val current = player ?: return
+        // a non-zero speed starts a paused, prepared or completed player: only touch a playing one
+        if (current.isPlaying) current.playbackParams = current.playbackParams.setSpeed(speed)
+    }
+
+    // in place of start(): setPlaybackParams with a non-zero speed starts the player at that speed
+    private fun begin(current: MediaPlayer) {
+        current.playbackParams = current.playbackParams.setSpeed(speed)
     }
 
     fun pause() {

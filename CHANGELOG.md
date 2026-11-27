@@ -8,6 +8,11 @@
   accounts under "All accounts" it asks which account. Each newly added account gets this chat
   pinned once, at its first sign-in; unpinned or deleted, it is not brought back (public issue
   #6).
+- Voice messages keep playing when you leave the chat (public issue #7, step 1): a bar under
+  the top bar of the chat list, the other tabs and every chat shows the playing message, with
+  play/pause, the speed (1×, 1.5×, 2×, remembered), close, and a tap that opens the chat at the
+  message. Playback pauses when no Tatrak screen is visible or headphones are unplugged, and
+  stops when the message, its file, its chat or its account goes away.
 
 ### Upstream
 - Tatrak now includes the fixes of Conversations 2.21.1-2.21.5 (OMEMO, TLS trust, Jingle file

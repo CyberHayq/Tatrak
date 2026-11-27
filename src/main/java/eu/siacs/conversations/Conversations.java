@@ -104,6 +104,8 @@ public class Conversations extends Application {
         am.cyberhayq.chat.storage.media.TemporaryMedia.deleteLeftovers(this);
         // Tatrak: the value of the removed "store in shared folders" setting
         androidx.preference.PreferenceManager.getDefaultSharedPreferences(this).edit().remove("use_shared_storage").apply();
+        // Tatrak: the app-wide voice player, here so it counts every started activity from the first
+        am.cyberhayq.chat.ui.chat.VoiceSession.init(this);
     }
 
     private static void installSecurityProvider() {

@@ -26,7 +26,7 @@ import am.cyberhayq.chat.ui.chat.ReplyPreview
 import am.cyberhayq.chat.ui.chat.StickerStore
 import am.cyberhayq.chat.ui.chat.ScrollAnchor
 import am.cyberhayq.chat.ui.chat.SwipeBackLayout
-import am.cyberhayq.chat.ui.chat.VoicePlayer
+import am.cyberhayq.chat.ui.chat.VoiceSession
 import am.cyberhayq.chat.ui.chat.VoiceRecorder
 import am.cyberhayq.chat.ui.chat.Wallpapers
 import am.cyberhayq.chat.ui.chat.currentTextPalette
@@ -47,7 +47,6 @@ import android.content.Intent
 import android.content.IntentSender
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.media.AudioManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
@@ -77,6 +76,7 @@ import androidx.core.os.BundleCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.viewModelScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
@@ -172,11 +172,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     // open "Clear history" of the shown chat; dismissed when another chat is shown
     private var clearing: androidx.appcompat.app.AlertDialog? = null
 
-    private val voicePlayer by lazy {
-        VoicePlayer(lifecycleScope, requireContext().getSystemService(AudioManager::class.java)) {
-            context?.let { Toast.makeText(it, R.string.tatrak_viewer_load_failed, Toast.LENGTH_SHORT).show() }
-        }
-    }
+    private val voiceBarActions by lazy { VoiceSession.barActions(requireActivity()) }
 
     private var conversation: Conversation? = null
     private var pendingUuid: String? = null
@@ -432,8 +428,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                                 reply = viewModel.reply?.let { it.copy(thumbnail = it.uuid == state.replyThumbnailUuid) },
                                 privateTo = viewModel.privateTo?.resource,
                                 actions = this@ChatFragment,
-                                voice = voicePlayer.state,
+                                voice = VoiceSession.playback,
                                 recording = voiceRecorder.state,
+                                voiceBar = VoiceSession.bar,
+                                voiceBarActions = voiceBarActions,
                                 focus = viewModel.focus,
                                 onFocused = { if (viewModel.focus == it) viewModel.focus = null },
                                 previews = viewModel.previews.map { it.uuid.toString() },
@@ -510,6 +508,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     override fun onStart() {
         super.onStart()
+        VoiceSession.setChatShown(shownUuid())
         val service = xmppConnectionService ?: return
         val c = conversation ?: return
         // extras handed to reInit before this fragment was added
@@ -525,7 +524,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     override fun onStop() {
         super.onStop()
-        voicePlayer.pause()
+        VoiceSession.clearChatShown(shownUuid())
         // like RecordingActivity.onStop: leaving the screen discards the recording
         if (voiceRecorder.state.value.active) stopRecording(send = false)
         voiceWarning?.dismiss() // shown again by the next hold; dismissing does not accept it
@@ -538,7 +537,6 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     override fun onDestroy() {
         // leaving the chat ends a private message; a configuration change of the open chat keeps it
         if (activity?.isChangingConfigurations != true) conversation?.takeIf { it.mode == Conversation.MODE_MULTI }?.nextCounterpart = null
-        voicePlayer.release()
         clearing?.dismiss() // replaced by the classic screen, or recreated
         super.onDestroy()
     }
@@ -567,10 +565,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             saveDraft(previous)
             // ConversationFragment.saveMessageDraftStopAudioPlayer clears the media previews too
             dropPreviews()
-            voicePlayer.release()
             voiceRecorder.stop(keep = false)
         }
         this.conversation = conversation
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) VoiceSession.setChatShown(conversation.uuid)
         // as ConversationFragment.reInit: a read chat opens with the last pages only, so loaded
         // history does not keep growing (and every snapshot with it) across visits
         // history keeps its loaded pages when a preview card hands over: the card may show an older message
@@ -597,6 +595,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             conversation = c
         }
         pendingUuid = null
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) VoiceSession.setChatShown(c.uuid)
         val extras = pendingExtras
         pendingExtras = null
         bind(service, c, extras)
@@ -915,7 +914,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             withPermissions(permissions) {}
             return false
         }
-        voicePlayer.pause()
+        VoiceSession.pause()
         val context = requireContext()
         if (!MediaPrompts.voiceWarningDue(context) && voiceRecorder.start()) {
             view?.keepScreenOn = true
@@ -2196,13 +2195,13 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val service = xmppConnectionService ?: return
         val file = service.fileBackend.getFile(message)
         if (file.exists()) {
-            voicePlayer.toggle(uuid, file)
+            VoiceSession.toggle(service, message.conversation.uuid, uuid, message.timeSent, file)
         } else {
             openMedia(uuid)
         }
     }
 
-    override fun seekVoice(uuid: String, fraction: Float) = voicePlayer.seek(uuid, fraction)
+    override fun seekVoice(uuid: String, fraction: Float) = VoiceSession.seek(uuid, fraction)
 
     /** Routes taps through [FixedURLSpan] so xmpp:, geo: and web links behave as before. */
     override fun openLink(url: String) {

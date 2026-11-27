@@ -490,6 +490,8 @@ public class ConversationsActivity extends QrCodeProcessingActivity
         final var existing = fragmentManager.findFragmentById(container);
         final var arguments = extras == null ? new Bundle() : extras;
         final boolean classic = wantsClassic(conversation, extras);
+        // Tatrak: the classic view plays with its own AudioPlayer, which takes no audio focus: no two players at once
+        if (classic) am.cyberhayq.chat.ui.chat.VoiceSession.release();
         if (classic && existing instanceof ChatFragment chatFragment) {
             // Tatrak: a group private message written in ChatFragment does not go along to the classic screen
             chatFragment.endPrivateMessage();

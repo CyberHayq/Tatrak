@@ -4,6 +4,8 @@ import am.cyberhayq.chat.ui.chat.ChatPreview
 import am.cyberhayq.chat.ui.chat.ScrollAnchor
 import am.cyberhayq.chat.ui.chat.ChatViewModel
 import am.cyberhayq.chat.ui.chat.NoChatActions
+import am.cyberhayq.chat.ui.chat.NoVoiceBar
+import am.cyberhayq.chat.ui.chat.VoiceSession
 import am.cyberhayq.chat.ui.chat.currentTextPalette
 import am.cyberhayq.chat.ui.accounts.AccountFilter
 import am.cyberhayq.chat.ui.calls.CallsScreen
@@ -191,6 +193,10 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                     val dock = { selected: MainTab -> @Composable { backdrop: BarBackdrop? -> TabDock(selected, state.account, ::selectTab, backdrop) } }
                     // ItemOptions' blur of the screen under the account switcher
                     val blur by animateDpAsState(if (switcher != null && LocalBarBlur.current != BarBlur.OFF) 12.dp else 0.dp, label = "blur")
+                    // two panes: the chat pane shows the voice bar while a chat is shown (Decision 13)
+                    val chatShown by VoiceSession.chatShown.collectAsStateWithLifecycle()
+                    val voiceBar = if (chatShown != null && ConversationsActivity.isTabletView(requireActivity())) NoVoiceBar else VoiceSession.bar
+                    val voiceBarActions = remember { VoiceSession.barActions(requireActivity()) }
                     CompositionLocalProvider(LocalAccountSwitcher provides { switcher = it }) {
                         PreviewCovered(previewing != null) {
                             // blur(0) would still add a clipping layer
@@ -212,14 +218,16 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                                                 onTab = ::selectTab,
                                                 // as Telegram (DialogsActivity.onItemLongClick, !isTablet): no preview beside an open chat
                                                 canPreview = !ConversationsActivity.isTabletView(requireActivity()),
+                                                voiceBar = voiceBar,
+                                                voiceBarActions = voiceBarActions,
                                             )
                                         MainTab.CONTACTS -> {
                                             val contacts by contactsTab.state.collectAsStateWithLifecycle()
-                                            NewChatScreen(contacts, contactsTab, contactsOnly = true, dock = dock(page), scrollToTop = scrollToTop)
+                                            NewChatScreen(contacts, contactsTab, contactsOnly = true, dock = dock(page), scrollToTop = scrollToTop, voiceBar = voiceBar, voiceBarActions = voiceBarActions)
                                         }
                                         MainTab.CALLS -> {
                                             val calls by callList.state.collectAsStateWithLifecycle()
-                                            CallsScreen(calls, callList, dock = dock(page), scrollToTop = scrollToTop)
+                                            CallsScreen(calls, callList, dock = dock(page), scrollToTop = scrollToTop, voiceBar = voiceBar, voiceBarActions = voiceBarActions)
                                         }
                                         MainTab.PROFILE -> {
                                             val sections = remember(language) {
@@ -227,7 +235,7 @@ class ChatListFragment : XmppFragment(), ChatListActions {
                                                 listOf(listOf(SavedMessages.profileRow(requireContext(), ::openSavedMessages))) +
                                                     settingsSections(requireContext(), ::openSettingsPage)
                                             }
-                                            ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop)
+                                            ProfileTab(profile, { AccountUtils.launchManageAccounts(requireActivity()) }, sections, dock(page), scrollToTop, voiceBar, voiceBarActions)
                                         }
                                     }
                                 }
