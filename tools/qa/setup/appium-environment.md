@@ -6,10 +6,12 @@ Appium is installed inside this QA workspace, independently of global npm packag
 
 - Node.js detected: `22.22.0`.
 - npm detected: `10.9.4`.
-- Selected Appium: `3.1.0`.
+- Selected Appium: `3.9.1` (was `3.1.0` for the recorded run; raised 2026-11-27 for the
+  security fixes in its dependency tree, not re-run on a device yet).
 - Selected UiAutomator2 driver: `5.0.6`.
 - Both packages declare Node support `^20.19.0 || ^22.12.0 || >=24.0.0` and npm `>=10`.
-- Driver `5.0.6` declares Appium peer support `^3.0.0-rc.2`.
+- Driver `5.0.6` declares Appium peer support `^3.0.0-rc.2` (covers `3.9.1`; Appium 4 needs driver
+  10.x).
 
 These values were checked with `npm view` against package metadata on 2026-11-25.
 Installation completed successfully. `appium --version` returns `3.1.0` and
@@ -23,7 +25,7 @@ see [RUN_RESULTS.md](../RUN_RESULTS.md) for the completed run.
 Run from `tools/qa/`:
 
 ```sh
-timeout 480 npm install --prefix .tools/appium --save-exact --no-audit --no-fund appium@3.1.0
+timeout 480 npm install --prefix .tools/appium --save-exact --no-audit --no-fund appium@3.9.1
 APPIUM_HOME="$PWD/.tools/appium-home" timeout 480 \
   .tools/appium/node_modules/.bin/appium driver install uiautomator2@5.0.6
 ```

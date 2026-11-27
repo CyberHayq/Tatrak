@@ -15,6 +15,7 @@
 ### Developer tooling
 - Add the Appium/pytest QA suite under `tools/qa/`: nine regression cases, three smoke cases,
   fixture helpers, pinned test-tool dependencies, run instructions and recorded emulator results.
+- QA suite: Appium 3.1.0 -> 3.9.1 for the security fixes in its dependency tree.
 
 ### Fixes
 - Calls: fixes for hanging up while the other side answers, for calls placed or cancelled during

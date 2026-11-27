@@ -38,7 +38,8 @@ take precedence when present. Android Emulator hardware acceleration must be ava
 ## Appium setup
 
 The tested server version and its npm dependency tree are recorded under `tooling/appium/`.
-Node.js must satisfy the Appium 3.1.0 engine requirement; Node 22.22.0 was used in the recorded run.
+Node.js must satisfy the Appium 3.9.1 engine requirement; Node 22.22.0 was used in the recorded run
+(Appium 3.1.0 then).
 
 ```sh
 mkdir -p .tools/appium
