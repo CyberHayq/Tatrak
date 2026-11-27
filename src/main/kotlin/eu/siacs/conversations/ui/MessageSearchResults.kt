@@ -140,13 +140,15 @@ internal class MessageSearchResults(
          */
         @JvmStatic
         fun openAt(context: Context, conversation: Conversation, messageUuid: String) {
-            context.startActivity(
-                Intent(context, ConversationsActivity::class.java)
-                    .setAction(ConversationsActivity.ACTION_VIEW_CONVERSATION)
-                    .putExtra(ConversationsActivity.EXTRA_CONVERSATION, conversation.uuid)
-                    .putExtra(ChatFragment.EXTRA_MESSAGE_UUID, messageUuid)
-                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
-            )
+            context.startActivity(openAtIntent(context, conversation.uuid, messageUuid))
         }
+
+        /** The intent of [openAt]; also the voice bar's tap. */
+        fun openAtIntent(context: Context, conversationUuid: String, messageUuid: String): Intent =
+            Intent(context, ConversationsActivity::class.java)
+                .setAction(ConversationsActivity.ACTION_VIEW_CONVERSATION)
+                .putExtra(ConversationsActivity.EXTRA_CONVERSATION, conversationUuid)
+                .putExtra(ChatFragment.EXTRA_MESSAGE_UUID, messageUuid)
+                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP)
     }
 }
