@@ -18,6 +18,9 @@ pointer here. When every rule earns its place, the owner raises the limit.
   Everything unchecked or risky also goes into `knowledge/project/risks.md`.
 - A question is not an instruction: "what if we commit X?" gets an answer (can it be done, pros,
   cons, a recommendation) and a wait; nothing is moved, edited or staged until the owner says so.
+- A short approval approves only the action it names: "write" approves writing, not launching
+  the agents or committing; Codex runs, commits, pushes and installs need their own yes (on
+  2026-11-10 a "write" also launched two Codex reviews and spent the owner's limit).
 - Decisions go to the owner one at a time: one question, a concrete example, every difference
   between the options and a recommendation. No bundled questions.
 - Before designing a migration or an upgrade path, ask whether real installs exist. Tatrak has
@@ -25,8 +28,14 @@ pointer here. When every rule earns its place, the owner raises the limit.
 
 ## Commits
 
-- The owner signs commits with a hardware key: prepare changes in the working tree (or staged),
-  **commit only when asked**.
+- The main session commits finished, re-checked work (tests run, the checks below done) on its
+  own judgement, in focused commits (owner, 2026-11-26); other agents commit only when asked.
+  Pushes and releases need the owner's yes.
+- The owner signs commits with a hardware key. When the key does not answer, commit unsigned
+  (`git -c commit.gpgsign=false commit`), but before any push re-sign every unpushed commit and
+  check each one carries `BEGIN SSH SIGNATURE` (`git cat-file commit <sha>`; `%G?` shows N
+  without an allowed-signers file). Re-sign by recreating the commits with the same trees
+  (`git commit-tree -S`), so a merge is not redone (owner, 2026-11-27).
 - Code copied from another project (see reference clones below) names its source (project,
   file, commit) in the commit message.
 - Nothing committed contains an absolute path that shows a user name (`/home/<user>/...`): use
