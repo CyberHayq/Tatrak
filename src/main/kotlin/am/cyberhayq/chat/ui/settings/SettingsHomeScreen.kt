@@ -42,6 +42,12 @@ import am.cyberhayq.chat.ui.common.TatrakTopBar
 import am.cyberhayq.chat.ui.common.listBottom
 import am.cyberhayq.chat.ui.common.listPadding
 import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.chat.NoVoiceBar
+import am.cyberhayq.chat.ui.chat.NoVoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBar
+import am.cyberhayq.chat.ui.chat.VoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBarState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.ui.res.stringResource
@@ -124,6 +130,9 @@ fun ProfileTab(
     sections: List<List<SettingsRow>>,
     dock: @Composable (BarBackdrop?) -> Unit,
     scrollToTop: Int = 0,
+    /** The voice mini bar under the top bar (the default shows none). */
+    voiceBar: StateFlow<VoiceBarState?> = NoVoiceBar,
+    voiceBarActions: VoiceBarActions = NoVoiceBarActions,
 ) {
     val list = rememberLazyListState()
     ScrollToTopOn(scrollToTop, list)
@@ -131,6 +140,7 @@ fun ProfileTab(
         topBar = { TatrakTopBar(title = stringResource(R.string.title_activity_settings), onBack = null) },
         modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.groupedBackground),
         bottomBar = dock,
+        underBar = { VoiceBar(voiceBar, voiceBarActions, it) },
     ) { top ->
         SettingsHomeScreen(account, onAccount, sections, top = top, list = list)
     }

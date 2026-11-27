@@ -5,6 +5,12 @@ import am.cyberhayq.chat.ui.common.ScrollToTopOn
 import am.cyberhayq.chat.ui.common.listBottom
 import am.cyberhayq.chat.ui.common.listPadding
 import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.chat.NoVoiceBar
+import am.cyberhayq.chat.ui.chat.NoVoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBar
+import am.cyberhayq.chat.ui.chat.VoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBarState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import am.cyberhayq.chat.ui.common.AvatarRow
 import am.cyberhayq.chat.ui.common.EmptyText
@@ -134,6 +140,9 @@ fun NewChatScreen(
     searchRequest: Pair<Int, String?>? = null,
     dock: (@Composable (BarBackdrop?) -> Unit)? = null,
     scrollToTop: Int = 0,
+    /** The voice mini bar under the top bar (the default shows none). */
+    voiceBar: StateFlow<VoiceBarState?> = NoVoiceBar,
+    voiceBarActions: VoiceBarActions = NoVoiceBarActions,
 ) {
     val list = rememberLazyListState()
     ScrollToTopOn(scrollToTop, list)
@@ -196,6 +205,7 @@ fun NewChatScreen(
             },
             modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             bottomBar = dock,
+            underBar = { VoiceBar(voiceBar, voiceBarActions, it) },
         ) { top ->
             LazyColumn(Modifier.fillMaxSize().listBottom().imePadding(), state = list, contentPadding = listPadding(top)) {
                 if (needle.isEmpty()) {

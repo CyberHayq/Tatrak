@@ -1,6 +1,12 @@
 package am.cyberhayq.chat.ui.chatlist
 
 import am.cyberhayq.chat.update.UpdateNotice
+import am.cyberhayq.chat.ui.chat.NoVoiceBar
+import am.cyberhayq.chat.ui.chat.NoVoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBar
+import am.cyberhayq.chat.ui.chat.VoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBarState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ContentTransform
 import androidx.compose.animation.core.EaseOutQuint
@@ -223,6 +229,9 @@ fun ChatListScreen(
     onTab: (MainTab) -> Unit = {},
     /** The avatar's long press previews the chat; without it (two panes) it selects the row like the rest of it. */
     canPreview: Boolean = true,
+    /** The voice mini bar under the top bar (the default shows none). */
+    voiceBar: StateFlow<VoiceBarState?> = NoVoiceBar,
+    voiceBarActions: VoiceBarActions = NoVoiceBarActions,
 ) {
     val drawer = rememberDrawerController()
     val scope = rememberCoroutineScope()
@@ -422,11 +431,16 @@ fun ChatListScreen(
                 },
                 topBar = {
                     if (floating) {
-                        FloatingTopBar(backdrop, tabs, bars)
+                        Column {
+                            FloatingTopBar(backdrop, tabs, bars)
+                            // kept in search, selection and the archive, as Telegram's player bar
+                            VoiceBar(voiceBar, voiceBarActions, backdrop)
+                        }
                     } else {
                         Column(Modifier.background(chatColors.topBar)) {
                             bars()
                             tabs?.invoke()
+                            VoiceBar(voiceBar, voiceBarActions)
                             HorizontalDivider(thickness = 0.5.dp, color = MaterialTheme.colorScheme.outlineVariant)
                         }
                     }

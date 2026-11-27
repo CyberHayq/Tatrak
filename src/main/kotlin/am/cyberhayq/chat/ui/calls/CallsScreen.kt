@@ -9,6 +9,12 @@ import am.cyberhayq.chat.ui.common.ScrollToTopOn
 import am.cyberhayq.chat.ui.common.listBottom
 import am.cyberhayq.chat.ui.common.listPadding
 import am.cyberhayq.chat.ui.theme.BarBackdrop
+import am.cyberhayq.chat.ui.chat.NoVoiceBar
+import am.cyberhayq.chat.ui.chat.NoVoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBar
+import am.cyberhayq.chat.ui.chat.VoiceBarActions
+import am.cyberhayq.chat.ui.chat.VoiceBarState
+import kotlinx.coroutines.flow.StateFlow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import am.cyberhayq.chat.ui.theme.LocalFloatingBars
 import am.cyberhayq.chat.ui.common.MenuEntry
@@ -116,6 +122,9 @@ fun CallsScreen(
     modifier: Modifier = Modifier,
     dock: (@Composable (BarBackdrop?) -> Unit)? = null,
     scrollToTop: Int = 0,
+    /** The voice mini bar under the top bar (the default shows none). */
+    voiceBar: StateFlow<VoiceBarState?> = NoVoiceBar,
+    voiceBarActions: VoiceBarActions = NoVoiceBarActions,
 ) {
     var tab by rememberSaveable { mutableStateOf(CallsTab.ALL) }
     val list = rememberLazyListState()
@@ -128,6 +137,7 @@ fun CallsScreen(
         TatrakScaffold(
             topBar = { TatrakTopBar(title = stringResource(R.string.tatrak_calls), onBack = if (dock == null) actions::back else null) },
             bottomBar = dock,
+            underBar = { VoiceBar(voiceBar, voiceBarActions, it) },
             modifier = modifier.fillMaxSize().background(MaterialTheme.colorScheme.surface),
             tabs = {
                 // scrollable: four Russian labels do not fit equal widths

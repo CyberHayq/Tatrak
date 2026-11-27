@@ -164,6 +164,7 @@ fun TatrakTopBar(
  * gets their height to pad its list's top with. [floatingTop] draws the floating top slot itself instead (its own pills over
  * the backdrop). Off: bar, tabs and content in a column as before, [content] gets 0 dp. A [bottomBar] (the chat list's
  * dock on a main tab) sits under the content, or floats over it like the top bar; [LocalBottomBar] tells the content.
+ * [underBar] (the voice mini bar) sits under the bar and its tabs, or under the floating pills; it gets the backdrop.
  */
 @Composable
 fun TatrakScaffold(
@@ -172,12 +173,14 @@ fun TatrakScaffold(
     tabs: (@Composable () -> Unit)? = null,
     floatingTop: (@Composable (BarBackdrop?) -> Unit)? = null,
     bottomBar: (@Composable (BarBackdrop?) -> Unit)? = null,
+    underBar: (@Composable (BarBackdrop?) -> Unit)? = null,
     content: @Composable ColumnScope.(top: Dp) -> Unit,
 ) {
     if (!LocalFloatingBars.current) {
         Column(modifier) {
             topBar()
             tabs?.invoke()
+            underBar?.invoke(null)
             if (bottomBar == null) {
                 content(0.dp)
             } else {
@@ -195,7 +198,12 @@ fun TatrakScaffold(
         modifier = modifier,
         containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0),
-        topBar = { if (floatingTop != null) floatingTop(backdrop) else FloatingTopBar(backdrop, tabs, topBar) },
+        topBar = {
+            Column {
+                if (floatingTop != null) floatingTop(backdrop) else FloatingTopBar(backdrop, tabs, topBar)
+                underBar?.invoke(backdrop)
+            }
+        },
         bottomBar = { bottomBar?.invoke(backdrop) },
     ) { bars ->
         Column(Modifier.fillMaxSize().fadeUnderBars(bars).backdropSource(backdrop)) {

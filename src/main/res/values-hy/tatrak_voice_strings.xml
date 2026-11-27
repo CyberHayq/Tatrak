@@ -1,4 +1,9 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
     <string name="tatrak_voice_not_sent">Ձայնային հաղորդագրությունը չուղարկվեց․ զրույցը փակվեց մինչև այն ուղարկելը</string>
+    <string name="tatrak_voice_message">Ձայնային հաղորդագրություն</string>
+    <string name="tatrak_voice_bar_title">Ձայնային հաղորդագրություն · %1$s</string>
+    <string name="tatrak_voice_speed_label">Նվագարկման արագություն %1$s</string>
+    <string name="tatrak_voice_bar_open">Բացել հաղորդագրությունը</string>
+    <string name="tatrak_voice_close">Փակել</string>
 </resources>

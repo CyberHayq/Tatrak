@@ -1014,7 +1014,7 @@ private fun AudioContent(
         )
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            val fraction = if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
+            val fraction = voiceFraction(position, duration)
             // seeking only works on the clip loaded in the player; other bubbles show a plain bar
             val seekable = playback != null
             val seek =
@@ -1057,6 +1057,9 @@ private fun AudioContent(
         }
     }
 }
+
+internal fun voiceFraction(position: Int, duration: Int): Float =
+    if (duration > 0) (position.toFloat() / duration).coerceIn(0f, 1f) else 0f
 
 internal fun formatDuration(ms: Int): String {
     val seconds = ms / 1000

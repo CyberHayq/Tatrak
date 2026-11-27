@@ -413,6 +413,9 @@ fun ChatScreen(
     listState: LazyListState? = null,
     /** Where the list opens instead of the unread divider: a [ChatPreview] card that became this chat. */
     startAt: ScrollAnchor? = null,
+    /** The voice mini bar under the header, above the banner (the default shows none). */
+    voiceBar: StateFlow<VoiceBarState?> = NoVoiceBar,
+    voiceBarActions: VoiceBarActions = NoVoiceBarActions,
 ) {
     val menu = remember(state.conversationUuid) { mutableStateOf<Pair<String, Rect>?>(null) }
     val menuKey = remember(menu) { derivedStateOf { menu.value?.first } }
@@ -521,6 +524,7 @@ fun ChatScreen(
                         topBar = {
                             Column(Modifier.pointerInput(Unit) {}) {
                                 FloatingTopBar(backdrop, content = header)
+                                if (!preview) VoiceBar(voiceBar, voiceBarActions, backdrop)
                                 // Telegram 13's pinned bar: 7 dp from the sides and under the header glass
                                 state.banner?.let { ChatBannerBar(it, state.blockMenu, actions, Modifier.padding(start = 7.dp, end = 7.dp, top = 7.dp - PieceInset), floating = true, backdrop) }
                             }
@@ -545,6 +549,7 @@ fun ChatScreen(
                 } else {
                     Column(Modifier.fillMaxSize()) {
                         header()
+                        if (!preview) VoiceBar(voiceBar, voiceBarActions)
                         // above the list, not over it: a banner that wraps to two lines pushes the messages down
                         state.banner?.takeIf { !preview }?.let { ChatBannerBar(it, state.blockMenu, actions) }
                         Box(Modifier.weight(1f).fillMaxWidth()) {
