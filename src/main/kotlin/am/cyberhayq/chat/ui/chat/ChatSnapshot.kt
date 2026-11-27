@@ -1068,7 +1068,7 @@ object ChatSnapshot {
                                     progress,
                                 ),
                         )
-                    params.runtime > 0 ->
+                    isVoice(message) ->
                         base.copy(kind = MessageKind.AUDIO, audioDurationMs = params.runtime)
                     else ->
                         base.copy(
