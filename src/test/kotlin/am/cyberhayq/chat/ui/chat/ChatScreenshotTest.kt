@@ -807,6 +807,13 @@ class ChatScreenshotTest {
         compose.waitForIdle()
         assertSelected(null)
         compose.onNodeWithText("Vika").assertDoesNotExist()
+        // the bubble's finger first, then the chip's, both still past the timeout (no moves in between)
+        chip.performTouchInput { down(0, other); down(1, center) }
+        compose.mainClock.advanceTimeBy(2_000)
+        chip.performTouchInput { up(1); up(0) }
+        compose.waitForIdle()
+        assertSelected(null)
+        compose.onNodeWithText("Vika").assertDoesNotExist()
     }
 
     /** An open sheet follows a rename under the same id and a swap that keeps the chips equal. */

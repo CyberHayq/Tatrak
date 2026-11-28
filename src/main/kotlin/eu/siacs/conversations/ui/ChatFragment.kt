@@ -24,6 +24,7 @@ import am.cyberhayq.chat.ui.chat.MessageFocus
 import am.cyberhayq.chat.ui.chat.highlightInConference
 import am.cyberhayq.chat.ui.chat.ReplyPreview
 import am.cyberhayq.chat.ui.chat.privateReactorHasMessageAvatar
+import am.cyberhayq.chat.ui.chat.hasOwnAvatar
 import am.cyberhayq.chat.ui.chat.reactorWho
 import am.cyberhayq.chat.ui.chat.StickerStore
 import am.cyberhayq.chat.ui.chat.ScrollAnchor
@@ -1744,11 +1745,12 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                 // the reaction names only room/nick, which may be someone else now: the received message's own sender
                 // when it is known by more than the nick, else the letter avatar
                 c.mode == Conversation.MODE_MULTI && message.isPrivateMessage ->
-                    if (privateReactorHasMessageAvatar(message)) service.avatarService.get(message, sizePx, false) else null
+                    c.mucOptions.getUserOrStub(message).takeIf { privateReactorHasMessageAvatar(message) && hasOwnAvatar(it) }
+                        ?.let { service.avatarService.get(it, sizePx, false) }
                 c.mode != Conversation.MODE_MULTI -> service.avatarService.get(c.contact, sizePx, false)
                 else -> {
                     val reaction = message.reactions.firstOrNull { reactorWho(it, inGroup) == who } ?: return@withContext null
-                    service.avatarService.get(c.mucOptions.getUserOrStub(reaction), sizePx, false)
+                    c.mucOptions.getUserOrStub(reaction).takeIf(::hasOwnAvatar)?.let { service.avatarService.get(it, sizePx, false) }
                 }
             }
         }

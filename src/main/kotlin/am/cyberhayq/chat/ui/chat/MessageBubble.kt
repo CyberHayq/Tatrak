@@ -1313,9 +1313,9 @@ private fun Modifier.chipPress(press: ChipPress, key: Any, longPress: Pair<Strin
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
                 press.marked = true
-                // a down someone already took (a touch that stops a fling) starts no long press
+                // a down someone already took (a touch that stops a fling) or a second finger already down starts no long press
                 val fired =
-                    longPress != null && !down.isConsumed &&
+                    longPress != null && !down.isConsumed && press.pointers <= 1 &&
                         withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
                             while (true) {
                                 val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break

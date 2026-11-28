@@ -386,7 +386,7 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   Rows are `MessageItem.reactors`, built with every snapshot (`ChatSnapshot`: `reactorRows`, names through
   `MucOptions.getUserOrStub` in a group, the contact in a one-to-one chat; a private message in a
   group stores only room/nick, so it shows that nick and, for a received message, the message's own
-  avatar when it carries an occupant id or real JID, else a letter; deduplicated by person and VS16-normalised emoji). In a group a tap
+  avatar when it carries an occupant id or real JID, else a letter; a member who left without a real JID also gets a letter; deduplicated by person and VS16-normalised emoji). In a group a tap
   on another member's row closes the sheet and opens the participant menu of the avatar tap
   (`reactorMenu`, `MucDetailsContextMenuHelper`); own rows and one-to-one rows are inert. The sheet
   state is `rememberSaveable(conversationUuid)` in `ChatScreen`; it reads the item's rows, so a rename
@@ -396,7 +396,7 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   bubble's select, and no sheet opens. A chip that cannot toggle (reaction limit, no
   rights) has no click: a short tap goes to the bubble's usual tap, TalkBack gets only the "Who
   reacted" long-click action, and the chip detects the long press itself (`chipPress`): only on a down
-  nobody consumed (a touch that stops a fling opens nothing), cancelled by a release, a move past the
+  nobody consumed (a touch that stops a fling opens nothing) while no other finger is on the bubble, cancelled by a release, a move past the
   slop, a second finger on the bubble, or a parent consuming its pointer (scroll, swipe). A chip's
   press marks the bubble's gesture (`ChipPress`, one per bubble) until the last finger on the bubble
   lifts; the bubble's own long press and `childLongPress` check the mark when they fire, so neither

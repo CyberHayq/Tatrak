@@ -5,6 +5,7 @@ import com.google.common.collect.ImmutableList
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Conversational
 import eu.siacs.conversations.entities.Message
+import eu.siacs.conversations.entities.MucOptions
 import eu.siacs.conversations.entities.Reaction
 import eu.siacs.conversations.utils.UIHelper
 
@@ -66,6 +67,9 @@ internal fun reactorRows(message: Message, you: String): List<ReactorRow> {
  */
 internal fun privateReactorHasMessageAvatar(message: Message): Boolean =
     message.status == Message.STATUS_RECEIVED && (message.occupantId != null || message.trueCounterpart != null)
+
+/** A Stub (someone who left) without a real JID has nothing that tells it apart from whoever holds the nick now, so it gets the letter. */
+internal fun hasOwnAvatar(user: MucOptions.User): Boolean = user !is MucOptions.Stub || user.realJid != null
 
 /** null (All) first, then each emoji of [chipOrder] that has rows, with its row count; empty for a single emoji. */
 internal fun reactorTabs(rows: List<ReactorRow>, chipOrder: List<String>): List<Pair<String?, Int>> {

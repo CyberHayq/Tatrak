@@ -195,6 +195,15 @@ class ReactorsTest {
         assertFalse(privateReactorHasMessageAvatar(sent))
     }
 
+    /** Someone who left, known only by room/nick and occupant id, would share the nick's current holder's cached avatar. */
+    @Test
+    fun goneReactorWithoutRealJidHasNoOwnAvatar() {
+        val options = group().mucOptions
+        assertFalse(hasOwnAvatar(options.getUserOrStub(Reaction("👍", true, room.withResource("Gone"), null, "occ-gone"))))
+        assertTrue(hasOwnAvatar(options.getUserOrStub(Reaction("👍", true, room.withResource("Gone"), Jid.of("gone@example.com"), "occ-gone"))))
+        assertTrue(hasOwnAvatar(options.getUserOrStub(reaction("👍", "Anya"))))
+    }
+
     @Test
     fun tabsCountRowsInChipOrderAndVanishForOneEmoji() {
         val rows = listOf(row("a", "👍"), row("b", "❤️"), row("c", "👍"))
