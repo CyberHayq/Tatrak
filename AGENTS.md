@@ -134,7 +134,10 @@ pointer here. When every rule earns its place, the owner raises the limit.
 - Never two builds or heavy jobs at once (owner, 2026-11-27): every Gradle command, emulator run
   and other heavy job takes one machine-wide lock, so the second one waits instead of starting:
   `flock -w 1800 ~/.cache/tatrak-heavy.lock ./gradlew ...` (the same for emulator scripts). Every
-  brief says so. A `pgrep` wait is not enough: two agents can both see no build and start together
+  brief says so. An emulator started under the lock is started with `flock -o` and `setsid nohup`,
+  or it keeps the lock as long as it runs (`knowledge/ops/test-environment.md`; on 2026-11-28 a
+  leftover emulator blocked every build for over half an hour). A `pgrep` wait is not enough: two
+  agents can both see no build and start together
   (and `gradlew` runs the wrapper as `java -jar gradle/wrapper/gradle-wrapper.jar`, so the old
   `GradleWrapperMain` pattern never matched; parallel builds ran out of memory, 2026-11-27). At
   most two or three agents at once.
