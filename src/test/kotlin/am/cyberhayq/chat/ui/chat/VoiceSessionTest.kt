@@ -4,6 +4,7 @@ import am.cyberhayq.chat.storage.JvmDurable
 import am.cyberhayq.chat.storage.media.EncryptedMediaStore
 import am.cyberhayq.chat.storage.media.MediaKeyTable
 import android.app.Activity
+import android.content.Context
 import android.content.Intent
 import android.media.AudioManager
 import android.media.MediaDataSource
@@ -47,9 +48,14 @@ import org.robolectric.annotation.ConscryptMode
 )
 class VoiceSessionTest {
 
-    /** Prepares with a set length; plays from `setPlaybackParams` (as `VoicePlayer.begin`); ends on [finish]. */
+    /**
+     * Prepares with a set length; plays from `setPlaybackParams` (as `VoicePlayer.begin`); ends on [finish]. [awake]
+     * follows the platform's wake lock of [setWakeMode]: taken in start(), given up on pause, completion and release.
+     */
     class FakePlayer(private val length: Int = 19_000, private val damaged: Boolean = false) : MediaPlayer() {
         var playing = false
+        var wakeMode = 0
+        var awake = false
         /** setPlaybackParams throws, as a player in a wrong state or without the parameters. */
         var refuseParams = false
         var position = 0
@@ -70,16 +76,41 @@ class VoiceSessionTest {
 
         override fun getCurrentPosition() = position
 
+        /** A seek lands only through [landSeek], as the platform's asynchronous one. */
+        var deferSeek = false
+        private var seekDone: OnSeekCompleteListener? = null
+
         override fun seekTo(msec: Int) {
-            position = msec
+            if (deferSeek) return
+            landSeek(msec)
+        }
+
+        fun landSeek(at: Int) {
+            position = at
+            seekDone?.onSeekComplete(this)
+        }
+
+        override fun setOnSeekCompleteListener(listener: OnSeekCompleteListener?) {
+            seekDone = listener
+        }
+
+        override fun start() {
+            playing = true
+            awake = wakeMode != 0
+        }
+
+        override fun setWakeMode(context: Context, mode: Int) {
+            wakeMode = mode
         }
 
         override fun pause() {
             playing = false
+            awake = false
         }
 
         override fun release() {
             playing = false
+            awake = false
             released = true
         }
 
@@ -101,6 +132,7 @@ class VoiceSessionTest {
 
         fun finish() {
             playing = false
+            awake = false
             position = length
             completion?.onCompletion(this)
         }
@@ -158,6 +190,13 @@ class VoiceSessionTest {
     private fun play(voice: Pair<Message, File>) =
         VoiceSession.toggle(service, voice.first.conversation.uuid, voice.first.uuid, voice.second)
 
+    /** Whether the 100 ms ticker publishes: the position moves and shows within two ticks. */
+    private fun ticking(): Boolean {
+        player.position += 1_234
+        idle(250)
+        return VoiceSession.playback.value.positionMs == player.position
+    }
+
     private fun released() = !VoiceSession.active.value && VoiceSession.bar.value == null && VoiceSession.playback.value.uuid == null
 
     @Test
@@ -196,31 +235,34 @@ class VoiceSessionTest {
     }
 
     @Test
-    fun theLastStoppedActivityPausesAndNothingResumes() {
+    fun theLastStoppedActivityStopsOnlyTheTicker() {
         val one = Robolectric.buildActivity(Activity::class.java).setup()
         val two = Robolectric.buildActivity(Activity::class.java).setup()
         // the first play happens with both already started
         play(voice())
         two.pause().stop()
-        assertTrue("one activity still started", player.playing)
+        assertTrue("one activity still started", ticking())
         one.pause().stop()
-        assertFalse(player.playing)
+        assertTrue("plays on in the background (step 2)", player.playing)
         assertTrue(VoiceSession.active.value)
+        assertFalse("no ticker while nothing is visible", ticking())
         one.start().resume()
-        idle(500)
-        assertFalse("no resume when a screen is visible again", player.playing)
+        assertTrue("ticks again when a screen is visible", ticking())
         one.pause().stop().destroy()
         two.destroy()
     }
 
     @Test
-    fun aRotationDoesNotPauseButHomeAfterItDoes() {
+    fun aRotationThenHomePlaysOn() {
         val one = Robolectric.buildActivity(Activity::class.java).setup()
         play(voice())
         val rotated = one.recreate()
         assertTrue(player.playing)
+        assertTrue("a rotation keeps the ticker", ticking())
         rotated.pause().stop()
-        assertFalse(player.playing)
+        assertTrue(player.playing)
+        assertTrue(VoiceSession.active.value)
+        assertFalse(ticking())
         rotated.destroy()
     }
 
@@ -392,11 +434,13 @@ class VoiceSessionTest {
         VoiceSession.init(app) { FakePlayer().also(players::add) }
         assertTrue(released())
         assertNull(VoiceSession.chatShown.value)
-        // counted from zero by one callback: one stop after a start pauses
+        // counted from zero by one callback: one stop after a start stops the ticker
         val two = Robolectric.buildActivity(Activity::class.java).setup()
         play(voice("b.m4a"))
+        assertTrue(ticking())
         two.pause().stop()
-        assertFalse(player.playing)
+        assertFalse(ticking())
+        assertTrue(player.playing)
         one.pause().stop().destroy()
         two.destroy()
     }

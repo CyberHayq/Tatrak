@@ -166,12 +166,13 @@ class VoiceFlowsTest {
         assertTrue(player.playing)
         assertEquals(1, players.size)
         assertEquals(a.uuid, VoiceSession.chatShown.value)
-        // then Home: the last started activity stops
+        // then Home: plays on in the background (step 2a, the service keeps it)
         controller.pause().stop()
-        assertFalse(player.playing)
+        assertTrue(player.playing)
         assertTrue(VoiceSession.active.value)
         controller.start().resume()
-        assertFalse("no auto-resume", player.playing)
+        assertTrue(player.playing)
+        assertEquals(1, players.size)
     }
 
     @Test
@@ -183,7 +184,7 @@ class VoiceFlowsTest {
         assertTrue(player.playing)
         assertNull(VoiceSession.chatShown.value)
         over.pause().stop().destroy()
-        assertFalse(player.playing)
+        assertTrue("nothing visible plays on (step 2a)", player.playing)
         controller.start().resume()
         assertEquals(a.uuid, VoiceSession.chatShown.value)
     }

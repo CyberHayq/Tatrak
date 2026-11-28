@@ -6,4 +6,5 @@
     <string name="tatrak_voice_speed_label">Скорость воспроизведения %1$s</string>
     <string name="tatrak_voice_bar_open">Открыть сообщение</string>
     <string name="tatrak_voice_close">Закрыть</string>
+    <string name="tatrak_voice_channel">Голосовые сообщения</string>
 </resources>

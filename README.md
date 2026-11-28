@@ -179,6 +179,7 @@ is still pending. Planned features have no committed release dates.
 | Private messages to a group participant from the chat (text and replies) | 🧪 In testing |
 | App language chosen in the settings, on every Android version | 🧪 In testing |
 | "Saved messages" always in the side menu and the Profile tab, pinned for every new account | 🧪 In testing |
+| Voice messages keep playing outside the chat and in the background: a mini bar, a notification and the system media controls | 🧪 In testing |
 
 ### 🗺️ Roadmap
 

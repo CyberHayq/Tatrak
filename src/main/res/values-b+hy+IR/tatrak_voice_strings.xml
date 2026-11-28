@@ -6,4 +6,5 @@
     <string name="tatrak_voice_speed_label">Նուագարկման արագութիւն %1$s</string>
     <string name="tatrak_voice_bar_open">Բացել հաղորդագրութիւնը</string>
     <string name="tatrak_voice_close">Փակել</string>
+    <string name="tatrak_voice_channel">Ձայնային հաղորդագրութիւններ</string>
 </resources>

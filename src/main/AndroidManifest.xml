@@ -47,6 +47,8 @@
 
     <!-- this foreground service type permission is exclusively used for import and export backup -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Tatrak: voice messages playing in the background (VoicePlaybackService) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <uses-permission android:name="android.permission.MANAGE_OWN_CALLS" />
 
@@ -135,6 +137,13 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="xmpp-im" />
         </service>
+
+        <!-- Tatrak: voice messages playing in the background; no MEDIA_BUTTON receiver, so a button press after the
+             process ended does not try a background start -->
+        <service
+            android:name="am.cyberhayq.chat.ui.chat.VoicePlaybackService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
 
         <service
             android:name="androidx.work.impl.foreground.SystemForegroundService"

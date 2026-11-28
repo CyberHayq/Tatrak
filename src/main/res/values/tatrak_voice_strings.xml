@@ -9,4 +9,5 @@
     <string name="tatrak_voice_speed_label">Playback speed %1$s</string>
     <string name="tatrak_voice_bar_open">Open the message</string>
     <string name="tatrak_voice_close">Close</string>
+    <string name="tatrak_voice_channel">Voice messages</string>
 </resources>

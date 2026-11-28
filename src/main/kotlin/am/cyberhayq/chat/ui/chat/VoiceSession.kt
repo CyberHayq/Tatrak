@@ -9,9 +9,11 @@ import android.content.IntentFilter
 import android.media.AudioManager
 import android.media.MediaPlayer
 import android.os.Bundle
+import android.util.Log
 import android.widget.Toast
 import androidx.core.content.ContextCompat
 import androidx.preference.PreferenceManager
+import eu.siacs.conversations.Config
 import eu.siacs.conversations.R
 import eu.siacs.conversations.entities.Conversation
 import eu.siacs.conversations.entities.Message
@@ -25,15 +27,19 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.channels.BufferOverflow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 
 /**
  * The app-wide voice player (issue #7): playback outlives the chat that started it and shows in the mini bar
- * ([VoiceBar]). Initialised in `Conversations.onCreate`, so it counts every started activity; pauses when none is
- * started. Holds only ids, the chat's clear marker, the message's file and the service instance: messages and conversations are
+ * ([VoiceBar]), and in the background through [VoicePlaybackService]. Initialised in `Conversations.onCreate`, so it
+ * counts every started activity; the progress ticker stops while none is started. Holds only ids, the chat's clear marker, the message's file and the service instance: messages and conversations are
  * resolved again on each check. Main thread only.
  */
 object VoiceSession {
@@ -55,6 +61,10 @@ object VoiceSession {
     private var started = 0
     private var goneCheck: Job? = null
     private var noisyRegistered = false
+    private var startForegroundService: (Context, Intent) -> Unit = ContextCompat::startForegroundService
+
+    /** A start of [VoicePlaybackService] was accepted and it has not stopped: playback may go on with no screen. */
+    internal var serviceRunning = false
 
     private val mutablePlayback = MutableStateFlow(VoicePlayback())
     /** The player's state, for the bubbles. */
@@ -72,16 +82,23 @@ object VoiceSession {
     /** The conversation a started `ChatFragment` shows, else null. */
     val chatShown: StateFlow<String?> = mutableChatShown.asStateFlow()
 
+    private val mutableChanges = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+    /** Play, pause, seek, speed or another message: what the notification and the media session show; never a tick. */
+    val changes: SharedFlow<Unit> = mutableChanges.asSharedFlow()
+
     private val visibility =
         object : Application.ActivityLifecycleCallbacks {
             override fun onActivityStarted(activity: Activity) {
-                started++
+                if (started++ == 0) player?.setTicking(true)
             }
 
             override fun onActivityStopped(activity: Activity) {
                 started = (started - 1).coerceAtLeast(0)
-                // a rotation: the recreated activity starts at once
-                if (started == 0 && !activity.isChangingConfigurations) pause()
+                // a rotation: the recreated activity starts at once; otherwise playback goes on in the service
+                if (started == 0 && !activity.isChangingConfigurations) {
+                    player?.setTicking(false)
+                    if (!serviceRunning) pause() // Android refused the service: no playing on unseen, as step 1
+                }
             }
 
             override fun onActivityCreated(activity: Activity, savedInstanceState: Bundle?) {}
@@ -104,11 +121,16 @@ object VoiceSession {
 
     /**
      * Called from `Application.onCreate`; may run again (Robolectric makes an `Application` per test): the previous
-     * callbacks, receiver and player go, the state starts over. [newPlayer] is replaced by a fake in tests.
+     * callbacks, receiver and player go, the state starts over. [startForegroundService] and [newPlayer] are replaced
+     * in tests.
      */
     @JvmStatic
     @JvmOverloads
-    fun init(context: Context, newPlayer: () -> MediaPlayer = ::MediaPlayer) {
+    fun init(
+        context: Context,
+        startForegroundService: (Context, Intent) -> Unit = ContextCompat::startForegroundService,
+        newPlayer: () -> MediaPlayer = ::MediaPlayer,
+    ) {
         if (this::app.isInitialized) {
             release()
             app.unregisterActivityLifecycleCallbacks(visibility)
@@ -117,6 +139,8 @@ object VoiceSession {
         app = context.applicationContext as Application
         scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
         started = 0
+        serviceRunning = false
+        this.startForegroundService = startForegroundService
         mutableChatShown.value = null
         speed = PreferenceManager.getDefaultSharedPreferences(app).getFloat(SPEED_KEY, 1f).takeIf { it in SPEEDS } ?: 1f
         val next =
@@ -128,14 +152,18 @@ object VoiceSession {
                     release()
                     Toast.makeText(app, R.string.tatrak_viewer_load_failed, Toast.LENGTH_SHORT).show()
                 },
+                onSeeked = ::changed,
                 newPlayer = newPlayer,
             )
         next.setSpeed(speed)
+        next.setTicking(false) // no activity started yet
         player = next
         scope.launch {
             next.state.collect {
+                val before = mutablePlayback.value
                 mutablePlayback.value = it
                 publishBar()
+                if (it.playing != before.playing || it.uuid != before.uuid) changed()
             }
         }
         app.registerActivityLifecycleCallbacks(visibility)
@@ -150,7 +178,10 @@ object VoiceSession {
             release()
             return
         }
-        if (!switching) return
+        if (!switching) {
+            startService()
+            return
+        }
         this.service = service
         this.conversationUuid = conversationUuid
         this.messageUuid = messageUuid
@@ -187,7 +218,29 @@ object VoiceSession {
             }
         mutableActive.value = true
         publishBar()
+        changed() // another message: the notification's content intent follows it
+        startService()
     }
+
+    // after the player started, from the user's tap on a visible screen: Android 12+ forbids the start from the background
+    private fun startService() {
+        if (playing()) requestService(null)
+    }
+
+    /** Starts [VoicePlaybackService] in the foreground with [action]; false when Android refused. */
+    internal fun requestService(action: String?): Boolean =
+        try {
+            startForegroundService(app, Intent(app, VoicePlaybackService::class.java).setAction(action))
+            serviceRunning = true
+            true
+        } catch (e: IllegalStateException) {
+            // ForegroundServiceStartNotAllowedException among others; playback pauses when no screen is left
+            Log.w(Config.LOGTAG, "voice playback service not started: ${e.javaClass.simpleName}")
+            false
+        }
+
+    /** The player's own state: [playback] is mirrored by a coroutine and lags inside a running event loop. */
+    internal fun playing() = player?.state?.value?.playing == true
 
     /**
      * The fragments' onBackendConnected: a session of another service instance (the service was stopped and made
@@ -197,14 +250,35 @@ object VoiceSession {
         if (this.service != null && this.service !== service) release()
     }
 
-    /** Jumps within the loaded clip; ignored for any other message. */
+    /** Jumps within the loaded clip; ignored for any other message. [changes] emits when the seek lands. */
     fun seek(messageUuid: String, fraction: Float) {
         player?.seek(messageUuid, fraction)
     }
 
-    /** Recording, unplugged headphones, no screen of the app visible. */
+    /** The media session's seek, clamped to the clip. */
+    fun seekTo(ms: Long) {
+        player?.seekTo(messageUuid ?: return, ms)
+    }
+
+    /** Recording, unplugged headphones, the media session. */
     fun pause() {
         player?.pause()
+    }
+
+    /**
+     * A play from outside the app (the media session, the notification), with the service in the foreground: focus
+     * denied leaves the message paused instead of releasing it; a file that cannot play is still released.
+     */
+    fun resume() {
+        if (playing()) return
+        player?.toggle(messageUuid ?: return, file ?: return)
+    }
+
+    /** The bar's play/pause of the current message; released when it cannot play. */
+    fun togglePlaying() {
+        val uuid = messageUuid ?: return
+        val clip = file ?: return
+        if (player?.toggle(uuid, clip) != true) release()
     }
 
     fun close() = release()
@@ -214,6 +288,7 @@ object VoiceSession {
         PreferenceManager.getDefaultSharedPreferences(app).edit().putFloat(SPEED_KEY, speed).apply()
         player?.setSpeed(speed)
         publishBar()
+        changed()
     }
 
     /** Stops playback and forgets the message: the bar goes, the bubble shows play. */
@@ -249,9 +324,8 @@ object VoiceSession {
     fun barActions(context: Context): VoiceBarActions =
         object : VoiceBarActions {
             override fun toggle() {
-                val uuid = messageUuid ?: return
-                val clip = file ?: return
-                if (player?.toggle(uuid, clip) != true) release()
+                togglePlaying()
+                startService() // a tap on a visible screen: brings the service back if Android stopped it
             }
 
             override fun cycleSpeed() = this@VoiceSession.cycleSpeed()
@@ -279,6 +353,11 @@ object VoiceSession {
         return file?.exists() != true
     }
 
+    private fun changed() {
+        publishBar() // the collector that mirrors the player may not have run yet
+        if (mutableActive.value) mutableChanges.tryEmit(Unit)
+    }
+
     private fun publishBar() {
         val chat = conversationUuid
         val message = messageUuid
@@ -286,7 +365,7 @@ object VoiceSession {
             if (!mutableActive.value || chat == null || message == null) {
                 null
             } else {
-                val playback = mutablePlayback.value.takeIf { it.uuid == message }
+                val playback = (player?.state?.value ?: mutablePlayback.value).takeIf { it.uuid == message }
                 VoiceBarState(
                     conversationUuid = chat,
                     messageUuid = message,

@@ -7,6 +7,7 @@ import am.cyberhayq.chat.storage.media.EncryptedMediaStore
 import android.content.Context
 import am.cyberhayq.chat.storage.media.MediaFile
 import android.media.MediaPlayer
+import android.os.PowerManager
 import android.util.Log
 import androidx.compose.runtime.Immutable
 import eu.siacs.conversations.Config
@@ -32,18 +33,22 @@ data class VoicePlayback(
 /**
  * Plays one audio attachment at a time; the bubble of [VoicePlayback.uuid] shows the progress.
  * [unavailable] is called when a file cannot be played or a read fails while playing; [onCompletion]
- * with the uuid of a message that played to its end. [newPlayer] is replaced by a fake in tests.
+ * with the uuid of a message that played to its end; [onSeeked] when a seek has landed (`MediaPlayer.seekTo` is
+ * asynchronous and may land on an earlier sync point). [newPlayer] is replaced by a fake in tests. [context] is the
+ * application context: every player it creates keeps the CPU awake while playing (screen off, step 2).
  */
 class VoicePlayer(
-    context: Context,
+    private val context: Context,
     private val scope: CoroutineScope,
     private val onCompletion: (String) -> Unit,
     private val unavailable: () -> Unit,
+    private val onSeeked: () -> Unit = {},
     private val newPlayer: () -> MediaPlayer = ::MediaPlayer,
 ) {
     private val audioManager = context.getSystemService(AudioManager::class.java)
 
     private var speed = 1f
+    private var ticking = true
 
     private val mutableState = MutableStateFlow(VoicePlayback())
     val state: StateFlow<VoicePlayback> = mutableState.asStateFlow()
@@ -102,7 +107,11 @@ class VoicePlayer(
         }
         release()
         if (!requestFocus()) return false
-        val next = newPlayer().apply { setAudioAttributes(attributes) }
+        val next =
+            newPlayer().apply {
+                setAudioAttributes(attributes)
+                setWakeMode(context, PowerManager.PARTIAL_WAKE_LOCK)
+            }
         var opened: MediaFile? = null
         try {
             opened = EncryptedMediaStore.get().open(file) // through the media store, as every reader of attachments
@@ -131,6 +140,11 @@ class VoicePlayer(
             mutableState.value = VoicePlayback(uuid, false, 0, it.duration)
             onCompletion(uuid)
         }
+        next.setOnSeekCompleteListener {
+            if (player !== it) return@setOnSeekCompleteListener
+            publish(it, playing = it.isPlaying) // where it landed
+            onSeeked()
+        }
         next.setOnErrorListener { _, _, _ -> release(); unavailable(); true } // a read that failed after prepare(): stop, do not go on polling
         media = opened
         player = next
@@ -154,13 +168,16 @@ class VoicePlayer(
         } catch (e: IllegalArgumentException) {
             Log.w(Config.LOGTAG, "voice speed refused: ${e.javaClass.simpleName}")
         }
+        publish(current, playing = current.isPlaying) // the position at the change, for the media session
     }
 
-    // in place of start(): setPlaybackParams with a non-zero speed starts the player at that speed. False when the
-    // player refused (a state or parameters it does not take): then released and [unavailable] called
+    // setPlaybackParams with a non-zero speed starts the player at that speed; start() then only takes the wake lock
+    // of setWakeMode, which the platform acquires in start() alone. False when the player refused (a state or
+    // parameters it does not take): then released and [unavailable] called
     private fun begin(current: MediaPlayer): Boolean {
         try {
             current.playbackParams = current.playbackParams.setSpeed(speed)
+            current.start()
             return true
         } catch (e: IllegalStateException) {
             Log.w(Config.LOGTAG, "unable to play a voice message: ${e.javaClass.simpleName}")
@@ -185,9 +202,22 @@ class VoicePlayer(
     /** Jumps within the loaded clip; ignored for any other bubble. */
     fun seek(uuid: String, fraction: Float) {
         val current = player ?: return
+        seekTo(uuid, (fraction.coerceIn(0f, 1f) * current.duration).toLong())
+    }
+
+    /** Jumps to [ms], clamped to the clip; ignored for any other message. The bubble follows at once, [onSeeked] on landing. */
+    fun seekTo(uuid: String, ms: Long) {
+        val current = player ?: return
         if (mutableState.value.uuid != uuid) return
-        current.seekTo((fraction.coerceIn(0f, 1f) * current.duration).toInt())
+        current.seekTo(ms.coerceIn(0L, current.duration.coerceAtLeast(0).toLong()).toInt())
         publish(current, playing = current.isPlaying)
+    }
+
+    /** The 100 ms progress updates; off while no screen shows them (the position is still published on each change). */
+    fun setTicking(on: Boolean) {
+        ticking = on
+        val current = player ?: return
+        if (!on) ticker?.cancel() else if (current.isPlaying) startTicker(current)
     }
 
     fun release() {
@@ -202,11 +232,13 @@ class VoicePlayer(
 
     private fun startTicker(current: MediaPlayer) {
         ticker?.cancel()
+        publish(current, playing = current.isPlaying)
+        if (!ticking) return
         ticker =
             scope.launch {
                 while (isActive && player === current) {
-                    publish(current, playing = current.isPlaying)
                     delay(100)
+                    publish(current, playing = current.isPlaying)
                 }
             }
     }

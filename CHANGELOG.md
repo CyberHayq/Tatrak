@@ -11,8 +11,12 @@
 - Voice messages keep playing when you leave the chat (public issue #7, step 1): a bar under
   the top bar of the chat list, the other tabs and every chat shows the playing message, with
   play/pause, the speed (1×, 1.5×, 2×, remembered), close, and a tap that opens the chat at the
-  message. Playback pauses when no Tatrak screen is visible or headphones are unplugged, and
-  stops when the message, its file, its chat or its account goes away.
+  message. Playback stops when the message, its file, its chat or its account goes away, and
+  pauses when headphones are unplugged.
+- Voice messages keep playing in the background (public issue #7, step 2a): with the screen off
+  or another app open, a notification and the system media controls (lock screen, headset
+  button, Bluetooth) show "Voice message" with play/pause, seek and close; swiping Tatrak away
+  closes a paused message and lets a playing one finish.
 
 ### Upstream
 - Tatrak now includes the fixes of Conversations 2.21.1-2.21.5 (OMEMO, TLS trust, Jingle file
