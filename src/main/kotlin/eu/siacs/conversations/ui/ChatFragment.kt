@@ -2262,9 +2262,11 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     /** The chat's command sheet and the running command over the chat (ad-hoc commands, XEP-0050). */
     @Composable
     private fun CommandsOverlay() {
-        val c = conversation
-        if (commands.sheet && commands.commands.isNotEmpty() && c != null) {
-            CommandsSheet(commands.commands, onPick = { if (conversation === c) commands.open(it, c) }, onDismiss = { commands.sheet = false })
+        // not gated on `conversation`: it is a plain field, still null when a rotation recomposes, and
+        // nothing recomposes once bind sets it, so the open sheet vanished and the button stopped opening it;
+        // open() refuses an item that is not in the current chat's list
+        if (commands.sheet && commands.commands.isNotEmpty()) {
+            CommandsSheet(commands.commands, onPick = { item -> conversation?.let { commands.open(item, it) } }, onDismiss = { commands.sheet = false })
         }
         commands.session?.let { CommandScreen(it, openLink = ::openLink, copy = ::copyCommandValue) }
         val link = commands.link
