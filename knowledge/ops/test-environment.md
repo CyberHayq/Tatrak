@@ -193,6 +193,13 @@ agent (and any brief) that runs emulator checks:
   emulators (idle while playing, paused after a resume; 2026-11-27, API 30 and 37). Use
   `dumpsys media.audio_flinger | grep -i "tracks of which"` (1 active while playing) and a
   position text that changes between two uiautomator dumps.
+- Media session and background playback: `dumpsys media_session | grep -iE "state=|speed"` for
+  playing or paused, `dumpsys activity services <pkg> | grep -iE "isForeground|foregroundServiceType"`
+  for the foreground service, `dumpsys notification --noredact | grep <channel>` for the
+  notification; controls with `cmd media_session dispatch play|pause|play-pause` and
+  `input keyevent KEYCODE_HEADSETHOOK`. The session's position only moves on a state change
+  (readers extrapolate it from the update time and speed), so read it from a pause, not from two
+  dumps while playing. Unplugging headphones cannot be driven from adb.
 - Cut command output: `logcat -d | grep -A20 'FATAL EXCEPTION'`, Gradle with `-q` and a grep for
   errors, `dumpsys … | grep <field>`.
 - One scenario per agent: split a long check list into several short agents (for example keyboard
