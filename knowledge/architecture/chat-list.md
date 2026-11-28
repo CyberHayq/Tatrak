@@ -260,6 +260,10 @@ own.
 Tatrak has no current account: every enabled account is online and their chats share one list.
 The owner's decision (2026-11-21) is an app-wide filter instead of Telegram's account switch.
 
+- **Profile item.** The floating bar's Profile shows the filtered account's avatar; under "All
+  accounts" (more than one account, no filter) it shows the switcher's "All accounts" icon
+  (`AllAccountsIcon`: a group icon on the accent in the avatars' shape), not the first account's
+  avatar (owner, 2026-11-28). The drawer header still names the first account.
 - **Switcher.** A long press on the floating bar's Profile item opens Telegram's account selector
   (`MainTabsActivity.openAccountSelector` with `ItemOptions` and `accountView`):[^switcher] the
   screen behind dims (`0x66` over a light window, `0x33` over a dark one) and blurs (12 dp, only when

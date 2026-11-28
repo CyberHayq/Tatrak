@@ -684,6 +684,18 @@ class ChatListScreenshotTest {
 
     // ---- floating bars ----
 
+    /** Under "All accounts" the dock's Profile shows the switcher's "All accounts" icon, not the first account's avatar. */
+    @Test
+    fun chatListFloatingAllAccounts() {
+        compose.setContent {
+            TatrakTheme(darkTheme = false, style = TatrakStyle.GLASS, accent = Accent.BLUE, dynamicColors = false, floatingBars = true, barBlur = BarBlur.OFF) {
+                val state = sampleState()
+                ChatListScreen(state.copy(account = state.account?.copy(all = true)), NoListActions)
+            }
+        }
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_list_floating_all_accounts.png")
+    }
+
     /** Floating bars in the styles that default to the fixed bars (the setting wins over the style). */
     @Test
     fun chatListFloatingTelegramAndSlate() {

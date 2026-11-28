@@ -321,7 +321,7 @@ internal fun FloatingBottomBar(
                     .height(IntrinsicSize.Min),
         ) {
             Row(Modifier.weight(1f).pageDock().shadow(3.dp, CircleShape).backdropBlur(backdrop, CircleShape).background(bar).padding(4.dp)) {
-                mainTabOrder(floating = true).forEach { TabItem(it, selected, onTab, floating = true, avatar = account?.avatar) }
+                mainTabOrder(floating = true).forEach { TabItem(it, selected, onTab, floating = true, avatar = account?.avatar, all = account?.all == true) }
             }
             // Chats' own, as Telegram's search: it slides with the page while the tabs switch
             if (onSearch == null) Spacer(Modifier.fillMaxHeight().aspectRatio(1f, matchHeightConstraintsFirst = true))
@@ -350,7 +350,7 @@ internal fun TabDock(selected: MainTab, account: AccountHeader?, onTab: (MainTab
 }
 
 @Composable
-internal fun RowScope.TabItem(tab: MainTab, selected: MainTab, onTab: (MainTab) -> Unit, floating: Boolean, avatar: Bitmap?) {
+internal fun RowScope.TabItem(tab: MainTab, selected: MainTab, onTab: (MainTab) -> Unit, floating: Boolean, avatar: Bitmap?, all: Boolean = false) {
     val (icon, label) =
         when (tab) {
             MainTab.CHATS -> R.drawable.ic_chat_24dp to R.string.tatrak_dock_chats
@@ -361,7 +361,7 @@ internal fun RowScope.TabItem(tab: MainTab, selected: MainTab, onTab: (MainTab) 
         }
     // Telegram: a long press on the floating bar's Profile opens the account switcher
     val switcher = if (floating && tab == MainTab.PROFILE) LocalAccountSwitcher.current else null
-    DockItem(icon, stringResource(label), selected = tab == selected, onClick = { onTab(tab) }, avatar = if (tab == MainTab.PROFILE) avatar else null, capsule = floating, onLongClick = switcher)
+    DockItem(icon, stringResource(label), selected = tab == selected, onClick = { onTab(tab) }, avatar = if (tab == MainTab.PROFILE) avatar else null, all = all && tab == MainTab.PROFILE, capsule = floating, onLongClick = switcher)
 }
 
 /** Opens the account switcher over the dock's Profile item, given the item's bounds in the root; null: no switcher. */
@@ -375,6 +375,7 @@ private fun RowScope.DockItem(
     selected: Boolean,
     onClick: () -> Unit,
     avatar: Bitmap? = null,
+    all: Boolean = false,
     capsule: Boolean = false,
     onLongClick: ((Rect) -> Unit)? = null,
 ) {
@@ -408,7 +409,8 @@ private fun RowScope.DockItem(
                     .background(if (capsule) Color.Transparent else mark)
                     .padding(horizontal = 18.dp),
         ) {
-            if (avatar != null) ChatAvatar(avatar, online = false, size = 24.dp) else Icon(painterResource(icon), null, tint = color, modifier = Modifier.size(if (capsule) 24.dp else 22.dp))
+            if (all) AllAccountsIcon(24.dp)
+            else if (avatar != null) ChatAvatar(avatar, online = false, size = 24.dp) else Icon(painterResource(icon), null, tint = color, modifier = Modifier.size(if (capsule) 24.dp else 22.dp))
         }
         if (capsule) Text(label, color = color, fontSize = 12.sp, lineHeight = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         else Text(label, color = color, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)

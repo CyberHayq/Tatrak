@@ -9,6 +9,8 @@
   theme; on light accent colours the bookmark used to turn dark.
 - Floating bars: lists and messages stay visible under the bottom bar and fade out, as in Telegram,
   instead of ending above it on a plain band.
+- Under "All accounts" the floating bar's Profile shows the "All accounts" icon from the account
+  switcher instead of the first account's avatar.
 
 ## 0.6.0-beta.1 (pre-release)
 

@@ -74,7 +74,7 @@ data class ChatListItem(
 )
 
 @Immutable
-data class AccountHeader(val name: String, val address: String, val avatar: Bitmap?)
+data class AccountHeader(val name: String, val address: String, val avatar: Bitmap?, val all: Boolean = false)
 
 /** An account in the dock's account switcher, with its unread chats (as the folder tabs count them); a disabled one is drawn muted. */
 @Immutable
@@ -153,6 +153,8 @@ object ChatListSnapshot {
                     name = accountName(it),
                     address = it.jid.asBareJid().toString(),
                     avatar = service.avatarService.get(it, avatarSize, avatarsCachedOnly),
+                    // "All accounts": the dock shows the switcher's icon for it, not the first account
+                    all = only == null && service.accounts.size > 1,
                 )
             }
         val connecting = service.accounts.any { AccountFilter.shows(only, it) && it.isConnectionEnabled && !it.isOnlineAndConnected }

@@ -54,6 +54,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import eu.siacs.conversations.R
@@ -97,7 +98,7 @@ internal fun AccountSwitcher(
                             .shadow(6.dp, plate)
                             .background(scheme.surfaceContainer, plate)
                     ) {
-                        TabItem(MainTab.PROFILE, tab, { onDismiss() }, floating = true, avatar = avatar)
+                        TabItem(MainTab.PROFILE, tab, { onDismiss() }, floating = true, avatar = avatar, all = selected == null && accounts.size > 1)
                     }
                     Surface(
                         shape = MaterialTheme.shapes.extraSmall,
@@ -181,9 +182,7 @@ private fun AccountRow(name: String, avatar: Bitmap?, all: Boolean, unread: Int,
         ) {
             val size = if (selected) 26.dp else 32.dp
             if (all) {
-                Box(Modifier.size(size).background(accent, shape), contentAlignment = Alignment.Center) {
-                    Icon(painterResource(R.drawable.ic_group_24dp), null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(size * 0.6f))
-                }
+                AllAccountsIcon(size)
             } else {
                 Box(if (disabled) Modifier.alpha(DISABLED_ALPHA) else Modifier) { ChatAvatar(avatar, online = false, size = size) }
             }
@@ -206,3 +205,11 @@ private fun AccountRow(name: String, avatar: Bitmap?, all: Boolean, unread: Int,
 
 /** Material's alpha for disabled content. */
 private const val DISABLED_ALPHA = 0.38f
+
+/** "All accounts": a group icon on the accent, in the avatars' shape (the switcher's row, the dock's Profile item). */
+@Composable
+internal fun AllAccountsIcon(size: Dp) {
+    Box(Modifier.size(size).background(MaterialTheme.colorScheme.primary, LocalAvatarShape.current), contentAlignment = Alignment.Center) {
+        Icon(painterResource(R.drawable.ic_group_24dp), null, tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(size * 0.6f))
+    }
+}
