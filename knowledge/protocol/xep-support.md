@@ -46,14 +46,14 @@ declared. Plan: **Port** (stage 5), Inherited (already in Conversations), Not pl
 
 | XEP | Conversations | monocles chat | Tatrak plan |
 |-----|---------------|---------------|-----------|
-| [XEP-0004](https://xmpp.org/extensions/xep-0004.html) | — | partial 2.13.2 — As part of XEP-0050 and XEP-0077 | Not planned yet |
+| [XEP-0004](https://xmpp.org/extensions/xep-0004.html) | — | partial 2.13.2 — As part of XEP-0050 and XEP-0077 | Done: forms of ad-hoc commands (issue #8) |
 | [XEP-0027](https://xmpp.org/extensions/xep-0027.html) | complete 1.4 | complete 1.4 | Inherited |
 | [XEP-0030](https://xmpp.org/extensions/xep-0030.html) | complete 2.5rc3 | complete 2.5.0 | Inherited |
 | [XEP-0045](https://xmpp.org/extensions/xep-0045.html) | complete 1.32.0 | complete 1.35.5 | Inherited |
 | [XEP-0047](https://xmpp.org/extensions/xep-0047.html) | complete 2.0.1 | complete 2.0.1 | Inherited |
 | [XEP-0048](https://xmpp.org/extensions/xep-0048.html) | complete 1.1 | complete 1.2 | Inherited |
 | [XEP-0049](https://xmpp.org/extensions/xep-0049.html) | complete 1.2 | complete 1.2 | Inherited |
-| [XEP-0050](https://xmpp.org/extensions/xep-0050.html) | — | complete 1.3.0 | Not planned yet |
+| [XEP-0050](https://xmpp.org/extensions/xep-0050.html) | — | complete 1.3.0 | Done: Commands button, list and form screen (issue #8) |
 | [XEP-0054](https://xmpp.org/extensions/xep-0054.html) | partial 1.2 — Avatars only | partial 1.3.0 — Avatars only | Inherited |
 | [XEP-0059](https://xmpp.org/extensions/xep-0059.html) | — | partial 1.0 — Used for paging MAM and other queries | Not planned yet |
 | [XEP-0060](https://xmpp.org/extensions/xep-0060.html) | — | partial 1.30.0 — Used for PEP, avatars, bookmarks, feeds and stories | Not planned yet |
@@ -69,7 +69,7 @@ declared. Plan: **Port** (stage 5), Inherited (already in Conversations), Not pl
 | [XEP-0103](https://xmpp.org/extensions/xep-0103.html) | — | partial 0.4.1 — As file source in XEP-0385 and XEP-0447 | Not planned yet |
 | [XEP-0115](https://xmpp.org/extensions/xep-0115.html) | complete 1.5.1 | complete 1.6.0 | Inherited |
 | [XEP-0118](https://xmpp.org/extensions/xep-0118.html) | — | complete 1.3.0 | Not planned yet |
-| [XEP-0122](https://xmpp.org/extensions/xep-0122.html) | — | partial 1.0.2 — When used with XEP-0050 | Not planned yet |
+| [XEP-0122](https://xmpp.org/extensions/xep-0122.html) | — | partial 1.0.2 — When used with XEP-0050 | Done: keyboard by datatype, `<open/>` lists (with XEP-0050) |
 | [XEP-0153](https://xmpp.org/extensions/xep-0153.html) | partial 1.1 — Read only. Publication via XEP-0398 | partial 1.1.1 — Read only. Publication via XEP-0398 | Inherited |
 | [XEP-0163](https://xmpp.org/extensions/xep-0163.html) | complete 1.2.1 — Avatar, Nick, OMEMO | complete 1.2.2 — Avatar, Nick, OMEMO | Inherited |
 | [XEP-0166](https://xmpp.org/extensions/xep-0166.html) | complete 1.1.2 — File transfer + A/V calls | complete 1.1.2 — File transfer + A/V calls | Inherited |

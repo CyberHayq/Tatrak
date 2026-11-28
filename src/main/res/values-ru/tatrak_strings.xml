@@ -82,4 +82,34 @@
     <string name="tatrak_blocklist_empty">Нет заблокированных адресов</string>
     <!-- TalkBack name of the long press on the avatar to publish: the default picture comes back -->
     <string name="tatrak_avatar_back_to_default">Вернуть изображение по умолчанию</string>
+    <!-- Ad-hoc commands (XEP-0050): the composer button and the sheet title listing a contact's or server's commands -->
+    <string name="tatrak_commands">Команды</string>
+    <!-- Ad-hoc command form buttons: XEP-0050 actions prev, next, complete, execute, and closing a finished command -->
+    <string name="tatrak_command_prev">Назад</string>
+    <string name="tatrak_command_next">Далее</string>
+    <string name="tatrak_command_complete">Готово</string>
+    <string name="tatrak_command_execute">Продолжить</string>
+    <string name="tatrak_command_close">Закрыть</string>
+    <!-- Leaving an ad-hoc command form with edited fields -->
+    <string name="tatrak_command_cancel_title">Отменить команду?</string>
+    <string name="tatrak_command_cancel_confirm">Отменить</string>
+    <string name="tatrak_command_keep">Продолжить ввод</string>
+    <!-- Under an empty required field of an ad-hoc command form -->
+    <string name="tatrak_command_required">Обязательное поле</string>
+    <!-- Under the spinner when an ad-hoc command takes more than a few seconds -->
+    <string name="tatrak_command_slow">Это может занять время…</string>
+    <!-- An ad-hoc command failed without saying why -->
+    <string name="tatrak_command_failed">Команда не выполнена</string>
+    <!-- No answer to an ad-hoc command within two minutes -->
+    <string name="tatrak_command_timeout">Сервер не отвечает</string>
+    <!-- Label of the text field for an own value next to a list of choices -->
+    <string name="tatrak_command_other">Другое</string>
+    <!-- TalkBack: the eye button of a password field -->
+    <string name="tatrak_command_show_password">Показать пароль</string>
+    <string name="tatrak_command_hide_password">Скрыть пароль</string>
+    <!-- A web link sent by an ad-hoc command, opened in the browser -->
+    <string name="tatrak_command_open_link">Открыть ссылку</string>
+    <!-- Clipboard label and notice for a value copied from an ad-hoc command result -->
+    <string name="tatrak_command_value">Значение</string>
+    <string name="tatrak_command_value_copied">Скопировано</string>
 </resources>

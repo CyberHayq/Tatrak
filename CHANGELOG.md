@@ -19,6 +19,11 @@
   or another app open, a notification and the system media controls (lock screen, headset
   button, Bluetooth) show "Voice message" with play/pause, seek and close; swiping Tatrak away
   closes a paused message and lets a playing one finish.
+- Ad-hoc commands (XEP-0050, public issue #8): in a chat whose contact, group or server offers
+  commands, a "Commands" button by the input field opens their list, like a bot menu; a command
+  runs as a full-screen form (XEP-0004 fields, keyboards from XEP-0122 datatypes, results as cards,
+  a single choice as buttons). Back or another chat cancels the command, asking first when a field
+  was edited.
 
 ### Upstream
 - Tatrak now includes the fixes of Conversations 2.21.1-2.21.5 (OMEMO, TLS trust, Jingle file

@@ -53,6 +53,18 @@ $ADB install -r build/outputs/apk/conversationsFree/debug/*x86_64.apk
 $ADB shell dumpsys deviceidle whitelist +am.cyberhayq.chat   # skips the battery-optimisation dialog
 ```
 
+Under the machine-wide heavy lock (AGENTS.md), start the emulator with `flock -o` and `setsid nohup`:
+a plain `flock … sh -c 'emulator … &'` lets the backgrounded qemu inherit the lock's file
+descriptor, and it then holds the lock for every Gradle run until the emulator exits
+(2026-11-28; `fuser -v ~/.cache/tatrak-heavy.lock` shows the holder):
+
+```sh
+timeout 900 flock -o -w 800 ~/.cache/tatrak-heavy.lock bash -c '
+  setsid nohup $ANDROID_HOME/emulator/emulator -avd <avd> -port <port> -no-audio -no-boot-anim >emu.log 2>&1 </dev/null &
+  for i in $(seq 1 120); do [ "$(adb -s emulator-<port> shell getprop sys.boot_completed 2>/dev/null | tr -d "\r")" = 1 ] && break; sleep 3; done
+  adb -s emulator-<port> install -r build/outputs/apk/conversationsFree/debug/*x86_64.apk'
+```
+
 `adb reboot` shuts the emulator down instead of restarting it; start it again with the command
 above (`ANDROID_AVD_HOME` is required, the AVDs live in `~/.android/avd`). The API 31
 emulator's camera app hangs on its splash screen; test camera capture on API 37.
@@ -90,6 +102,20 @@ A container older than the repository config misses its later modules: on 2026-1
 one lacked `lastactivity` (added in `8d21317a4`) and was rebuilt as below. Check with
 `podman exec tatrak-prosody grep lastactivity /etc/prosody/prosody.cfg.lua`.
 
+Ad-hoc commands (XEP-0050, issue #8): the config enables `adhoc` and `admin_adhoc` and makes
+`tester@10.0.2.2` a server admin, so the chat with the server address `10.0.2.2` shows the
+Commands button with Prosody's admin commands (XEP-0133: add user, online users, announce, …);
+`ping` and `uptime` are listed for every user. Added on 2026-11-28; a container built before
+that lacks them: check with `podman exec tatrak-prosody grep admin_adhoc /etc/prosody/prosody.cfg.lua`
+and rebuild as below when it is missing (no other agent should be using the server then).
+Without a rebuild, while other agents use the server (done this way on 2026-11-28):
+`podman cp tools/test-server/prosody.cfg.lua tatrak-prosody:/etc/prosody/prosody.cfg.lua`, then
+`prosodyctl shell config reload`, `prosodyctl shell module load admin_adhoc 10.0.2.2` (`adhoc`
+was already loaded) through `podman exec tatrak-prosody`. The reloaded `admins` line did not
+change the running role, so the role was set in storage (kept in the volume):
+`prosodyctl shell user set_role tester@10.0.2.2 10.0.2.2 prosody:admin`; check with
+`prosodyctl shell user role tester@10.0.2.2`.
+
 Later sessions: `podman start tatrak-prosody`. After editing the config:
 `podman rm -f tatrak-prosody`, build and run again (the volume keeps accounts, archive and certificate).
 Removing the volume makes a new certificate; the app then needs to accept it again (simplest:
@@ -101,7 +127,8 @@ Welcome screen → "I already have an account" → `tester@10.0.2.2` / `secret12
 "Accept Unknown Certificate?" → **Always** → skip the avatar.
 
 On Android 17 (API 37) there are extra steps: hide the keyboard with `adb shell input keyevent 111`
-(BACK would close the form), and after the first Next the app asks "LAN permission required"
+(BACK would close the form; on API 30 keyevent 111 does not hide it, so there BACK it is, sent only
+while `dumpsys input_method | grep mInputShown` says it is up), and after the first Next the app asks "LAN permission required"
 (10.0.2.2 is a local address) → Grant → Allow → Next again. After the avatar step, allow notifications.
 
 ## Messages from the other side

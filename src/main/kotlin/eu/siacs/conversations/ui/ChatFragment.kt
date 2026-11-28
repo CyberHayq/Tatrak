@@ -40,6 +40,10 @@ import am.cyberhayq.chat.ui.chat.replyQuote
 import am.cyberhayq.chat.ui.chat.SelectedText
 import am.cyberhayq.chat.ui.chat.selectionCopyText
 import am.cyberhayq.chat.ui.theme.TatrakTheme
+import am.cyberhayq.chat.ui.commands.CommandScreen
+import am.cyberhayq.chat.ui.commands.CommandsSheet
+import am.cyberhayq.chat.ui.commands.CommandsViewModel
+import am.cyberhayq.chat.ui.commands.LocalCommandsButton
 import android.Manifest
 import android.animation.Animator
 import android.animation.AnimatorListenerAdapter
@@ -66,6 +70,7 @@ import android.widget.Toast
 import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.getValue
@@ -170,6 +175,8 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
 
     private val viewModelLazy = lazy { ViewModelProvider(this)[ChatViewModel::class.java] }
     private val viewModel by viewModelLazy
+    private val commandsLazy = lazy { ViewModelProvider(this)[CommandsViewModel::class.java] }
+    private val commands by commandsLazy
     private val voiceRecorder by lazy { VoiceRecorder(requireContext().applicationContext) }
     private var voiceWarning: androidx.appcompat.app.AlertDialog? = null
     // open "Clear history" of the shown chat; dismissed when another chat is shown
@@ -419,7 +426,12 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                 setContent {
                     val swipeMethod = SwipeMethod.remember()
                     SideEffect { layout.dragEnabled = swipeMethod == SwipeMethod.TELEGRAM }
-                    CompositionLocalProvider(LocalSwipeBack provides layout, LocalSwipeMethod provides swipeMethod) {
+                    val openCommands = if (commands.commands.isNotEmpty()) ({ commands.sheet = true }) else null
+                    CompositionLocalProvider(
+                        LocalSwipeBack provides layout,
+                        LocalSwipeMethod provides swipeMethod,
+                        LocalCommandsButton provides openCommands,
+                    ) {
                         TatrakTheme {
                             val palette = currentTextPalette()
                             LaunchedEffect(palette) { viewModel.setPalette(palette) }
@@ -443,6 +455,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
                                 seenMentions = viewModel.seenMentions,
                                 startAt = startAt,
                             )
+                            CommandsOverlay()
                         }
                     }
                 }
@@ -569,6 +582,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             // ConversationFragment.saveMessageDraftStopAudioPlayer clears the media previews too
             dropPreviews()
             voiceRecorder.stop(keep = false)
+            if (commandsLazy.isInitialized()) commands.leave()
         }
         this.conversation = conversation
         if (lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) VoiceSession.setChatShown(conversation.uuid)
@@ -614,6 +628,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         }
         syncPrivate(c)
         viewModel.invalidate(service)
+        commands.refresh(c)
     }
 
     private fun bind(service: XmppConnectionService, c: Conversation, extras: Bundle?) {
@@ -634,6 +649,7 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             viewModel.invalidate(service)
         }
         syncPrivate(c)
+        commands.refresh(c)
         c.messagesLoaded.set(true)
         service.notificationService.setOpenConversation(c)
         extras?.let { processExtras(c, it) }
@@ -2242,6 +2258,29 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
     }
 
     override fun seekVoice(uuid: String, fraction: Float) = VoiceSession.seek(uuid, fraction)
+
+    /** The chat's command sheet and the running command over the chat (ad-hoc commands, XEP-0050). */
+    @Composable
+    private fun CommandsOverlay() {
+        val c = conversation
+        if (commands.sheet && commands.commands.isNotEmpty() && c != null) {
+            CommandsSheet(commands.commands, onPick = { if (conversation === c) commands.open(it, c) }, onDismiss = { commands.sheet = false })
+        }
+        commands.session?.let { CommandScreen(it, openLink = ::openLink, copy = ::copyCommandValue) }
+        val link = commands.link
+        LaunchedEffect(link) {
+            if (link != null) {
+                commands.link = null
+                openLink(link)
+            }
+        }
+    }
+
+    private fun copyCommandValue(text: String) {
+        if (requireXmppActivity().copyTextToClipboard(text, R.string.tatrak_command_value) && Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            Toast.makeText(requireContext(), R.string.tatrak_command_value_copied, Toast.LENGTH_SHORT).show()
+        }
+    }
 
     /** Routes taps through [FixedURLSpan] so xmpp:, geo: and web links behave as before. */
     override fun openLink(url: String) {

@@ -24,6 +24,9 @@ import android.view.ViewGroup
 import android.os.SystemClock
 import android.widget.Toast
 import androidx.activity.compose.BackHandler
+import am.cyberhayq.chat.ui.commands.CommandsButton
+import am.cyberhayq.chat.ui.commands.LocalCommandsButton
+import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animate
@@ -508,6 +511,18 @@ private fun InputRow(
                 }
             }
         } else {
+            // the chat's ad-hoc commands (XEP-0050): Telegram's bot menu pill, an icon once typing starts
+            val openCommands = LocalCommandsButton.current
+            val ime = WindowInsets.ime
+            val density = LocalDensity.current
+            val imeUp by remember(ime, density) { derivedStateOf { ime.getBottom(density) > 0 } }
+            AnimatedVisibility(openCommands != null, enter = scaleIn(initialScale = 0.6f) + fadeIn(), exit = scaleOut() + fadeOut()) {
+                CommandsButton(
+                    expanded = input.text.isEmpty() && !imeUp && panel == KeyboardPanel.NONE,
+                    onClick = { openCommands?.invoke() },
+                    modifier = Modifier.padding(start = 8.dp, bottom = 9.dp),
+                )
+            }
             val emojiOpen = panel == KeyboardPanel.EMOJI
             IconButton(onClick = { toggle(KeyboardPanel.EMOJI) }, modifier = Modifier.padding(bottom = 1.dp)) {
                 Icon(

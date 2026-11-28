@@ -1,11 +1,12 @@
 -- Test server for the Android emulator: the host is 10.0.2.2 from inside the emulator,
 -- so that IP is the XMPP domain (no DNS needed). Self-signed certificate; accept it in the app.
-admins = { }
+-- an admin sees the server's admin commands (XEP-0133) in the chat with 10.0.2.2
+admins = { "tester@10.0.2.2" }
 modules_enabled = {
     "roster"; "saslauth"; "tls"; "disco"; "carbons"; "pep"; "private"; "blocklist";
     "vcard4"; "vcard_legacy"; "version"; "uptime"; "time"; "ping"; "register";
     "mam"; "offline"; "csi_simple"; "smacks"; "bookmarks"; "server_contact_info"; "lastactivity";
-    "invites"; "invites_register"; "admin_shell";
+    "invites"; "invites_register"; "admin_shell"; "adhoc"; "admin_adhoc";
 }
 allow_registration = true
 -- invite tokens are checked when given (an invalid one is refused), plain registration stays open

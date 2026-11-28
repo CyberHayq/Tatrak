@@ -180,6 +180,7 @@ is still pending. Planned features have no committed release dates.
 | App language chosen in the settings, on every Android version | 🧪 In testing |
 | "Saved messages" always in the side menu and the Profile tab, pinned for every new account | 🧪 In testing |
 | Voice messages keep playing outside the chat and in the background: a mini bar, a notification and the system media controls | 🧪 In testing |
+| Ad-hoc commands (XEP-0050): a Commands button in chats that offer them, with a form screen | 🧪 In testing |
 
 ### 🗺️ Roadmap
 
