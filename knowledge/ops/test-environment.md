@@ -120,6 +120,14 @@ not reach Prosody ("Connection refused", 2026-11-27). A webp or png of at most 5
 The app does not fetch it from an unknown contact by itself: tap the download button once
 (it checks the size), then once more to download. `send.py` is copied into the image at build time;
 after editing it, `podman cp tools/test-server/send.py tatrak-prosody:/send.py` or rebuild.
+Group chats and reactions (2026-11-28): `tools/test-server/muc_react.py` runs on the host (a
+Python with slixmpp) as one user in one room on `conference.10.0.2.2` and performs its actions in
+order: `say` (prints the stanza id the room assigned; the app matches reactions on it), `react`
+(an empty emoji list retracts), `pm` and `pmreact` (private message through the room), `watch`,
+`sleep`; ending the actions leaves the room. Register extra users with
+`podman exec tatrak-prosody prosodyctl register <name> 10.0.2.2 secret123`; join from the app
+with `xmpp:<room>@conference.10.0.2.2?join`. Multi-touch on the emulator works with `adb root`
+and `sendevent` on the touchscreen device (`/dev/input/event2` on the API 37 AVD).
 To send attachments from the app, push generated files to `/sdcard/Pictures` etc. and pick them
 with the attach button → File (the system picker grants access). A `content://media` URI shared
 with `adb shell am start … ShareWithActivity` fails with "did not grant permission": the shell

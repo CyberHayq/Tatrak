@@ -387,8 +387,8 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   `MucOptions.getUserOrStub` in a group, the contact in a one-to-one chat; a private message in a
   group stores only room/nick, so it shows that nick and, for a received message, the message's own
   avatar when it carries an occupant id or real JID, else a letter; a member who left without a real JID also gets a letter; deduplicated by person and VS16-normalised emoji). In a group a tap
-  on another member's row closes the sheet and opens the participant menu of the avatar tap
-  (`reactorMenu`, `MucDetailsContextMenuHelper`); own rows and one-to-one rows are inert. The sheet
+  on another member's row opens the participant menu of the avatar tap over the sheet
+  (`reactorMenu`, `MucDetailsContextMenuHelper`); choosing an entry closes the sheet first; own rows and one-to-one rows are inert. The sheet
   state is `rememberSaveable(conversationUuid)` in `ChatScreen`; it reads the item's rows, so a rename
   or a swap that keeps the chips equal still shows; it closes when the message or its reactions go (after the first load). While messages
   are selected the chips have no click or long press of their own: a tap or a hold on any part of a
