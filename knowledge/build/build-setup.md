@@ -43,6 +43,13 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
 
 On 2026-10-31: 196 tests, 0 failures. For the emulator use the `x86_64` APK.
 
+The unit tests run in several JVMs side by side (`maxParallelForks` in `build.gradle`): one per
+~2.5 GB of `MemAvailable` when Gradle configures, at most 6, one JVM where `/proc/meminfo` is
+missing. Each JVM has a 2 GB heap, so a run started next to emulators gets fewer. Measured on
+2026-11-28 (12 cores, 32 GB, `--rerun`, compile up to date): 1174 tests in 132 s with one JVM,
+78 s and 79 s with six. A test that writes a fixed path under `build/` must not share it with
+another test class: the JVMs get whole classes.
+
 # Signed release APK
 
 `assembleConversationsFreeRelease` signs with the release key only when the ignored

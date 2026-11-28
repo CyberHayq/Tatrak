@@ -264,6 +264,11 @@ android {
                 systemProperty 'robolectric.pixelCopyRenderMode', 'hardware'
                 // Tatrak: the whole suite runs in one JVM; Gradle's default heap ran out (BackupFileHeaderTest's Argon2)
                 maxHeapSize = '2g'
+                // Tatrak: test JVMs side by side, one per ~2.5 GB of available RAM (2 GB heap plus overhead), at most 6:
+                // emulators and other agents' builds share the memory; no /proc/meminfo (not Linux) keeps one JVM
+                def meminfo = new File('/proc/meminfo')
+                def availableKb = meminfo.exists() ? ((meminfo.text =~ /MemAvailable:\s+(\d+)/).with { it.find() ? it.group(1) as long : 0L }) : 0L
+                maxParallelForks = Math.max(1, Math.min(6, (int) (availableKb / (2560L * 1024))))
                 // Tatrak: Robolectric unpacks ~200 MB per test JVM into java.io.tmpdir and leaves it there; /tmp may be a tmpfs
                 def testTmp = layout.buildDirectory.dir('tmp/unit-test-jvm').get().asFile
                 systemProperty 'java.io.tmpdir', testTmp.path
