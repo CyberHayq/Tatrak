@@ -22,6 +22,7 @@ import eu.siacs.conversations.xmpp.Jid
 import eu.siacs.conversations.xmpp.manager.DiscoManager
 import im.conversations.android.xmpp.Entity
 import im.conversations.android.xmpp.IqErrorException
+import java.net.IDN
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
 import kotlinx.coroutines.CancellationException
@@ -32,7 +33,20 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeout
 
-@Immutable data class CommandItem(val jid: Jid, val node: String, val name: String)
+/** [via]: the address shown when it is not the chat's; [blocked]: another domain, shown but never started (owner, 2026-11-28). */
+@Immutable data class CommandItem(val jid: Jid, val node: String, val name: String, val via: String? = null, val blocked: Boolean = false)
+
+/**
+ * A disco item of the chat's command list at [address]. The item may name any JID; XEP-0050 section 5 recommends
+ * ignoring other JIDs, Tatrak's policy (owner, 2026-11-28) runs the same domain and lists other domains as blocked.
+ */
+internal fun commandItem(address: Jid, jid: Jid?, node: String, name: String): CommandItem {
+    val to = jid ?: address
+    // a wire JID may keep the Punycode form of a domain the chat holds in Unicode
+    fun Jid.domainKey() = IDN.toUnicode(domain.toString()).lowercase()
+    val sameBare = to.domainKey() == address.domainKey() && to.asBareJid().local == address.asBareJid().local
+    return CommandItem(to, node, name, via = if (sameBare) null else to.asBareJid().toString(), blocked = to.domainKey() != address.domainKey())
+}
 
 /** The chat's command list, the sheet and the running session; kept across rotation (ChatFragment's view model). */
 class CommandsViewModel : ViewModel() {
@@ -97,7 +111,7 @@ class CommandsViewModel : ViewModel() {
 
     fun open(item: CommandItem, conversation: Conversation) {
         // a pick from a list that was replaced meanwhile
-        if (item !in commands) return
+        if (item !in commands || item.blocked) return
         sheet = false
         session?.cancel()
         session =
@@ -119,7 +133,9 @@ class CommandsViewModel : ViewModel() {
         return try {
             withTimeout(COMMAND_TIMEOUT_MS) { disco.items(Entity.discoItem(address), Namespace.COMMANDS).await() }.mapNotNull { item ->
                 val node = item.node ?: return@mapNotNull null
-                CommandItem(item.jid ?: address, node, item.getAttribute("name")?.takeIf(String::isNotBlank) ?: node)
+                // an unparsable item JID throws on getDomain(): drop that item only
+                if (item.jid?.let(Jid.Invalid::isValid) == false) return@mapNotNull null
+                commandItem(address, item.jid, node, item.getAttribute("name")?.takeIf(String::isNotBlank) ?: node)
             }
         } catch (e: TimeoutCancellationException) {
             emptyList()

@@ -115,4 +115,9 @@
     <!-- Clipboard label and notice for a value copied from an ad-hoc command result -->
     <string name="tatrak_command_value">Value</string>
     <string name="tatrak_command_value_copied">Copied to clipboard</string>
+    <string name="tatrak_command_via">→ %1$s</string>
+    <string name="tatrak_command_blocked">Other domain: %1$s, not available</string>
+    <string name="tatrak_command_blocked_title">Command not available</string>
+    <string name="tatrak_command_blocked_text">This command would send what you enter to %1$s, a domain other than this chat\'s. Only a misconfigured or fake service lists commands like that, so Tatrak does not run it.</string>
+    <string name="tatrak_command_blocked_why">explain why it is not available</string>
 </resources>

@@ -112,4 +112,9 @@
     <!-- Clipboard label and notice for a value copied from an ad-hoc command result -->
     <string name="tatrak_command_value">Значение</string>
     <string name="tatrak_command_value_copied">Скопировано</string>
+    <string name="tatrak_command_via">→ %1$s</string>
+    <string name="tatrak_command_blocked">Другой домен: %1$s, недоступно</string>
+    <string name="tatrak_command_blocked_title">Команда недоступна</string>
+    <string name="tatrak_command_blocked_text">Эта команда отправит введённые данные на %1$s, то есть на другой домен, а не собеседнику. Так делает только неправильно настроенный или поддельный сервис, поэтому Tatrak её не запускает.</string>
+    <string name="tatrak_command_blocked_why">узнать, почему недоступна</string>
 </resources>

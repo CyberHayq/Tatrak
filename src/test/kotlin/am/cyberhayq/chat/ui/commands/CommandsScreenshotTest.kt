@@ -18,10 +18,14 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.dp
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.siacs.conversations.xmpp.Jid
+import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -64,6 +68,8 @@ class CommandsScreenshotTest {
             CommandItem(Jid.of("10.0.2.2"), "ping", "Ping"),
             CommandItem(Jid.of("10.0.2.2"), "add-user", "Add User"),
             CommandItem(Jid.of("10.0.2.2"), "announce", "Send Announcement to Online Users"),
+            commandItem(Jid.of("bot@10.0.2.2"), Jid.of("10.0.2.2"), "plans", "Plans"),
+            commandItem(Jid.of("bot@10.0.2.2"), Jid.of("pay@evil.example"), "top-up", "Top up"),
         )
 
     /** Every field type, a required field left empty, a note and an action set with a default. */
@@ -131,6 +137,18 @@ class CommandsScreenshotTest {
             CommandsButton(expanded = true, onClick = {})
             CommandsButton(expanded = false, onClick = {})
         }
+    }
+
+    @Test
+    fun blockedRowExplainsAndNeverPicks() {
+        val picks = mutableListOf<CommandItem>()
+        compose.setContent { TatrakTheme { CommandsSheetContent(commands) { picks += it } } }
+        compose.onNodeWithText("Top up").performClick()
+        compose.onNodeWithText("Command not available").assertIsDisplayed()
+        compose.onNodeWithText("OK").performClick()
+        compose.onNodeWithText("Command not available").assertDoesNotExist()
+        compose.onNodeWithText("Plans").performClick()
+        assertEquals(listOf("plans"), picks.map { it.node })
     }
 
     @Test

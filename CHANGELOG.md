@@ -23,7 +23,8 @@
   commands, a "Commands" button by the input field opens their list, like a bot menu; a command
   runs as a full-screen form (XEP-0004 fields, keyboards from XEP-0122 datatypes, results as cards,
   a single choice as buttons). Back or another chat cancels the command, asking first when a field
-  was edited.
+  was edited. A command listed on another domain than the chat's is shown greyed out and does not
+  run.
 
 ### Upstream
 - Tatrak now includes the fixes of Conversations 2.21.1-2.21.5 (OMEMO, TLS trust, Jingle file
