@@ -388,12 +388,12 @@ fun ChatAvatar(avatar: Bitmap?, online: Boolean, size: Dp, selected: Boolean = f
     val dot = LocalAvatarDotOffset.current
     Box(Modifier.size(size)) {
         if (savedMessages) {
-            val accent = MaterialTheme.colorScheme.primary
-            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().background(accent, shape)) {
+            // Telegram's fixed blue with a white bookmark: an accent-coloured circle turned the icon dark on light accents
+            Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize().background(Color(0xFF3E88F7), shape)) {
                 Icon(
                     painterResource(R.drawable.tatrak_ic_bookmark_24dp),
                     contentDescription = null,
-                    tint = contentOn(accent),
+                    tint = Color.White,
                     modifier = Modifier.fillMaxSize(0.48f),
                 )
             }
