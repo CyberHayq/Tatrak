@@ -21,7 +21,8 @@ import androidx.compose.ui.unit.dp
 sealed interface NotesBlock {
     val text: String
 
-    data class Heading(override val text: String) : NotesBlock
+    /** [level]: the number of `#`; 1 is a version heading (Updater.withSkippedNotes), above a body's own `##`/`###` sections. */
+    data class Heading(override val text: String, val level: Int) : NotesBlock
 
     data class Paragraph(override val text: String) : NotesBlock
 
@@ -45,7 +46,7 @@ fun parseReleaseNotes(markdown: String): List<NotesBlock> {
         val hashes = line.takeWhile { it == '#' }.length
         if (hashes in 1..6 && line.getOrNull(hashes) == ' ') {
             close()
-            blocks += NotesBlock.Heading(line.substring(hashes + 1).trim())
+            blocks += NotesBlock.Heading(line.substring(hashes + 1).trim(), hashes)
         } else if (line.startsWith("- ") || line.startsWith("* ")) {
             close()
             val indent = raw.length - raw.trimStart().length
@@ -106,7 +107,11 @@ fun ReleaseNotesText(markdown: String, modifier: Modifier = Modifier) {
         for (b in blocks) {
             when (b) {
                 is NotesBlock.Heading ->
-                    Text(notesMarkup(b.text), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    if (b.level == 1) {
+                        Text(notesMarkup(b.text), Modifier.padding(top = 10.dp), style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onSurface)
+                    } else {
+                        Text(notesMarkup(b.text), Modifier.padding(top = 6.dp), style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                    }
                 is NotesBlock.Paragraph -> Text(notesMarkup(b.text), style = MaterialTheme.typography.bodyMedium)
                 is NotesBlock.Bullet ->
                     Row(Modifier.padding(start = if (b.level == 0) 0.dp else 16.dp)) {

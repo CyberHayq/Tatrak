@@ -65,6 +65,11 @@ release by its version name but installs it only when its versionCode is higher 
 one; with the same code the user gets "not newer than the installed app" after the download
 (updater). Tag pre-releases `vX.Y.Z-beta.N` (valid
 SemVer: no empty identifiers, no leading zeros): the updater decides beta or release from the tag.
+A stable release's notes list only what changed since its last pre-release (as `CHANGELOG.md`
+does): the update dialog also shows the notes of every skipped release, pre-releases included,
+also to users with Beta versions off. Exception: the first stable release after the skipped notes ship
+(0.6.0) also lists the betas' changes in its own notes, since users updating from 0.5.x still run
+the old updater, which shows only the offered release's notes.
 
 A published release (GitHub and F-Droid's reproducible build) is built from the public
 repository's tag (`~/workspace/tatrak-public`, see public export), not from

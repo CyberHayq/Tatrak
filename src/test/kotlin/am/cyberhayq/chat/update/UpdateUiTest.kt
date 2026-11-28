@@ -15,6 +15,8 @@ import androidx.preference.PreferenceManager
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import eu.siacs.conversations.R
+import org.json.JSONArray
+import org.json.JSONObject
 import org.junit.Assert.assertEquals
 import org.junit.Rule
 import org.junit.Test
@@ -78,6 +80,16 @@ class UpdateUiTest {
     @Test fun notesLight() = dialog(UpdateState.Available(release), testBuild = true, dark = false, "update_notes_light")
 
     @Test @Config(qualifiers = "+night") fun notesDark() = dialog(UpdateState.Available(release), testBuild = false, dark = true, "update_notes_dark")
+
+    /** Skipped releases' notes as [Updater.withSkippedNotes] joins them: a version heading above each body's own headings. */
+    @Test
+    fun skippedNotesLight() {
+        val list = JSONArray(listOf(
+            JSONObject().put("tag_name", "v9.9.9-beta.2").put("body", "Install preamble, left out.\r\n\r\n## Fixes\r\n- Voice messages resume where they stopped.\r\n"),
+            JSONObject().put("tag_name", "v9.9.9-beta.1").put("body", "### Interface\n- Reactions show who reacted.\n- Saved messages in the side menu."),
+        )).toString()
+        dialog(UpdateState.Available(Updater.withSkippedNotes(release, list, "9.9.8")), testBuild = false, dark = false, "update_notes_skipped_light")
+    }
 
     @Test fun progressLight() = dialog(UpdateState.Downloading(release, 0.4f), testBuild = false, dark = false, "update_progress_light")
 

@@ -56,8 +56,8 @@ object Updater {
     const val PRERELEASE = "tatrak_update_prerelease"
     private const val CHECKED_AT = "tatrak_update_checked_at"
     private const val LATEST = "https://api.github.com/repos/CyberHayq/Tatrak/releases/latest"
-    /** Newest first by creation date; [newest] still ranks by version. */
-    private const val RELEASES = "https://api.github.com/repos/CyberHayq/Tatrak/releases?per_page=10"
+    /** Newest first by creation date; [newest] still ranks by version. 100 is GitHub's largest page. */
+    private const val RELEASES = "https://api.github.com/repos/CyberHayq/Tatrak/releases?per_page=100"
     const val DOWNLOAD_PREFIX = "https://github.com/CyberHayq/Tatrak/releases/download/"
     /** AllowedAPKSigningKeys of tools/fdroid/am.cyberhayq.chat.yml. */
     const val RELEASE_CERT = "3bae017d66664f88502ab51a6868621c1f93fd47004b3666796d3cd9a6946d9b"
@@ -107,6 +107,9 @@ object Updater {
     fun acceptUrl(url: String): Boolean =
         url.startsWith(DOWNLOAD_PREFIX) && url.toHttpUrlOrNull()?.toString()?.startsWith(DOWNLOAD_PREFIX) == true
 
+    /** A release's notes; GitHub sends `"body": null` for none, which optString turns into "null". */
+    private fun body(release: JSONObject) = if (release.isNull("body")) "" else release.optString("body")
+
     /** The `releases/latest` answer: the first of [abis] with an asset, else `universal`. */
     fun parse(json: String, abis: List<String>): Release {
         try {
@@ -119,11 +122,14 @@ object Updater {
             val url = asset.getString("browser_download_url")
             val size = asset.getLong("size")
             if (!acceptUrl(url) || size <= 0) throw UpdateException(R.string.tatrak_update_error_release)
-            return Release(version, release.optString("body"), url, size)
+            return Release(version, body(release), url, size)
         } catch (e: JSONException) {
             throw UpdateException(R.string.tatrak_update_error_release, e)
         }
     }
+
+    /** Releases of a `releases` list by their tag's version, highest first. */
+    private val highestFirst = Comparator<JSONObject> { a, b -> if (isNewer(a.getString("tag_name"), b.getString("tag_name"))) -1 else if (isNewer(b.getString("tag_name"), a.getString("tag_name"))) 1 else 0 }
 
     /**
      * The `releases` list answer: the highest non-draft release newer than [current] that [parse]
@@ -138,8 +144,7 @@ object Updater {
                 throw UpdateException(R.string.tatrak_update_error_release, e)
             }
         if (newer.isEmpty()) return null
-        val highestFirst = newer.sortedWith { a, b -> if (isNewer(a.getString("tag_name"), b.getString("tag_name"))) -1 else if (isNewer(b.getString("tag_name"), a.getString("tag_name"))) 1 else 0 }
-        return highestFirst.firstNotNullOfOrNull {
+        return newer.sortedWith(highestFirst).firstNotNullOfOrNull {
             try {
                 parse(it.toString(), abis)
             } catch (e: UpdateException) {
@@ -147,6 +152,39 @@ object Updater {
             }
         } ?: throw UpdateException(R.string.tatrak_update_error_release)
     }
+
+    /**
+     * [release] with the notes of every release it skips: the non-draft ones in the `releases` list
+     * newer than [current] and older than [release], with or without an APK for this device, since their
+     * changes are in [release]'s. Pre-releases count also with Beta versions off: a release's notes list
+     * only what changed since its last pre-release. Highest first, each under a `# version` heading (a
+     * body's own sections are `##` and deeper); a skipped body loses its install preamble before its first
+     * heading, which every release repeats; empty bodies are left out. Nothing skipped (or an unreadable
+     * list): unchanged.
+     * shortcut: only the list's first page (100 releases) is read, so older skipped notes are missing; page through when there are more.
+     */
+    fun withSkippedNotes(release: Release, json: String, current: String): Release {
+        val skipped =
+            try {
+                val releases = JSONArray(json)
+                (0 until releases.length()).map(releases::getJSONObject).filter {
+                    val tag = it.optString("tag_name")
+                    !it.optBoolean("draft") && isNewer(tag, current) && isNewer(release.version, tag)
+                }
+            } catch (e: JSONException) {
+                return release
+            }
+        if (skipped.isEmpty()) return release
+        val notes =
+            (listOf(release.version to release.notes) + skipped.sortedWith(highestFirst).map { it.getString("tag_name").removePrefix("v") to fromFirstHeading(body(it)) })
+                .filter { it.second.isNotBlank() }
+                .joinToString("\n\n") { (version, body) -> "# $version\n${body.trim()}" }
+        return release.copy(notes = notes)
+    }
+
+    /** [body] from its first heading line on (the heading rule of [parseReleaseNotes]); whole when it has none. */
+    private fun fromFirstHeading(body: String): String =
+        Regex("^[ \\t]*#{1,6} ", RegexOption.MULTILINE).find(body)?.let { body.substring(it.range.first) } ?: body
 
     /** The reason to refuse an APK, or null; signer sets are SHA-256 hex of each certificate. */
     fun refusal(
@@ -230,26 +268,38 @@ object Updater {
             // https only, also behind GitHub's redirect to its object storage
             .newBuilder().followSslRedirects(false).build()
 
-    /** Blocking: the latest release (or pre-release, with betas on) if it is newer than this app, also stored for the chat list's notice. */
+    /**
+     * Blocking: the latest release (or pre-release, with betas on) if it is newer than this app, with the
+     * notes of the releases it skips ([withSkippedNotes]), also stored for the chat list's notice.
+     */
     fun check(context: Context): Release? {
         if (AppSettings(context).isUseTor) throw UpdateException(R.string.tatrak_update_error_tor)
         val betas = prefs(context).getBoolean(PRERELEASE, false)
-        val request = Request.Builder().url(if (betas) RELEASES else LATEST).header("Accept", "application/vnd.github+json").build()
-        val json =
-            try {
-                client(context).newCall(request).execute().use { response ->
-                    if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
-                    response.body.string()
-                }
-            } catch (e: IOException) {
-                throw UpdateException(R.string.tatrak_update_error_network, e)
-            }
+        val json = get(context, if (betas) RELEASES else LATEST)
         val abis = Build.SUPPORTED_ABIS.toList()
-        val release = if (betas) newest(json, abis, BuildConfig.VERSION_NAME) else parse(json, abis)
+        val offered = if (betas) newest(json, abis, BuildConfig.VERSION_NAME) else parse(json, abis)
         prefs(context).edit().putLong(CHECKED_AT, System.currentTimeMillis()).apply()
-        if (release == null || !isNewer(release.version, BuildConfig.VERSION_NAME)) return null
+        if (offered == null || !isNewer(offered.version, BuildConfig.VERSION_NAME)) return null
+        // betas off still picks the offer by releases/latest, which a page full of later betas cannot push out; the list
+        // only adds the skipped notes (betas' too), and when it fails the offer keeps its own notes
+        // Tor may have been turned on during the first request: then no second one
+        val list = if (betas) json else if (AppSettings(context).isUseTor) null else try { get(context, RELEASES) } catch (e: UpdateException) { null }
+        val release = list?.let { withSkippedNotes(offered, it, BuildConfig.VERSION_NAME) } ?: offered
         prefs(context).edit().putString(RELEASE, release.toJson()).apply()
         return release
+    }
+
+    /** Blocking GET of a GitHub API answer; any failure is the network error. */
+    private fun get(context: Context, url: String): String {
+        val request = Request.Builder().url(url).header("Accept", "application/vnd.github+json").build()
+        return try {
+            client(context).newCall(request).execute().use { response ->
+                if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
+                response.body.string()
+            }
+        } catch (e: IOException) {
+            throw UpdateException(R.string.tatrak_update_error_network, e)
+        }
     }
 
     fun apkFile(context: Context) = File(context.cacheDir, "tatrak-update.apk")

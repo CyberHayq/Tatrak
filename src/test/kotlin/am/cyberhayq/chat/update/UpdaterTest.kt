@@ -148,6 +148,102 @@ class UpdaterTest {
         expect(R.string.tatrak_update_error_release) { Updater.newest("{}", arm, "0.4.0-beta.1") }
     }
 
+    /** A list entry with its own notes; null is GitHub's `"body": null`. */
+    private fun noted(version: String, body: String?, abis: List<String> = allAbis, draft: Boolean = false) =
+        entry(version, abis, draft).put("body", body ?: JSONObject.NULL)
+
+    private fun offer(version: String, notes: String) = Release(version, notes, "${prefix}v$version/am.cyberhayq.chat-$version-x86.apk", 1004)
+
+    @Test
+    fun skippedBetasNotesNewestFirst() {
+        // created out of version order; a draft between them is not a release; the installed one and older ones are left out
+        val list =
+            JSONArray(listOf(
+                noted("0.6.0-beta.2", "### Fixes\n- two"),
+                noted("0.6.0-beta.4", "- four"),
+                noted("0.6.0-beta.3.1", "- draft", draft = true),
+                noted("0.6.0-beta.3", "- three\r\n"),
+                noted("0.6.0-beta.1", "- installed"),
+                noted("0.5.0", "- old"),
+            )).toString()
+        val three = Updater.withSkippedNotes(offer("0.6.0-beta.4", "- four"), list, "0.6.0-beta.1")
+        assertEquals("# 0.6.0-beta.4\n- four\n\n# 0.6.0-beta.3\n- three\n\n# 0.6.0-beta.2\n### Fixes\n- two", three.notes)
+        // only the notes change
+        assertEquals(offer("0.6.0-beta.4", "- four").copy(notes = three.notes), three)
+        // two skipped: an offer below the newest listed (that one without an APK for this device) leaves out what is above it
+        assertEquals(
+            "# 0.6.0-beta.3\n- three\n\n# 0.6.0-beta.2\n### Fixes\n- two",
+            Updater.withSkippedNotes(offer("0.6.0-beta.3", "- three"), list, "0.6.0-beta.1").notes,
+        )
+        // as check() builds it with betas on, from newest()
+        assertEquals(three.notes, Updater.withSkippedNotes(Updater.newest(list, listOf("x86"), "0.6.0-beta.1")!!, list, "0.6.0-beta.1").notes)
+    }
+
+    /** Beta versions off: the offer is a release, but its notes list only what changed since its last beta, so the betas' notes come too. */
+    @Test
+    fun skippedNotesOfAReleaseIncludeItsBetas() {
+        val list =
+            JSONArray(listOf(
+                noted("0.6.0", "- six"),
+                noted("0.6.0-beta.3", "- beta three"),
+                noted("0.6.0-beta.2", "- beta two"),
+                noted("0.6.0-beta.1", "- beta one"),
+                noted("0.5.1", "- installed"),
+            )).toString()
+        val stable = offer("0.6.0", "- six")
+        assertEquals(
+            "# 0.6.0\n- six\n\n# 0.6.0-beta.3\n- beta three\n\n# 0.6.0-beta.2\n- beta two\n\n# 0.6.0-beta.1\n- beta one",
+            Updater.withSkippedNotes(stable, list, "0.5.1").notes,
+        )
+        // from a beta: only what it has not had yet
+        assertEquals("# 0.6.0\n- six\n\n# 0.6.0-beta.3\n- beta three", Updater.withSkippedNotes(stable, list, "0.6.0-beta.2").notes)
+        // GitHub's prerelease flag is not read
+        val flagged = JSONArray(list).put(noted("0.5.2", "- five two").put("prerelease", true)).toString()
+        assertTrue(Updater.withSkippedNotes(stable, flagged, "0.5.1").notes.endsWith("# 0.5.2\n- five two"))
+    }
+
+    @Test
+    fun skippedReleaseWithoutAnApkStillGivesItsNotes() {
+        val list = JSONArray(listOf(noted("0.6.0-beta.3", "- three", listOf("x86")), noted("0.6.0-beta.2", "- two", emptyList()))).toString()
+        assertEquals("# 0.6.0-beta.3\n- three\n\n# 0.6.0-beta.2\n- two", Updater.withSkippedNotes(offer("0.6.0-beta.3", "- three"), list, "0.6.0-beta.1").notes)
+    }
+
+    @Test
+    fun singleNewerReleaseKeepsItsNotes() {
+        val notes = "Intro\r\n\r\n### Interface\r\n- one\r\n"
+        val release = offer("0.6.0-beta.2", notes)
+        val list = JSONArray(listOf(noted("0.6.0-beta.2", notes), noted("0.6.0-beta.1", "- installed"), noted("0.5.0", "- old"))).toString()
+        assertEquals(release, Updater.withSkippedNotes(release, list, "0.6.0-beta.1"))
+        // the offer not in the list's page, an unreadable list: unchanged too
+        assertEquals(release, Updater.withSkippedNotes(release, "[]", "0.6.0-beta.1"))
+        assertEquals(release, Updater.withSkippedNotes(release, "{}", "0.6.0-beta.1"))
+    }
+
+    @Test
+    fun emptyBodiesAreSkipped() {
+        val list = JSONArray(listOf(noted("0.6.0-beta.5", "- five"), noted("0.6.0-beta.4", ""), noted("0.6.0-beta.3", null), noted("0.6.0-beta.2", " \n "))).toString()
+        assertEquals("# 0.6.0-beta.5\n- five", Updater.withSkippedNotes(offer("0.6.0-beta.5", "- five"), list, "0.6.0-beta.1").notes)
+        // an offer without notes of its own still shows the skipped ones under their version
+        assertEquals("# 0.6.0-beta.5\n- five", Updater.withSkippedNotes(offer("0.6.0-beta.6", ""), list, "0.6.0-beta.1").notes)
+        // GitHub's "body": null is no notes, not the text "null"
+        assertEquals("", Updater.parse(noted("0.6.0", null).toString(), listOf("x86")).notes)
+    }
+
+    /** Every release body starts with the same install preamble; joined, it is kept only for the offered release. */
+    @Test
+    fun skippedPreambleIsDropped() {
+        val preamble = "A pre-release for testing. The in-app updater offers it only with Beta versions turned on.\r\n\r\nPick `arm64-v8a`. Signing certificate SHA-256: `3bae`\r\n\r\n"
+        val list =
+            JSONArray(listOf(
+                noted("0.6.0-beta.3", preamble + "### Interface\r\n- three\r\n"),
+                noted("0.6.0-beta.2", "Only a preamble, no heading."),
+            )).toString()
+        assertEquals(
+            "# 0.6.0-beta.4\n${preamble.trim()}\r\n\r\n### Fixes\n- four\n\n# 0.6.0-beta.3\n### Interface\r\n- three\n\n# 0.6.0-beta.2\nOnly a preamble, no heading.",
+            Updater.withSkippedNotes(offer("0.6.0-beta.4", preamble + "### Fixes\n- four"), list, "0.6.0-beta.1").notes,
+        )
+    }
+
     @Test
     fun urlAcceptance() {
         assertTrue(Updater.acceptUrl("${prefix}v0.4.0/am.cyberhayq.chat-0.4.0-x86.apk"))

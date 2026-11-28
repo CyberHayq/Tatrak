@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+### Interface
+- The update dialog shows the notes of every release you skipped, newest first, each under its
+  version, not only the newest one; with Beta versions off this includes the betas before the
+  offered release, whose notes the release itself does not repeat.
+
 ## 0.6.0-beta.2 (pre-release)
 
 ### Interface

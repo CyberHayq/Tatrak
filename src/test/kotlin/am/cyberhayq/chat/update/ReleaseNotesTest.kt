@@ -14,7 +14,7 @@ class ReleaseNotesTest {
         assertEquals(
             listOf(
                 NotesBlock.Paragraph("Intro line one line two"),
-                NotesBlock.Heading("Interface"),
+                NotesBlock.Heading("Interface", 3),
                 NotesBlock.Bullet("First bullet that wraps onto a second line", 0),
                 NotesBlock.Bullet("nested", 1),
                 NotesBlock.Bullet("star bullet", 0),
@@ -26,9 +26,26 @@ class ReleaseNotesTest {
 
     @Test
     fun crlfAndEmptyInput() {
-        assertEquals(listOf(NotesBlock.Heading("A"), NotesBlock.Bullet("b c", 0)), parseReleaseNotes("# A\r\n- b\r\n  c\r\n"))
+        assertEquals(listOf(NotesBlock.Heading("A", 1), NotesBlock.Bullet("b c", 0)), parseReleaseNotes("# A\r\n- b\r\n  c\r\n"))
         assertTrue(parseReleaseNotes("").isEmpty())
         assertTrue(parseReleaseNotes("\n  \n").isEmpty())
+    }
+
+    /** Skipped releases' notes as Updater.withSkippedNotes joins them: each body's sections sit under its version heading. */
+    @Test
+    fun versionHeadingsAboveBodySections() {
+        assertEquals(
+            listOf(
+                NotesBlock.Heading("0.6.0-beta.3", 1),
+                NotesBlock.Heading("Fixes", 2),
+                NotesBlock.Bullet("a", 0),
+                NotesBlock.Heading("0.6.0-beta.2", 1),
+                NotesBlock.Paragraph("Intro"),
+                NotesBlock.Heading("Interface", 3),
+                NotesBlock.Bullet("b", 0),
+            ),
+            parseReleaseNotes("# 0.6.0-beta.3\n## Fixes\n- a\n\n# 0.6.0-beta.2\nIntro\n\n### Interface\n- b"),
+        )
     }
 
     @Test
