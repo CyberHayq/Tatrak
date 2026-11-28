@@ -74,7 +74,10 @@ built in a temporary worktree of the public repository, removed after signing (t
 builds, and the owner sent an old one to his phone):
 
 ```sh
-export JAVA_HOME=/usr/lib/jvm/java-25-openjdk ANDROID_HOME=$HOME/Android/Sdk
+export JAVA_HOME=/usr/lib/jvm/java-25-openjdk
+# the SDK root is ~/Android/Sdk, or ~/Android where it was unpacked straight there (2026-11-28: the
+# wrong one fails with "SDK location not found"; a worktree has no local.properties)
+for d in ~/Android/Sdk ~/Android; do [ -d "$d/platforms" ] && export ANDROID_HOME=$d && break; done
 unset ANDROID_SDK_ROOT   # the shell's /opt/android-sdk conflicts with ANDROID_HOME and fails the build
 # the release APK carries no git data (vcsInfo off), so a worktree builds the same APK as a clone
 git -C ~/workspace/tatrak-public worktree add --detach ~/workspace/tatrak-build-v<version> v<version>
@@ -121,7 +124,10 @@ stored); it can sign a separate local test APK with the existing debug key (find
 `./gradlew signingReport`) and label it debug-signed:
 
 ```sh
-export JAVA_HOME=/usr/lib/jvm/java-25-openjdk ANDROID_HOME=$HOME/Android/Sdk
+export JAVA_HOME=/usr/lib/jvm/java-25-openjdk
+# the SDK root is ~/Android/Sdk, or ~/Android where it was unpacked straight there (2026-11-28: the
+# wrong one fails with "SDK location not found"; a worktree has no local.properties)
+for d in ~/Android/Sdk ~/Android; do [ -d "$d/platforms" ] && export ANDROID_HOME=$d && break; done
 BUILD_TOOLS="$ANDROID_HOME/build-tools/36.0.0"
 RELEASE_DIR=build/outputs/apk/conversationsFree/release
 mkdir -p "$RELEASE_DIR/signed-debug"

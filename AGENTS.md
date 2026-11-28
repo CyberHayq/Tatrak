@@ -242,9 +242,10 @@ grep -ho 'tests="[0-9]*" skipped="[0-9]*" failures="[0-9]*" errors="[0-9]*"' \
 ./gradlew assembleConversationsFreeBenchmark         # optimised build for speed checks
 ```
 
-- Android SDK is in `~/Android/Sdk`: set `ANDROID_HOME=~/Android/Sdk` (the shell's `/opt/android-sdk` is
-  an empty root-owned SDK and breaks the emulator; with `~/Android` lint vital fails with an
-  `Instantiatable` error on every class); adb is `~/Android/Sdk/platform-tools/adb`.
+- Android SDK is `~/Android/Sdk`, or `~/Android` on a machine where it was unpacked straight there:
+  the one with `platforms/` (`sdk.dir` in `local.properties`). Set `ANDROID_HOME` to it (the shell's
+  `/opt/android-sdk` is an empty root-owned SDK and breaks the emulator; an `ANDROID_HOME` without
+  the SDK fails the build, a partial one lint vital); adb is `$ANDROID_HOME/platform-tools/adb`.
 - When asked for release APKs, deliver only the signed `arm64-v8a` APK unless the owner asks for
   other variants, not merely unsigned Gradle outputs. The release key's password is never
   stored, so only the owner signs with it; an agent signs separate local test APKs with the

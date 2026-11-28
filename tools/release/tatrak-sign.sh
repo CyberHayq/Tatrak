@@ -64,7 +64,7 @@ unset KSPASS
 
 mkdir -p "$OUT"
 for apk in signed/am.cyberhayq.chat-*.apk; do
-  abi=${apk#signed/am.cyberhayq.chat-*-}; abi=${abi%.apk}   # am.cyberhayq.chat-<version>-<abi>.apk
+  abi=${apk#signed/am.cyberhayq.chat-"$version"-}; abi=${abi%.apk}   # am.cyberhayq.chat-<version>-<abi>.apk
   # a test build is for the owner's phone: arm64 only (AGENTS.md)
   [ "$label" = "$tag" ] || [ "$abi" = "arm64-v8a" ] || continue
   cp "$apk" "$OUT/tatrak-$label-$abi.apk"
