@@ -26,6 +26,10 @@ import androidx.compose.ui.test.captureToImage
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.assertIsNotFocused
@@ -64,6 +68,7 @@ import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasScrollAction
+import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.performScrollToIndex
@@ -609,9 +614,14 @@ class ChatScreenshotTest {
         assertEquals(listOf("dismiss", "menu b"), calls)
     }
 
-    /** The rows behind m5's chips 👍 2 (Boris and the user) and 🔥 1 (Vika). */
+    /** The rows behind m5's chips 👍 2 (Boris and the user) and 🔥 1 (Vika), as the snapshot puts them in the item. */
+    private val m5Reactors = listOf(reactorRows[1], reactorRows[2], reactorRows[3].copy(emoji = "🔥"))
+
+    /** The reactions a chip toggled, as "uuid emoji". */
+    private val toggled = mutableListOf<String>()
+
     private val reactionActions = object : ChatActions by FakeActions {
-        override fun reactors(uuid: String) = listOf(reactorRows[1], reactorRows[2], reactorRows[3].copy(emoji = "🔥"))
+        override fun toggleReaction(uuid: String, emoji: String) { toggled += "$uuid $emoji" }
     }
 
     /** m5 has the chips 👍 2 and 🔥 1. */
@@ -650,8 +660,8 @@ class ChatScreenshotTest {
     @Test
     fun chipWithoutReactingRightsStillOpensWhoReactedAndOnlyOffersThat() {
         capture("chat_reactors_no_rights", darkTheme = false, actions = reactionActions, act = {
-            compose.onNodeWithText("🔥", substring = true).assertHasNoClickAction().assert(SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
-            longPressChip()
+            // TalkBack's long press: the semantic action itself, not a touch
+            compose.onNodeWithText("🔥", substring = true).assertHasNoClickAction().performSemanticsAction(SemanticsActions.OnLongClick)
         }) { withoutReactingRights(privateChat(it)) }
         compose.onNodeWithText("Vika").assertExists()
         // not selected, no menu
@@ -715,6 +725,114 @@ class ChatScreenshotTest {
         assertSelected(1)
         assertTrue(isSelected("Yes, an hour ago"))
         assertFalse(isSelected("flag works now"))
+        assertEquals(emptyList<String>(), toggled)
+        // out of selection mode the chip toggles again
+        compose.onNodeWithContentDescription("Cancel selection").performClick()
+        assertSelected(null)
+        compose.onNodeWithText("🔥", substring = true).performTouchInput { click() }
+        assertEquals(listOf("m5 🔥"), toggled)
+    }
+
+    /** TalkBack's double tap (or Enter) on a chip while selecting toggles the row like on the bubble; it sends no reaction. */
+    @Test
+    fun semanticClickOnChipWhileSelectingSelects() {
+        capture("chat_reactors_selecting_talkback", darkTheme = false, actions = reactionActions, act = {
+            compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() }
+            // the chip has no node of its own: it is part of the bubble's, whose click selects
+            compose.onNodeWithText("🔥", substring = true).assert(hasText("flag works now", substring = true))
+                .performSemanticsAction(SemanticsActions.OnClick)
+        }) { privateChat(it) }
+        assertSelected(2)
+        assertTrue(isSelected("flag works now"))
+        assertEquals(emptyList<String>(), toggled)
+    }
+
+    /** A hold on a chip that stops a fling (the list takes the down in the Initial pass) opens no sheet and selects nothing. */
+    @Test
+    fun holdOnChipThatStopsAFlingOpensNothing() {
+        val calls = mutableListOf<String>()
+        compose.setContent {
+            TatrakTheme(darkTheme = false) {
+                val m5 = withoutReactingRights(privateChat(Samples(currentTextPalette()))).items.first { it.key == "m5" } as MessageItem
+                Box(Modifier.pointerInput(Unit) { awaitEachGesture { awaitFirstDown(pass = PointerEventPass.Initial).consume() } }) {
+                    MessageRow(
+                        m5, false, FakeActions, voice,
+                        onMenu = { _, _ -> calls += "menu" },
+                        onSelect = { calls += "select" },
+                        onSwipeReply = {},
+                        onReactors = { _, emoji -> calls += "sheet $emoji" },
+                    )
+                }
+            }
+        }
+        compose.onNodeWithText("🔥", substring = true).performTouchInput { longClick() }
+        compose.waitForIdle()
+        assertEquals(emptyList<String>(), calls)
+    }
+
+    /**
+     * Two fingers: one on a chip, one elsewhere on the bubble. Neither the chip's long press (who reacted) nor the bubble's
+     * (select) runs, in either order, also when the chip's finger lifts first and the other one stays past the timeout.
+     */
+    @Test
+    fun secondFingerCancelsTheChipAndKeepsTheBubbleAside() {
+        capture("chat_reactors_two_fingers", darkTheme = false, actions = reactionActions) { withoutReactingRights(privateChat(it)) }
+        val chip = compose.onNodeWithText("🔥", substring = true)
+        val chipBounds = chip.fetchSemanticsNode().boundsInRoot
+        val text = compose.onNodeWithText("flag works now", substring = true, useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        // the end of the text, clear of the link
+        val other = text.bottomRight - Offset(4f, 4f) - chipBounds.topLeft
+        fun hold() = repeat(10) { chip.performTouchInput { advanceEventTime(100); move() } }
+        // the bubble's finger first (on plain text, then on the quoted link: childLongPress), then a short touch on the chip:
+        // the bubble's long press stands aside to the last finger
+        for (first in listOf(other, text.center - chipBounds.topLeft)) {
+            chip.performTouchInput { down(0, first); down(1, center); up(1) }
+            hold()
+            chip.performTouchInput { up(0) }
+            compose.waitForIdle()
+            assertSelected(null)
+            compose.onNodeWithText("Vika").assertDoesNotExist()
+        }
+        // the chip's finger first and lifted first
+        chip.performTouchInput { down(0, center); down(1, other); up(0) }
+        hold()
+        chip.performTouchInput { up(1) }
+        compose.waitForIdle()
+        assertSelected(null)
+        compose.onNodeWithText("Vika").assertDoesNotExist()
+        // both stay down past the timeout
+        chip.performTouchInput { down(0, center); down(1, other) }
+        hold()
+        chip.performTouchInput { up(0); up(1) }
+        compose.waitForIdle()
+        assertSelected(null)
+        compose.onNodeWithText("Vika").assertDoesNotExist()
+    }
+
+    /** An open sheet follows a rename under the same id and a swap that keeps the chips equal. */
+    @Test
+    fun openSheetFollowsRenameAndSwap() {
+        var step by mutableStateOf(0)
+        capture("chat_reactors_renamed", darkTheme = false, actions = reactionActions, act = { longPressChip() }) { s ->
+            privateChat(s).let { st ->
+                val fire =
+                    when (step) {
+                        1 -> m5Reactors[2].copy(name = "Viktoria")
+                        2 -> m5Reactors[0].copy(emoji = "🔥")
+                        else -> m5Reactors[2]
+                    }
+                st.copy(items = st.items.map { if (it is MessageItem && it.key == "m5") it.copy(reactors = m5Reactors.take(2) + fire) else it })
+            }
+        }
+        compose.onNodeWithText("Vika").assertExists()
+        step = 1
+        compose.waitForIdle()
+        compose.onNodeWithText("Viktoria").assertExists()
+        compose.onNodeWithText("Vika").assertDoesNotExist()
+        step = 2
+        compose.waitForIdle()
+        compose.onNodeWithText("Viktoria").assertDoesNotExist()
+        compose.onNodeWithText("Boris").assertExists()
     }
 
     /** The sheet is part of the saved screen state: a rotation keeps it open. */
@@ -1826,7 +1944,7 @@ class ChatScreenshotTest {
                     s.unread(2),
                     s.text("m4", false, GroupPosition.FIRST, "See you tomorrow at 10?", "09:12"),
                     s.text("m5", false, GroupPosition.LAST, "> The changelog is at https://example.am/changes\nAlso: the `--release` flag works now", "09:13",
-                        reactions = listOf(ReactionChip("👍", 2, true), ReactionChip("🔥", 1, false))),
+                        reactions = listOf(ReactionChip("👍", 2, true), ReactionChip("🔥", 1, false))).copy(reactors = m5Reactors),
                     s.text("m6", true, GroupPosition.FIRST, "Fixd the typo", "09:20", status = DeliveryStatus.DELIVERED, edited = true),
                     s.text("m7", true, GroupPosition.MIDDLE, "Sure, 10 works", "09:20", status = DeliveryStatus.SENT)
                         .copy(reply = ReplyHeader("Ani", "See you tomorrow at 10?", 0xFFE17076.toInt(), "m4")),

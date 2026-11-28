@@ -383,21 +383,24 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
 - Who reacted (2026-11-28, public issue #10, `Reactors.kt`, `ReactorsSheet.kt`): a long press on a
   reaction chip opens a bottom sheet with "All N" and one tab per emoji (opened on the pressed one;
   no tabs for one emoji), a row per person: avatar, full name ("You" for own reactions), emoji.
-  Rows come from `ChatActions.reactors` (`ChatFragment`: `reactorRows`, names through
+  Rows are `MessageItem.reactors`, built with every snapshot (`ChatSnapshot`: `reactorRows`, names through
   `MucOptions.getUserOrStub` in a group, the contact in a one-to-one chat; a private message in a
   group stores only room/nick, so it shows that nick and, for a received message, the message's own
-  avatar, else a letter; deduplicated by person and VS16-normalised emoji). In a group a tap
+  avatar when it carries an occupant id or real JID, else a letter; deduplicated by person and VS16-normalised emoji). In a group a tap
   on another member's row closes the sheet and opens the participant menu of the avatar tap
   (`reactorMenu`, `MucDetailsContextMenuHelper`); own rows and one-to-one rows are inert. The sheet
-  state is `rememberSaveable(conversationUuid)` in `ChatScreen`; its rows are rebuilt when the item
-  changes (`MessageItem.reactorsKey` changes with who reacted, so a swap that keeps the chips equal
-  still shows); it closes when the message or its reactions go (after the first load). While messages
-  are selected the chips get no long press: a tap or a hold on any part of a row, the chip included,
-  toggles that row as on the bubble, and no sheet opens. A chip that cannot toggle (reaction limit, no
+  state is `rememberSaveable(conversationUuid)` in `ChatScreen`; it reads the item's rows, so a rename
+  or a swap that keeps the chips equal still shows; it closes when the message or its reactions go (after the first load). While messages
+  are selected the chips have no click or long press of their own: a tap or a hold on any part of a
+  row, the chip included, toggles that row as on the bubble, TalkBack and the keyboard reach the
+  bubble's select, and no sheet opens. A chip that cannot toggle (reaction limit, no
   rights) has no click: a short tap goes to the bubble's usual tap, TalkBack gets only the "Who
-  reacted" long-click action, and the chip detects the long press itself (`chipPress`). A chip's
-  press sets a flag the bubble's own long press and `childLongPress` check, so the long press no
-  longer selects the message.
+  reacted" long-click action, and the chip detects the long press itself (`chipPress`): only on a down
+  nobody consumed (a touch that stops a fling opens nothing), cancelled by a release, a move past the
+  slop, a second finger on the bubble, or a parent consuming its pointer (scroll, swipe). A chip's
+  press marks the bubble's gesture (`ChipPress`, one per bubble) until the last finger on the bubble
+  lifts; the bubble's own long press and `childLongPress` check the mark when they fire, so neither
+  selects the message.
 
 ## Profile (stage 6d)
 

@@ -16,6 +16,8 @@ import im.conversations.android.xmpp.model.muc.Affiliation
 import im.conversations.android.xmpp.model.muc.Role
 import im.conversations.android.xmpp.model.reactions.Restrictions
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -155,6 +157,42 @@ class ReactorsTest {
         assertEquals(anya.reactions, boris.reactions)
         assertNotEquals(anya, boris)
         assertEquals(anya, item(conversation, reaction("👍", "Anya")))
+        assertEquals(listOf("Anya"), anya.reactors.map { it.name })
+    }
+
+    /** The same occupant, renamed (here: the nick's holder is now a contact with another name): the item carries the new name. */
+    @Test
+    fun renamedReactorChangesTheItem() {
+        val before = item(group(), reaction("👍", "Anya"))
+        val after = item(group(mapOf("Anya" to "Anna K.")), reaction("👍", "Anya"))
+        assertEquals(before.reactions, after.reactions)
+        assertEquals(listOf("Anna K."), after.reactors.map { it.name })
+        assertNotEquals(before, after)
+    }
+
+    /** Two people who left with the same nick and occupant ids of equal String hashes ("Aa" and "BB"): still different items. */
+    @Test
+    fun swapWithEqualHashesChangesTheItem() {
+        assertEquals("occ-Aa".hashCode(), "occ-BB".hashCode())
+        val conversation = group()
+        val one = item(conversation, Reaction("👍", true, room.withResource("Gone"), null, "occ-Aa"))
+        val two = item(conversation, Reaction("👍", true, room.withResource("Gone"), null, "occ-BB"))
+        assertNotEquals(one, two)
+    }
+
+    /** A received group private message without occupant id or real JID: no message avatar (it would be the nick's holder now). */
+    @Test
+    fun privateMessageAvatarNeedsAStableSender() {
+        val pm = message(group()).apply { type = Message.TYPE_PRIVATE; counterpart = room.withResource("Anya") }
+        assertFalse(privateReactorHasMessageAvatar(pm))
+        pm.occupantId = "occ-anya"
+        assertTrue(privateReactorHasMessageAvatar(pm))
+        pm.occupantId = null
+        pm.trueCounterpart = Jid.of("anya@example.com")
+        assertTrue(privateReactorHasMessageAvatar(pm))
+        // own message: the account's avatar, not the message's
+        val sent = Message(group(), "hi", Message.ENCRYPTION_NONE, Message.STATUS_SEND).apply { type = Message.TYPE_PRIVATE; occupantId = "occ-me" }
+        assertFalse(privateReactorHasMessageAvatar(sent))
     }
 
     @Test

@@ -235,7 +235,7 @@ fun MessageRow(
     val onMenuState by rememberUpdatedState(onMenu)
     val onSelectState by rememberUpdatedState(onSelect)
     val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
-    val chipPress = remember { BooleanArray(1) }
+    val chipPress = remember { ChipPress() }
     val openMenu = { onMenuState(item, placed[0]?.takeIf { it.isAttached }) }
     val select = { onSelectState(item) }
     val menuLabel = stringResource(R.string.tatrak_open_menu)
@@ -376,6 +376,7 @@ fun MessageRow(
                 actions = actions,
                 voice = voice,
                 onReactors = onReactors,
+                selecting = selecting,
                 modifier =
                     Modifier.maxWidthFraction(if (isGroup && !item.isOutgoing) 0.82f else 0.86f)
                         .onPlaced { placed[0] = it }
@@ -396,8 +397,10 @@ fun MessageRow(
                                     selecting -> select
                                     else -> open ?: openMenu
                                 },
-                            onLongClick = if (item.actions.any) { { if (!chipPress[0]) select() } } else null,
+                            onLongClick = if (item.actions.any) { { if (!chipPress.marked) select() } } else null,
                         )
+                        // ahead of the chips (Initial pass): counts the fingers on the bubble, drops the chip mark when the last one lifts
+                        .then(if (item.reactions.isNotEmpty()) Modifier.pointerInput(chipPress) { trackChipPress(chipPress) } else Modifier)
                         .then(
                             if (item.actions.any) {
                                 Modifier.pointerInput(item.key) {
@@ -421,11 +424,9 @@ fun MessageRow(
  * handler, so the bubble's combinedClickable never sees a press on a link. Swallows the release so
  * the link does not open as well.
  */
-private suspend fun PointerInputScope.childLongPress(chipPress: BooleanArray, onLongPress: () -> Unit) = awaitEachGesture {
+private suspend fun PointerInputScope.childLongPress(chipPress: ChipPress, onLongPress: () -> Unit) = awaitEachGesture {
     val down = awaitFirstDown(requireUnconsumed = false)
     if (!down.isConsumed) return@awaitEachGesture // the bubble's combinedClickable has it
-    // a reaction chip has it: its long press opens "who reacted", it does not select the message
-    if (chipPress[0]) return@awaitEachGesture
     val ended =
         withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
             do {
@@ -433,6 +434,8 @@ private suspend fun PointerInputScope.childLongPress(chipPress: BooleanArray, on
             } while (change.pressed && (change.position - down.position).getDistance() <= viewConfiguration.touchSlop)
         }
     if (ended != null) return@awaitEachGesture
+    // a reaction chip was pressed in this gesture (also by another finger): its long press opens "who reacted", not select
+    if (chipPress.marked) return@awaitEachGesture
     onLongPress()
     do {
         val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -493,6 +496,8 @@ fun Bubble(
     voice: StateFlow<VoicePlayback>,
     modifier: Modifier = Modifier,
     onReactors: ((MessageItem, String) -> Unit)? = null,
+    /** Messages are being selected: the chips have no actions of their own, the bubble's (select) takes them. */
+    selecting: Boolean = false,
 ) {
     if (item.trustWarning == null && !item.retractUnverified && item.reactions.isEmpty() && item.reply == null &&
         item.caption == null) {
@@ -560,6 +565,7 @@ fun Bubble(
                     item,
                     actions,
                     onReactors,
+                    selecting,
                     Modifier.padding(top = 4.dp).then(if (media) Modifier.padding(4.dp) else Modifier),
                 )
                 if (item.kind != MessageKind.CALL) {
@@ -575,8 +581,28 @@ fun Bubble(
     }
 }
 
-/** True while a finger is down on a reaction chip with a long press; the message's own long press (select) stands aside. */
-private val LocalChipPress = staticCompositionLocalOf { BooleanArray(1) }
+/** A bubble's gesture as its reaction chips see it; one per bubble, written on the main thread by its pointer handlers. */
+private class ChipPress {
+    /** A chip was pressed in this gesture: the message's own long press (select) stands aside until the last finger lifts. */
+    var marked = false
+    /** Fingers down on the bubble now; a second one cancels a chip's long press. */
+    var pointers = 0
+}
+
+/** Initial pass of the bubble, so a chip's Main pass sees this event's count; the mark lives until every finger is up. */
+private suspend fun PointerInputScope.trackChipPress(press: ChipPress) = awaitEachGesture {
+    try {
+        do {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            press.pointers = event.changes.count { it.pressed }
+        } while (press.pointers > 0)
+    } finally {
+        press.pointers = 0
+        press.marked = false
+    }
+}
+
+private val LocalChipPress = staticCompositionLocalOf { ChipPress() }
 
 /** Scrolls the chat to a message by key; provided by the message list. */
 internal val LocalOpenMessage = staticCompositionLocalOf<(String) -> Unit> { {} }
@@ -1214,7 +1240,13 @@ private fun CallContent(item: MessageItem, textColor: Color, secondary: Color) {
 }
 
 @Composable
-private fun Reactions(item: MessageItem, actions: ChatActions, onReactors: ((MessageItem, String) -> Unit)?, modifier: Modifier = Modifier) {
+private fun Reactions(
+    item: MessageItem,
+    actions: ChatActions,
+    onReactors: ((MessageItem, String) -> Unit)?,
+    selecting: Boolean,
+    modifier: Modifier = Modifier,
+) {
     val whoReacted = stringResource(R.string.tatrak_chat_who_reacted)
     val chipPress = LocalChipPress.current
     // read when the gesture ends, not when it starts
@@ -1227,8 +1259,9 @@ private fun Reactions(item: MessageItem, actions: ChatActions, onReactors: ((Mes
         modifier = modifier,
     ) {
         for (reaction in item.reactions) {
+            // while selecting no click either: TalkBack and the keyboard then reach the bubble's select, not a reaction
             val enabled =
-                if (reaction.mine) item.actions.canRemoveReaction else item.actions.canReact
+                !selecting && if (reaction.mine) item.actions.canRemoveReaction else item.actions.canReact
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier =
@@ -1269,35 +1302,35 @@ private fun Reactions(item: MessageItem, actions: ChatActions, onReactors: ((Mes
 }
 
 /**
- * Marks [press] while a finger is down on the chip, so the bubble's own long press (select) stands aside. With [longPress] (the
- * label and the action), a chip without a click of its own detects the long press here, offers it to TalkBack as its only
- * action and leaves a short tap unconsumed for the bubble. [key] tells chips apart: the gesture restarts only when it changes.
+ * Marks [press] when a finger lands on the chip, so the bubble's own long press (select) stands aside for the whole gesture. With
+ * [longPress] (the label and the action), a chip without a click of its own detects the long press here, offers it to TalkBack as
+ * its only action and leaves a short tap unconsumed for the bubble. [key] tells chips apart: the gesture restarts only when it
+ * changes.
  */
-private fun Modifier.chipPress(press: BooleanArray, key: Any, longPress: Pair<String, () -> Unit>?): Modifier =
+private fun Modifier.chipPress(press: ChipPress, key: Any, longPress: Pair<String, () -> Unit>?): Modifier =
     (if (longPress == null) this else semantics(mergeDescendants = true) { onLongClick(longPress.first) { longPress.second(); true } })
         .pointerInput(key, longPress == null) {
             awaitEachGesture {
                 val down = awaitFirstDown(requireUnconsumed = false)
-                press[0] = true
-                try {
-                    var pressed = true
-                    val fired =
-                        longPress != null &&
-                            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-                                do {
-                                    val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                                    pressed = change.pressed
-                                } while (pressed && (change.position - down.position).getDistance() <= viewConfiguration.touchSlop)
-                            } == null
-                    if (fired && longPress != null) longPress.second()
-                    // to the release; after a long press it is not a tap on the bubble either
-                    while (pressed) {
-                        val event = awaitPointerEvent()
-                        if (fired) event.changes.forEach { it.consume() }
-                        pressed = event.changes.any { it.pressed }
-                    }
-                } finally {
-                    press[0] = false
+                press.marked = true
+                // a down someone already took (a touch that stops a fling) starts no long press
+                val fired =
+                    longPress != null && !down.isConsumed &&
+                        withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                            while (true) {
+                                val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                // released, moved off, a second finger on the bubble, or taken in the Initial pass (a selection drag)
+                                if (!change.pressed || change.isConsumed || press.pointers > 1 ||
+                                    (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+                                // taken by a parent after us (the list scrolls, the row swipes)
+                                if (awaitPointerEvent(PointerEventPass.Final).changes.any { it.id == down.id && it.isConsumed }) break
+                            }
+                        } == null
+                if (fired && longPress != null) longPress.second()
+                // to the last finger's release; after a long press it is not a tap on the bubble either
+                while (currentEvent.changes.any { it.pressed }) {
+                    val event = awaitPointerEvent()
+                    if (fired) event.changes.forEach { it.consume() }
                 }
             }
         }

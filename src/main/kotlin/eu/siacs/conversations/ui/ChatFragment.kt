@@ -22,9 +22,8 @@ import am.cyberhayq.chat.ui.chat.SwipeMethod
 import am.cyberhayq.chat.ui.chat.MentionCandidate
 import am.cyberhayq.chat.ui.chat.MessageFocus
 import am.cyberhayq.chat.ui.chat.highlightInConference
-import am.cyberhayq.chat.ui.chat.ReactorRow
 import am.cyberhayq.chat.ui.chat.ReplyPreview
-import am.cyberhayq.chat.ui.chat.reactorRows
+import am.cyberhayq.chat.ui.chat.privateReactorHasMessageAvatar
 import am.cyberhayq.chat.ui.chat.reactorWho
 import am.cyberhayq.chat.ui.chat.StickerStore
 import am.cyberhayq.chat.ui.chat.ScrollAnchor
@@ -1733,9 +1732,6 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         }
     }
 
-    override fun reactors(uuid: String): List<ReactorRow> =
-        message(uuid)?.let { reactorRows(it, getString(R.string.tatrak_you)) } ?: emptyList()
-
     override suspend fun reactorAvatar(uuid: String, who: String, sizePx: Int): Bitmap? {
         val message = message(uuid) ?: return null
         val c = message.conversation as? Conversation ?: return null
@@ -1745,10 +1741,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             val inGroup = c.mode == Conversation.MODE_MULTI && !message.isPrivateMessage
             when {
                 who == "self" -> service.avatarService.get(c.account, sizePx, false)
-                // the reaction names only room/nick, which may be someone else now: the message's own sender
-                // (the peer) when it was received, else the letter avatar
+                // the reaction names only room/nick, which may be someone else now: the received message's own sender
+                // when it is known by more than the nick, else the letter avatar
                 c.mode == Conversation.MODE_MULTI && message.isPrivateMessage ->
-                    if (message.status == Message.STATUS_RECEIVED) service.avatarService.get(message, sizePx, false) else null
+                    if (privateReactorHasMessageAvatar(message)) service.avatarService.get(message, sizePx, false) else null
                 c.mode != Conversation.MODE_MULTI -> service.avatarService.get(c.contact, sizePx, false)
                 else -> {
                     val reaction = message.reactions.firstOrNull { reactorWho(it, inGroup) == who } ?: return@withContext null

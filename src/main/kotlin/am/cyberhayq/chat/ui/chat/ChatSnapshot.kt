@@ -220,8 +220,8 @@ data class MessageItem(
      */
     val retractUnverified: Boolean = false,
     val reactions: List<ReactionChip> = emptyList(),
-    /** Changes with who reacted (not only how many): a swap that keeps the chips equal still updates an open "who reacted" sheet. */
-    val reactorsKey: Int = 0,
+    /** Who reacted, as the "who reacted" sheet lists them; a rename or a swap that keeps the chips equal still changes the item. */
+    val reactors: List<ReactorRow> = emptyList(),
     val media: MediaInfo? = null,
     val file: FileInfo? = null,
     val call: CallInfo? = null,
@@ -773,6 +773,7 @@ object ChatSnapshot {
         private val today = LocalDate.now(zone)
         private val dayLabels = HashMap<LocalDate, String>()
         private val avatars = HashMap<String, Bitmap?>()
+        private val you by lazy { context.getString(R.string.tatrak_you) }
         private val linkStyles =
             TextLinkStyles(style = SpanStyle(color = Color(params.palette.link)))
         private val highlightNick =
@@ -979,7 +980,8 @@ object ChatSnapshot {
                     trustWarning = trustWarning,
                     retractUnverified = message.retractAttempt != 0L,
                     reactions = reactions(message),
-                    reactorsKey = reactorsKey(message),
+                    // built with every snapshot, not when the sheet opens (monocles #484 was about views): only map lookups
+                    reactors = if (message.reactions.isEmpty()) emptyList() else reactorRows(message, you),
                     actions = actions(message),
                     reply = replyHeader(message),
                     receivedAt = receivedAt,
@@ -1309,12 +1311,6 @@ object ChatSnapshot {
                 else conversation.account.axolotlService?.getFingerprintTrust(fingerprint)
             val trust = keyTrustLabel(status, own = fingerprint == ownFingerprint)
             return KeyInfo(method, trust, fingerprintLines(fingerprint))
-        }
-
-        private fun reactorsKey(message: Message): Int {
-            if (message.reactions.isEmpty()) return 0
-            val inGroup = conversation.mode == Conversational.MODE_MULTI && !message.isPrivateMessage
-            return message.reactions.map { reactorWho(it, inGroup) to it.normalizedReaction() }.hashCode()
         }
 
         private fun reactions(message: Message): List<ReactionChip> {

@@ -307,9 +307,6 @@ interface ChatActions {
     /** Group avatar tap: the classic onContactPictureLongClicked participant menu's visible entries; none outside a group. */
     fun senderMenu(uuid: String): List<MenuEntry> = emptyList()
 
-    /** The "who reacted" rows of a message, built from its live reactions; empty when it is gone. */
-    fun reactors(uuid: String): List<ReactorRow> = emptyList()
-
     /** A reactor's avatar; called off the main thread; null while unavailable. */
     suspend fun reactorAvatar(uuid: String, who: String, sizePx: Int): Bitmap? = null
 
@@ -605,9 +602,7 @@ fun ChatScreen(
             // not before the first load: a restored sheet waits for its message
             if (state.loaded) LaunchedEffect(Unit) { reactorsFor = emptyList() }
         } else {
-            // rebuilt when the item changes, also for a reactor swap that keeps the chips (MessageItem.reactorsKey)
-            val rows = remember(item) { actions.reactors(uuid) }
-            ReactorsSheet(uuid, rows, item.reactions.map { it.emoji }, emoji, actions, onDismiss = { reactorsFor = emptyList() })
+            ReactorsSheet(uuid, item.reactors, item.reactions.map { it.emoji }, emoji, actions, onDismiss = { reactorsFor = emptyList() })
         }
     }
 }

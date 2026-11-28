@@ -60,6 +60,13 @@ internal fun reactorRows(message: Message, you: String): List<ReactorRow> {
         .distinctBy { it.who to it.emoji }
 }
 
+/**
+ * A received group private message names its sender by more than room/nick (occupant id or real JID), so its avatar is that
+ * person's; without either AvatarService falls back to whoever holds the nick now.
+ */
+internal fun privateReactorHasMessageAvatar(message: Message): Boolean =
+    message.status == Message.STATUS_RECEIVED && (message.occupantId != null || message.trueCounterpart != null)
+
 /** null (All) first, then each emoji of [chipOrder] that has rows, with its row count; empty for a single emoji. */
 internal fun reactorTabs(rows: List<ReactorRow>, chipOrder: List<String>): List<Pair<String?, Int>> {
     val counts = rows.groupingBy { it.emoji }.eachCount()
