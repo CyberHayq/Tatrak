@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0-beta.1 (pre-release)
 
 ### Interface
 - A long press on a reaction shows who reacted, in a bottom sheet with a tab per emoji; in a group a
