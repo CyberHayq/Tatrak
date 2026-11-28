@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0-beta.3 (pre-release)
 
 ### Interface
 - The update dialog shows the notes of every release you skipped, newest first, each under its
