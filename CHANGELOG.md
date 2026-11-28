@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0-beta.2 (pre-release)
 
 ### Interface
 - The update dialog shows the release notes formatted (headings, bullets, code) instead of the
