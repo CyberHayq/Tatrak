@@ -171,14 +171,14 @@ is still pending. Planned features have no committed release dates.
 | Hold-to-record voice messages, attachment sheet, emoji panel | ✅ Verified |
 | Replies, reactions, editing, delete for everyone, sticker packs, search across conversations | 🧪 In testing |
 | Encrypted audio and video calls, call list | 🧪 In testing |
-| Backups, including import of monocles chat backups | 🧪 In testing |
+| Backups, including import of monocles chat backups | ✅ Verified |
 | Select several messages in a chat; chat preview on a long press of its avatar that opens into the chat as in Telegram | 🧪 In testing |
 | Account switcher: show the whole app for one account, disabled accounts included | 🧪 In testing |
 | Frequently used reactions in the message menu; a long press on a reaction shows who reacted | 🧪 In testing |
 | Updates from GitHub releases inside the app (beta versions optional), release signature checked | 🧪 In testing |
 | Private messages to a group participant from the chat (text and replies) | 🧪 In testing |
-| App language chosen in the settings, on every Android version | 🧪 In testing |
-| "Saved messages" always in the side menu and the Profile tab, pinned for every new account | 🧪 In testing |
+| App language chosen in the settings, on every Android version | ✅ Verified |
+| "Saved messages" always in the side menu and the Profile tab, pinned for every new account | ✅ Verified |
 | Voice messages keep playing outside the chat and in the background: a mini bar, a notification and the system media controls | 🧪 In testing |
 | Ad-hoc commands (XEP-0050): a Commands button in chats that offer them, with a form screen | 🧪 In testing |
 
