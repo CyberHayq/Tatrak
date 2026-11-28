@@ -84,6 +84,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.ProgressBarRangeInfo
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onLongClick
 import androidx.compose.ui.semantics.progressBarRangeInfo
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
@@ -395,7 +396,7 @@ fun MessageRow(
                                     selecting -> select
                                     else -> open ?: openMenu
                                 },
-                            onLongClick = if (item.actions.any) select else null,
+                            onLongClick = if (item.actions.any) { { if (!chipPress[0]) select() } } else null,
                         )
                         .then(
                             if (item.actions.any) {
@@ -1216,6 +1217,9 @@ private fun CallContent(item: MessageItem, textColor: Color, secondary: Color) {
 private fun Reactions(item: MessageItem, actions: ChatActions, onReactors: ((MessageItem, String) -> Unit)?, modifier: Modifier = Modifier) {
     val whoReacted = stringResource(R.string.tatrak_chat_who_reacted)
     val chipPress = LocalChipPress.current
+    // read when the gesture ends, not when it starts
+    val latestOnReactors by rememberUpdatedState(onReactors)
+    val latestItem by rememberUpdatedState(item)
     val accent = if (item.isOutgoing) ChatScreenTheme.colors.accentOut else ChatScreenTheme.colors.accentIn
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1231,30 +1235,23 @@ private fun Reactions(item: MessageItem, actions: ChatActions, onReactors: ((Mes
                     Modifier.height(26.dp)
                         .clip(RoundedCornerShape(13.dp))
                         .background(if (reaction.mine) accent else accent.copy(alpha = 0.14f))
-                        // the long press also works where reacting is not allowed; combinedClickable vibrates on it itself
-                        .combinedClickable(
-                            enabled = enabled || onReactors != null,
-                            onClickLabel = null,
-                            onLongClickLabel = whoReacted,
-                            onClick = { if (enabled) actions.toggleReaction(item.key, reaction.emoji) },
-                            onLongClick = onReactors?.let { { it(item, reaction.emoji) } },
+                        // combinedClickable vibrates on the long press itself
+                        .then(
+                            if (enabled) {
+                                Modifier.combinedClickable(
+                                    onClickLabel = null,
+                                    onLongClickLabel = whoReacted,
+                                    onClick = { actions.toggleReaction(item.key, reaction.emoji) },
+                                    onLongClick = onReactors?.let { { it(item, reaction.emoji) } },
+                                )
+                            } else {
+                                Modifier
+                            }
                         )
-                        // seen before the chip consumes the press: the bubble's childLongPress checks it
+                        // a chip that cannot toggle has no click: a short tap goes to the bubble, only the long press is the chip's
                         .then(
                             if (onReactors == null) Modifier
-                            else Modifier.pointerInput(Unit) {
-                                awaitEachGesture {
-                                    awaitFirstDown(requireUnconsumed = false)
-                                    chipPress[0] = true
-                                    try {
-                                        do {
-                                            val event = awaitPointerEvent()
-                                        } while (event.changes.any { it.pressed })
-                                    } finally {
-                                        chipPress[0] = false
-                                    }
-                                }
-                            }
+                            else Modifier.chipPress(chipPress, reaction.emoji, if (enabled) null else whoReacted to { latestOnReactors?.invoke(latestItem, reaction.emoji) })
                         )
                         .padding(horizontal = 8.dp),
             ) {
@@ -1270,6 +1267,40 @@ private fun Reactions(item: MessageItem, actions: ChatActions, onReactors: ((Mes
         }
     }
 }
+
+/**
+ * Marks [press] while a finger is down on the chip, so the bubble's own long press (select) stands aside. With [longPress] (the
+ * label and the action), a chip without a click of its own detects the long press here, offers it to TalkBack as its only
+ * action and leaves a short tap unconsumed for the bubble. [key] tells chips apart: the gesture restarts only when it changes.
+ */
+private fun Modifier.chipPress(press: BooleanArray, key: Any, longPress: Pair<String, () -> Unit>?): Modifier =
+    (if (longPress == null) this else semantics(mergeDescendants = true) { onLongClick(longPress.first) { longPress.second(); true } })
+        .pointerInput(key, longPress == null) {
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                press[0] = true
+                try {
+                    var pressed = true
+                    val fired =
+                        longPress != null &&
+                            withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+                                do {
+                                    val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                                    pressed = change.pressed
+                                } while (pressed && (change.position - down.position).getDistance() <= viewConfiguration.touchSlop)
+                            } == null
+                    if (fired && longPress != null) longPress.second()
+                    // to the release; after a long press it is not a tap on the bubble either
+                    while (pressed) {
+                        val event = awaitPointerEvent()
+                        if (fired) event.changes.forEach { it.consume() }
+                        pressed = event.changes.any { it.pressed }
+                    }
+                } finally {
+                    press[0] = false
+                }
+            }
+        }
 
 /** What the delivery tick says to TalkBack; null without one. */
 internal fun statusDescription(status: DeliveryStatus): Int? =

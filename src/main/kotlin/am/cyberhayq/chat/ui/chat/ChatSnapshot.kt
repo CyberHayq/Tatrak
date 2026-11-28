@@ -220,6 +220,8 @@ data class MessageItem(
      */
     val retractUnverified: Boolean = false,
     val reactions: List<ReactionChip> = emptyList(),
+    /** Changes with who reacted (not only how many): a swap that keeps the chips equal still updates an open "who reacted" sheet. */
+    val reactorsKey: Int = 0,
     val media: MediaInfo? = null,
     val file: FileInfo? = null,
     val call: CallInfo? = null,
@@ -977,6 +979,7 @@ object ChatSnapshot {
                     trustWarning = trustWarning,
                     retractUnverified = message.retractAttempt != 0L,
                     reactions = reactions(message),
+                    reactorsKey = reactorsKey(message),
                     actions = actions(message),
                     reply = replyHeader(message),
                     receivedAt = receivedAt,
@@ -1306,6 +1309,12 @@ object ChatSnapshot {
                 else conversation.account.axolotlService?.getFingerprintTrust(fingerprint)
             val trust = keyTrustLabel(status, own = fingerprint == ownFingerprint)
             return KeyInfo(method, trust, fingerprintLines(fingerprint))
+        }
+
+        private fun reactorsKey(message: Message): Int {
+            if (message.reactions.isEmpty()) return 0
+            val inGroup = conversation.mode == Conversational.MODE_MULTI && !message.isPrivateMessage
+            return message.reactions.map { reactorWho(it, inGroup) to it.normalizedReaction() }.hashCode()
         }
 
         private fun reactions(message: Message): List<ReactionChip> {

@@ -41,6 +41,9 @@ internal fun reactorRows(message: Message, you: String): List<ReactorRow> {
             val name =
                 when {
                     !r.received -> you
+                    // a private message stores only room/nick: the nick then, not whoever holds it now
+                    multi && message.isPrivateMessage ->
+                        r.from?.resource?.takeIf { it.isNotEmpty() } ?: conversation.mucOptions.getUserOrStub(r).displayName
                     multi -> conversation.mucOptions.getUserOrStub(r).displayName
                     else -> conversation.contact.displayName
                 }

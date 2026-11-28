@@ -1,6 +1,8 @@
 package am.cyberhayq.chat.ui.chat
 
 import android.app.Application
+import android.content.Context
+import androidx.test.core.app.ApplicationProvider
 import eu.siacs.conversations.entities.Account
 import eu.siacs.conversations.entities.Contact
 import eu.siacs.conversations.entities.Conversation
@@ -8,11 +10,13 @@ import eu.siacs.conversations.entities.Conversational
 import eu.siacs.conversations.entities.Message
 import eu.siacs.conversations.entities.MucOptions
 import eu.siacs.conversations.entities.Reaction
+import eu.siacs.conversations.services.XmppConnectionService
 import eu.siacs.conversations.xmpp.Jid
 import im.conversations.android.xmpp.model.muc.Affiliation
 import im.conversations.android.xmpp.model.muc.Role
 import im.conversations.android.xmpp.model.reactions.Restrictions
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotEquals
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -28,7 +32,8 @@ class ReactorsTest {
     private val room = Jid.of("room@muc.example.com")
     private val account = Account(Jid.of("tester@example.com"), "secret")
 
-    private fun group(): Conversation {
+    /** [contactNames]: nicks whose current holder is a roster contact with that display name. */
+    private fun group(contactNames: Map<String, String> = emptyMap()): Conversation {
         lateinit var options: MucOptions
         val conversation = object : Conversation(
             "g1", "Room", null, "a1", room, 0, Conversation.STATUS_AVAILABLE,
@@ -47,7 +52,12 @@ class ReactorsTest {
         }
         for (nick in listOf("Anya", "Boris", "me")) {
             val user = object : MucOptions.User(options, room.withResource(nick), Jid.of("${nick.lowercase()}@example.com"), "occ-${nick.lowercase()}", Role.PARTICIPANT, Affiliation.MEMBER, emptySet()) {
-                override fun getContact() = null
+                override fun getContact() =
+                    contactNames[nick]?.let { name ->
+                        object : Contact(Jid.of("${nick.lowercase()}@example.com")) {
+                            override fun getDisplayName() = name
+                        }
+                    }
             }
             options.updateUser(user)
         }
@@ -112,13 +122,39 @@ class ReactorsTest {
         assertEquals(listOf("peer", "self"), rows.map { it.who })
     }
 
+    /** A private message stores only room/nick (no occupant id, no real JID): the nick then, whoever holds it now. */
     @Test
-    fun privateMessageInAGroupIsNotTappable() {
-        val message = message(group(), reaction("👍", "Anya")).apply { type = Message.TYPE_PRIVATE }
+    fun privateMessageInAGroupIsNotTappableAndKeepsTheStoredNick() {
+        // "Anya" is now somebody else, a roster contact named differently
+        val message =
+            message(group(mapOf("Anya" to "Anna K.")), Reaction("👍", true, room.withResource("Anya"), null, null))
+                .apply { type = Message.TYPE_PRIVATE }
         val row = reactorRows(message, "You").single()
         assertEquals("peer", row.who)
         assertEquals(false, row.tappable)
         assertEquals("Anya", row.name)
+        // the same reaction in the public room is looked up
+        message.type = Message.TYPE_TEXT
+        assertEquals("Anna K.", reactorRows(message, "You").single().name)
+    }
+
+    private val context: Context = ApplicationProvider.getApplicationContext()
+
+    private fun item(conversation: Conversation, vararg reactions: Reaction): MessageItem {
+        val params = SnapshotParams(TextPalette(0, 0, 0, 0, 0), null, 48, true, 0, false, MentionTracker())
+        val message = message(conversation, *reactions).apply { uuid = "m1"; setTime(1_000L) }
+        return ChatSnapshot.items(context, XmppConnectionService(), conversation, params, listOf(message)).filterIsInstance<MessageItem>().single()
+    }
+
+    /** Anya takes back 👍 and Boris adds it: the chip is the same, the item is not (an open sheet must follow). */
+    @Test
+    fun reactorSwapKeepingTheChipsChangesTheItem() {
+        val conversation = group()
+        val anya = item(conversation, reaction("👍", "Anya"))
+        val boris = item(conversation, reaction("👍", "Boris"))
+        assertEquals(anya.reactions, boris.reactions)
+        assertNotEquals(anya, boris)
+        assertEquals(anya, item(conversation, reaction("👍", "Anya")))
     }
 
     @Test

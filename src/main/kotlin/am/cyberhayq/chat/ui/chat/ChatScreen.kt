@@ -502,8 +502,8 @@ fun ChatScreen(
                             selection = remember(selected) { selected.map { it.key } },
                             onSelectionChange = { if (!preview) selection = it },
                             onMenu = { item, bubble -> if (!selecting && !preview) menu.value = item.key to bounds(screen[0], bubble) },
-                            // the chip swallows its long press while selecting, so the message is not flipped either
-                            onReactors = if (preview) null else { item, emoji -> if (selection.isEmpty()) reactorsFor = listOf(item.key, emoji) },
+                            // while selecting the chips have no long press: a press anywhere on a row toggles it
+                            onReactors = if (preview || selecting) null else { item, emoji -> reactorsFor = listOf(item.key, emoji) },
                             bars = bars,
                             blurred = backdrop != null,
                             preview = preview,
@@ -605,8 +605,8 @@ fun ChatScreen(
             // not before the first load: a restored sheet waits for its message
             if (state.loaded) LaunchedEffect(Unit) { reactorsFor = emptyList() }
         } else {
-            // not remembered: a handful of reactions, rebuilt with each snapshot so a swap that keeps the counts still shows
-            val rows = actions.reactors(uuid)
+            // rebuilt when the item changes, also for a reactor swap that keeps the chips (MessageItem.reactorsKey)
+            val rows = remember(item) { actions.reactors(uuid) }
             ReactorsSheet(uuid, rows, item.reactions.map { it.emoji }, emoji, actions, onDismiss = { reactorsFor = emptyList() })
         }
     }

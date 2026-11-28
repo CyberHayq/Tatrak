@@ -384,14 +384,20 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   reaction chip opens a bottom sheet with "All N" and one tab per emoji (opened on the pressed one;
   no tabs for one emoji), a row per person: avatar, full name ("You" for own reactions), emoji.
   Rows come from `ChatActions.reactors` (`ChatFragment`: `reactorRows`, names through
-  `MucOptions.getUserOrStub` in a group, the contact in a one-to-one chat; private messages in a
-  group use the one-to-one path; deduplicated by person and VS16-normalised emoji). In a group a tap
+  `MucOptions.getUserOrStub` in a group, the contact in a one-to-one chat; a private message in a
+  group stores only room/nick, so it shows that nick and, for a received message, the message's own
+  avatar, else a letter; deduplicated by person and VS16-normalised emoji). In a group a tap
   on another member's row closes the sheet and opens the participant menu of the avatar tap
   (`reactorMenu`, `MucDetailsContextMenuHelper`); own rows and one-to-one rows are inert. The sheet
-  state is `rememberSaveable(conversationUuid)` in `ChatScreen`, follows the live message, closes
-  when the message or its reactions go (after the first load), and does not open while messages are
-  selected. The chip's long press sets a flag the bubble's `childLongPress` checks, so it no longer
-  selects the message.
+  state is `rememberSaveable(conversationUuid)` in `ChatScreen`; its rows are rebuilt when the item
+  changes (`MessageItem.reactorsKey` changes with who reacted, so a swap that keeps the chips equal
+  still shows); it closes when the message or its reactions go (after the first load). While messages
+  are selected the chips get no long press: a tap or a hold on any part of a row, the chip included,
+  toggles that row as on the bubble, and no sheet opens. A chip that cannot toggle (reaction limit, no
+  rights) has no click: a short tap goes to the bubble's usual tap, TalkBack gets only the "Who
+  reacted" long-click action, and the chip detects the long press itself (`chipPress`). A chip's
+  press sets a flag the bubble's own long press and `childLongPress` check, so the long press no
+  longer selects the message.
 
 ## Profile (stage 6d)
 

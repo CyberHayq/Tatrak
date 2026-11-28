@@ -30,6 +30,12 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.assertIsNotFocused
 import androidx.compose.ui.test.assertIsFocused
+import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertHasNoClickAction
+import androidx.compose.ui.test.assertIsNotSelected
+import androidx.compose.ui.test.assertIsSelected
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.semantics.getOrNull
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.FocusRequester
@@ -603,21 +609,54 @@ class ChatScreenshotTest {
         assertEquals(listOf("dismiss", "menu b"), calls)
     }
 
+    /** The rows behind m5's chips 👍 2 (Boris and the user) and 🔥 1 (Vika). */
     private val reactionActions = object : ChatActions by FakeActions {
-        override fun reactors(uuid: String) = reactorRows
+        override fun reactors(uuid: String) = listOf(reactorRows[1], reactorRows[2], reactorRows[3].copy(emoji = "🔥"))
     }
 
     /** m5 has the chips 👍 2 and 🔥 1. */
     private fun longPressChip() = compose.onNodeWithText("🔥", substring = true).performTouchInput { longClick() }
 
+    /** The sheet opens on the pressed chip's tab: the 🔥 tab is selected, the 👍 rows are not listed. */
     @Test
     fun longPressOnChipOpensWhoReacted() {
         capture("chat_reactors_open", darkTheme = false, actions = reactionActions, act = { longPressChip() }) { privateChat(it) }
-        compose.onNodeWithText("Boris").assertExists()
-        compose.onNodeWithText("All 4").assertExists()
+        compose.onNodeWithText("All 3").assertExists()
+        compose.onNodeWithText("🔥 1").assertIsSelected()
+        compose.onNodeWithText("👍 2").assertIsNotSelected()
+        compose.onNodeWithText("Vika").assertExists()
+        compose.onNodeWithText("Boris").assertDoesNotExist()
+        compose.onNodeWithText("You").assertDoesNotExist()
         // the message is not selected and its menu is not open
         assertSelected(null)
         compose.onNodeWithContentDescription("More reactions").assertDoesNotExist()
+    }
+
+    private fun withoutReactingRights(st: ChatState) =
+        st.copy(items = st.items.map { if (it is MessageItem && it.key == "m5") it.copy(actions = it.actions.copy(canReact = false, canRemoveReaction = false)) else it })
+
+    /** A chip that cannot toggle (reaction limit, no rights) keeps the bubble's tap, and its only action is the long press. */
+    @Test
+    fun chipWithoutReactingRightsPassesTheTapToTheBubble() {
+        capture("chat_reactors_no_rights_tap", darkTheme = false, actions = reactionActions, act = { compose.onNodeWithText("🔥", substring = true).performTouchInput { click() } }) {
+            withoutReactingRights(privateChat(it))
+        }
+        // the bubble's tap: the message menu
+        compose.onNodeWithText("Copy").assertExists()
+        compose.onNodeWithText("Vika").assertDoesNotExist()
+        assertSelected(null)
+    }
+
+    @Test
+    fun chipWithoutReactingRightsStillOpensWhoReactedAndOnlyOffersThat() {
+        capture("chat_reactors_no_rights", darkTheme = false, actions = reactionActions, act = {
+            compose.onNodeWithText("🔥", substring = true).assertHasNoClickAction().assert(SemanticsMatcher.keyIsDefined(SemanticsActions.OnLongClick))
+            longPressChip()
+        }) { withoutReactingRights(privateChat(it)) }
+        compose.onNodeWithText("Vika").assertExists()
+        // not selected, no menu
+        assertSelected(null)
+        compose.onNodeWithText("Copy").assertDoesNotExist()
     }
 
     /** The sheet closes when its message loses its reactions (retracted, deleted, expired) or leaves the list. */
@@ -633,36 +672,49 @@ class ChatScreenshotTest {
                 }
             }
         }
-        compose.onNodeWithText("Boris").assertExists()
+        compose.onNodeWithText("Vika").assertExists()
         mode = 1
         compose.waitForIdle()
-        compose.onNodeWithText("Boris").assertDoesNotExist()
+        compose.onNodeWithText("Vika").assertDoesNotExist()
         // a later reaction does not bring it back
         mode = 0
         compose.waitForIdle()
-        compose.onNodeWithText("Boris").assertDoesNotExist()
+        compose.onNodeWithText("Vika").assertDoesNotExist()
         longPressChip()
-        compose.onNodeWithText("Boris").assertExists()
+        compose.onNodeWithText("Vika").assertExists()
         mode = 2
         compose.waitForIdle()
-        compose.onNodeWithText("Boris").assertDoesNotExist()
+        compose.onNodeWithText("Vika").assertDoesNotExist()
     }
 
-    /** While messages are selected the chip's long press opens no sheet. */
+    private fun isSelected(text: String) =
+        compose.onNodeWithText(text, substring = true).fetchSemanticsNode().config.getOrNull(SemanticsProperties.Selected) == true
+
+    /** While messages are selected a hold or a tap on a chip toggles its row like on the bubble, and no sheet opens. */
     @Test
-    fun longPressOnChipWhileSelectingDoesNothing() {
+    fun pressOnChipWhileSelectingTogglesTheRow() {
         capture(
             "chat_reactors_selecting",
             darkTheme = false,
             actions = reactionActions,
             act = {
                 compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() }
+                assertSelected(1)
+                assertTrue(isSelected("Yes, an hour ago"))
+                assertFalse(isSelected("flag works now"))
                 longPressChip()
             },
         ) { privateChat(it) }
-        compose.onNodeWithText("Boris").assertDoesNotExist()
-        // the list's own release-as-tap toggles the message under the finger (as for any long press while selecting); the bar stays
-        compose.onNodeWithContentDescription("Cancel selection").assertExists()
+        compose.onNodeWithText("Vika").assertDoesNotExist()
+        compose.onNodeWithText("All 3").assertDoesNotExist()
+        assertSelected(2)
+        assertTrue(isSelected("Yes, an hour ago"))
+        assertTrue(isSelected("flag works now"))
+        // a short tap on the chip unselects the row; the reaction is not toggled either
+        compose.onNodeWithText("🔥", substring = true).performTouchInput { click() }
+        assertSelected(1)
+        assertTrue(isSelected("Yes, an hour ago"))
+        assertFalse(isSelected("flag works now"))
     }
 
     /** The sheet is part of the saved screen state: a rotation keeps it open. */
@@ -683,9 +735,9 @@ class ChatScreenshotTest {
             }
         }
         longPressChip()
-        compose.onNodeWithText("Boris").assertExists()
+        compose.onNodeWithText("Vika").assertExists()
         restoration.emulateSavedInstanceStateRestore()
-        compose.onNodeWithText("Boris").assertExists()
+        compose.onNodeWithText("Vika").assertExists()
     }
 
     /** m5 with sent and received times in a past year (the year shows, so the text does not depend on today) and an OMEMO key. */

@@ -1745,6 +1745,10 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
             val inGroup = c.mode == Conversation.MODE_MULTI && !message.isPrivateMessage
             when {
                 who == "self" -> service.avatarService.get(c.account, sizePx, false)
+                // the reaction names only room/nick, which may be someone else now: the message's own sender
+                // (the peer) when it was received, else the letter avatar
+                c.mode == Conversation.MODE_MULTI && message.isPrivateMessage ->
+                    if (message.status == Message.STATUS_RECEIVED) service.avatarService.get(message, sizePx, false) else null
                 c.mode != Conversation.MODE_MULTI -> service.avatarService.get(c.contact, sizePx, false)
                 else -> {
                     val reaction = message.reactions.firstOrNull { reactorWho(it, inGroup) == who } ?: return@withContext null
