@@ -34,7 +34,7 @@ class UpdateUiTest {
 
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val prefs = PreferenceManager.getDefaultSharedPreferences(context)
-    private val release = Release("9.9.9", "- Faster chat list\n- Updates from GitHub releases", "${Updater.DOWNLOAD_PREFIX}x", 1)
+    private val release = Release("9.9.9", "Small fixes and a new updater.\n\n### Interface\n- Faster chat list: the `ChatListScreen` no longer redraws\n  every row when a single message arrives.\n- Updates from GitHub releases", "${Updater.DOWNLOAD_PREFIX}x", 1)
 
     private fun chatList(dark: Boolean, name: String) {
         prefs.edit().putString(Updater.RELEASE, release.toJson()).commit()

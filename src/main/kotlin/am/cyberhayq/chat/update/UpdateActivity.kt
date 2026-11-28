@@ -251,7 +251,7 @@ fun UpdateDialog(state: UpdateState, testBuild: Boolean, onUpdate: () -> Unit, o
                 text = {
                     Column(Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                         if (testBuild) Text(stringResource(R.string.tatrak_update_test_build), color = MaterialTheme.colorScheme.error)
-                        Text(state.release.notes)
+                        ReleaseNotesText(state.release.notes)
                     }
                 },
             )
