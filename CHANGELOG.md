@@ -3,6 +3,8 @@
 ## Unreleased
 
 ### Interface
+- A long press on a reaction shows who reacted, in a bottom sheet with a tab per emoji; in a group a
+  tap on another person's row opens their participant menu (public issue #10).
 - "Saved messages" is always reachable: a permanent entry in the side menu (after Calls) and at
   the top of the Profile tab opens the chat with yourself, created if needed; with several
   accounts under "All accounts" it asks which account. Each newly added account gets this chat

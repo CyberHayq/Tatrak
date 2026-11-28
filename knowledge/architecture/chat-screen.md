@@ -380,6 +380,18 @@ Stage 3 of the [roadmap](../project/roadmap.md): implemented and wired into
   `addReaction` count the emoji in the VS16 form `toggleReaction` sends; the counts live in the
   plain-text preference `tatrak_frequent_reactions`, 32 kept, most used first and the most recent
   first among equals, never decaying.
+- Who reacted (2026-11-28, public issue #10, `Reactors.kt`, `ReactorsSheet.kt`): a long press on a
+  reaction chip opens a bottom sheet with "All N" and one tab per emoji (opened on the pressed one;
+  no tabs for one emoji), a row per person: avatar, full name ("You" for own reactions), emoji.
+  Rows come from `ChatActions.reactors` (`ChatFragment`: `reactorRows`, names through
+  `MucOptions.getUserOrStub` in a group, the contact in a one-to-one chat; private messages in a
+  group use the one-to-one path; deduplicated by person and VS16-normalised emoji). In a group a tap
+  on another member's row closes the sheet and opens the participant menu of the avatar tap
+  (`reactorMenu`, `MucDetailsContextMenuHelper`); own rows and one-to-one rows are inert. The sheet
+  state is `rememberSaveable(conversationUuid)` in `ChatScreen`, follows the live message, closes
+  when the message or its reactions go (after the first load), and does not open while messages are
+  selected. The chip's long press sets a flag the bubble's `childLongPress` checks, so it no longer
+  selects the message.
 
 ## Profile (stage 6d)
 

@@ -137,4 +137,7 @@
     <string name="tatrak_chat_trust_busy">Не отправлено: предыдущая проверка ключей ещё не завершена</string>
     <!-- something other than text (a file, a sticker, a share) arrived while writing a group private message -->
     <string name="tatrak_chat_private_cancelled">Личное сообщение отменено: это уйдёт всей группе</string>
+    <!-- long-press label of a reaction chip, and the "all reactions" tab of the sheet it opens -->
+    <string name="tatrak_chat_who_reacted">Кто отреагировал</string>
+    <string name="tatrak_reactors_all">Все %1$d</string>
 </resources>

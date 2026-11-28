@@ -533,6 +533,161 @@ class ChatScreenshotTest {
         compose.onRoot().captureRoboImage("build/outputs/roborazzi/chat_group_message_info_sheet.png")
     }
 
+    // --- who reacted: a long press on a reaction chip ---
+
+    private val reactorRows =
+        listOf(
+            ReactorRow("a", "Aleksandr Konstantinopolsky", "👍", mine = false, tappable = true, color = UIHelper.getColorForName("Aleksandr"), letter = "A"),
+            ReactorRow("b", "Boris", "👍", mine = false, tappable = true, color = UIHelper.getColorForName("Boris"), letter = "B"),
+            ReactorRow("self", "You", "👍", mine = true, tappable = false, color = UIHelper.getColorForName("You"), letter = "Y"),
+            ReactorRow("c", "Vika", "❤️", mine = false, tappable = true, color = UIHelper.getColorForName("Vika"), letter = "V"),
+        )
+
+    /** The sheet's content on a phone: the All tab, one tab per emoji, a long name cut with an ellipsis, own row marked "You". */
+    private fun reactorsContent(name: String, darkTheme: Boolean) {
+        compose.setContent {
+            TatrakTheme(darkTheme = darkTheme) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+                    ReactorsSheetContent("m5", reactorRows, listOf("👍", "❤️"), "👍", FakeActions, onDismiss = {})
+                }
+            }
+        }
+        compose.onNodeWithText("All 4").assertExists()
+        compose.onNodeWithText("👍 3").assertExists()
+        compose.onNodeWithText("❤️ 1").assertExists()
+        // the initial tab: only the thumbs-up rows
+        compose.onNodeWithText("Vika").assertDoesNotExist()
+        compose.onNodeWithText("You").assertExists()
+        compose.onRoot().captureRoboImage("build/outputs/roborazzi/$name.png")
+    }
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-xxhdpi")
+    fun reactorsSheet() = reactorsContent("chat_reactors_sheet", darkTheme = false)
+
+    @Test
+    @Config(qualifiers = "w360dp-h800dp-night-xxhdpi")
+    fun reactorsSheetDark() = reactorsContent("chat_reactors_sheet_dark", darkTheme = true)
+
+    /** The tab of an emoji nobody reacts with any more falls back to All; with one emoji left there are no tabs. */
+    @Test
+    fun reactorsTabFallsBackToAll() {
+        var rows by mutableStateOf(reactorRows)
+        compose.setContent {
+            TatrakTheme(darkTheme = false) { ReactorsSheetContent("m5", rows, listOf("👍", "❤️"), "❤️", FakeActions, onDismiss = {}) }
+        }
+        compose.onNodeWithText("Vika").assertExists()
+        compose.onNodeWithText("Boris").assertDoesNotExist()
+        rows = reactorRows.filter { it.emoji == "👍" }
+        compose.waitForIdle()
+        compose.onNodeWithText("Vika").assertDoesNotExist()
+        compose.onNodeWithText("Boris").assertExists()
+        compose.onNodeWithText("You").assertExists()
+        compose.onNodeWithText("All 3").assertDoesNotExist()
+    }
+
+    /** A tap on another member's row opens the menu; choosing an entry closes the sheet first. Own rows do nothing. */
+    @Test
+    fun reactorRowMenuClosesTheSheetFirst() {
+        val calls = mutableListOf<String>()
+        val actions = object : ChatActions by FakeActions {
+            override fun reactorMenu(uuid: String, who: String) = listOf(MenuEntry("Private message") { calls += "menu $who" })
+        }
+        compose.setContent {
+            TatrakTheme(darkTheme = false) { ReactorsSheetContent("m5", reactorRows, listOf("👍", "❤️"), "👍", actions, onDismiss = { calls += "dismiss" }) }
+        }
+        compose.onNodeWithText("You").performClick()
+        compose.onNodeWithText("Private message").assertDoesNotExist()
+        compose.onNodeWithText("Boris").performClick()
+        compose.onNodeWithText("Private message").performClick()
+        assertEquals(listOf("dismiss", "menu b"), calls)
+    }
+
+    private val reactionActions = object : ChatActions by FakeActions {
+        override fun reactors(uuid: String) = reactorRows
+    }
+
+    /** m5 has the chips 👍 2 and 🔥 1. */
+    private fun longPressChip() = compose.onNodeWithText("🔥", substring = true).performTouchInput { longClick() }
+
+    @Test
+    fun longPressOnChipOpensWhoReacted() {
+        capture("chat_reactors_open", darkTheme = false, actions = reactionActions, act = { longPressChip() }) { privateChat(it) }
+        compose.onNodeWithText("Boris").assertExists()
+        compose.onNodeWithText("All 4").assertExists()
+        // the message is not selected and its menu is not open
+        assertSelected(null)
+        compose.onNodeWithContentDescription("More reactions").assertDoesNotExist()
+    }
+
+    /** The sheet closes when its message loses its reactions (retracted, deleted, expired) or leaves the list. */
+    @Test
+    fun whoReactedSheetClosesWithItsMessage() {
+        var mode by mutableStateOf(0)
+        capture("chat_reactors_closing", darkTheme = false, actions = reactionActions, act = { longPressChip() }) { s ->
+            privateChat(s).let { st ->
+                when (mode) {
+                    1 -> st.copy(items = st.items.map { if (it is MessageItem && it.key == "m5") it.copy(reactions = emptyList()) else it })
+                    2 -> st.copy(items = st.items.filterNot { it.key == "m5" })
+                    else -> st
+                }
+            }
+        }
+        compose.onNodeWithText("Boris").assertExists()
+        mode = 1
+        compose.waitForIdle()
+        compose.onNodeWithText("Boris").assertDoesNotExist()
+        // a later reaction does not bring it back
+        mode = 0
+        compose.waitForIdle()
+        compose.onNodeWithText("Boris").assertDoesNotExist()
+        longPressChip()
+        compose.onNodeWithText("Boris").assertExists()
+        mode = 2
+        compose.waitForIdle()
+        compose.onNodeWithText("Boris").assertDoesNotExist()
+    }
+
+    /** While messages are selected the chip's long press opens no sheet. */
+    @Test
+    fun longPressOnChipWhileSelectingDoesNothing() {
+        capture(
+            "chat_reactors_selecting",
+            darkTheme = false,
+            actions = reactionActions,
+            act = {
+                compose.onNodeWithText("Yes, an hour ago", substring = true).performTouchInput { longClick() }
+                longPressChip()
+            },
+        ) { privateChat(it) }
+        compose.onNodeWithText("Boris").assertDoesNotExist()
+        // the list's own release-as-tap toggles the message under the finger (as for any long press while selecting); the bar stays
+        compose.onNodeWithContentDescription("Cancel selection").assertExists()
+    }
+
+    /** The sheet is part of the saved screen state: a rotation keeps it open. */
+    @Test
+    fun whoReactedSheetSurvivesRecreation() {
+        val restoration = StateRestorationTester(compose)
+        restoration.setContent {
+            TatrakTheme(darkTheme = false) {
+                ChatScreen(
+                    state = privateChat(Samples(currentTextPalette())),
+                    input = TextFieldValue(),
+                    onInputChange = {},
+                    reply = null,
+                    actions = reactionActions,
+                    voice = voice,
+                    recording = MutableStateFlow(VoiceRecording()),
+                )
+            }
+        }
+        longPressChip()
+        compose.onNodeWithText("Boris").assertExists()
+        restoration.emulateSavedInstanceStateRestore()
+        compose.onNodeWithText("Boris").assertExists()
+    }
+
     /** m5 with sent and received times in a past year (the year shows, so the text does not depend on today) and an OMEMO key. */
     private fun withInfo(st: ChatState, key: String?) =
         st.copy(

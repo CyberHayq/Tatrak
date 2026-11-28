@@ -46,6 +46,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.getValue
@@ -219,6 +220,8 @@ fun MessageRow(
     modifier: Modifier = Modifier,
     selecting: Boolean = false,
     selected: Boolean = false,
+    /** Long press on a reaction chip (the message and the chip's emoji): the "who reacted" sheet. Null: the chips have no long press. */
+    onReactors: ((MessageItem, String) -> Unit)? = null,
 ) {
     ReportComposition(item.key)
     val scope = rememberCoroutineScope()
@@ -231,6 +234,7 @@ fun MessageRow(
     val onMenuState by rememberUpdatedState(onMenu)
     val onSelectState by rememberUpdatedState(onSelect)
     val placed = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    val chipPress = remember { BooleanArray(1) }
     val openMenu = { onMenuState(item, placed[0]?.takeIf { it.isAttached }) }
     val select = { onSelectState(item) }
     val menuLabel = stringResource(R.string.tatrak_open_menu)
@@ -365,10 +369,12 @@ fun MessageRow(
             }
             val open = primaryAction(item, actions)
             val menuMessage = LocalMenuMessage.current
+            CompositionLocalProvider(LocalChipPress provides chipPress) {
             Bubble(
                 item = item,
                 actions = actions,
                 voice = voice,
+                onReactors = onReactors,
                 modifier =
                     Modifier.maxWidthFraction(if (isGroup && !item.isOutgoing) 0.82f else 0.86f)
                         .onPlaced { placed[0] = it }
@@ -394,7 +400,7 @@ fun MessageRow(
                         .then(
                             if (item.actions.any) {
                                 Modifier.pointerInput(item.key) {
-                                    childLongPress {
+                                    childLongPress(chipPress) {
                                         haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                                         onSelectState(item)
                                     }
@@ -404,6 +410,7 @@ fun MessageRow(
                             }
                         ),
             )
+            }
         }
     }
 }
@@ -413,9 +420,11 @@ fun MessageRow(
  * handler, so the bubble's combinedClickable never sees a press on a link. Swallows the release so
  * the link does not open as well.
  */
-private suspend fun PointerInputScope.childLongPress(onLongPress: () -> Unit) = awaitEachGesture {
+private suspend fun PointerInputScope.childLongPress(chipPress: BooleanArray, onLongPress: () -> Unit) = awaitEachGesture {
     val down = awaitFirstDown(requireUnconsumed = false)
     if (!down.isConsumed) return@awaitEachGesture // the bubble's combinedClickable has it
+    // a reaction chip has it: its long press opens "who reacted", it does not select the message
+    if (chipPress[0]) return@awaitEachGesture
     val ended =
         withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
             do {
@@ -482,6 +491,7 @@ fun Bubble(
     actions: ChatActions,
     voice: StateFlow<VoicePlayback>,
     modifier: Modifier = Modifier,
+    onReactors: ((MessageItem, String) -> Unit)? = null,
 ) {
     if (item.trustWarning == null && !item.retractUnverified && item.reactions.isEmpty() && item.reply == null &&
         item.caption == null) {
@@ -548,6 +558,7 @@ fun Bubble(
                 Reactions(
                     item,
                     actions,
+                    onReactors,
                     Modifier.padding(top = 4.dp).then(if (media) Modifier.padding(4.dp) else Modifier),
                 )
                 if (item.kind != MessageKind.CALL) {
@@ -562,6 +573,9 @@ fun Bubble(
         }
     }
 }
+
+/** True while a finger is down on a reaction chip with a long press; the message's own long press (select) stands aside. */
+private val LocalChipPress = staticCompositionLocalOf { BooleanArray(1) }
 
 /** Scrolls the chat to a message by key; provided by the message list. */
 internal val LocalOpenMessage = staticCompositionLocalOf<(String) -> Unit> { {} }
@@ -1199,7 +1213,9 @@ private fun CallContent(item: MessageItem, textColor: Color, secondary: Color) {
 }
 
 @Composable
-private fun Reactions(item: MessageItem, actions: ChatActions, modifier: Modifier = Modifier) {
+private fun Reactions(item: MessageItem, actions: ChatActions, onReactors: ((MessageItem, String) -> Unit)?, modifier: Modifier = Modifier) {
+    val whoReacted = stringResource(R.string.tatrak_chat_who_reacted)
+    val chipPress = LocalChipPress.current
     val accent = if (item.isOutgoing) ChatScreenTheme.colors.accentOut else ChatScreenTheme.colors.accentIn
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(4.dp),
@@ -1215,9 +1231,31 @@ private fun Reactions(item: MessageItem, actions: ChatActions, modifier: Modifie
                     Modifier.height(26.dp)
                         .clip(RoundedCornerShape(13.dp))
                         .background(if (reaction.mine) accent else accent.copy(alpha = 0.14f))
-                        .clickable(enabled = enabled) {
-                            actions.toggleReaction(item.key, reaction.emoji)
-                        }
+                        // the long press also works where reacting is not allowed; combinedClickable vibrates on it itself
+                        .combinedClickable(
+                            enabled = enabled || onReactors != null,
+                            onClickLabel = null,
+                            onLongClickLabel = whoReacted,
+                            onClick = { if (enabled) actions.toggleReaction(item.key, reaction.emoji) },
+                            onLongClick = onReactors?.let { { it(item, reaction.emoji) } },
+                        )
+                        // seen before the chip consumes the press: the bubble's childLongPress checks it
+                        .then(
+                            if (onReactors == null) Modifier
+                            else Modifier.pointerInput(Unit) {
+                                awaitEachGesture {
+                                    awaitFirstDown(requireUnconsumed = false)
+                                    chipPress[0] = true
+                                    try {
+                                        do {
+                                            val event = awaitPointerEvent()
+                                        } while (event.changes.any { it.pressed })
+                                    } finally {
+                                        chipPress[0] = false
+                                    }
+                                }
+                            }
+                        )
                         .padding(horizontal = 8.dp),
             ) {
                 Text(reaction.emoji, fontSize = 14.sp)

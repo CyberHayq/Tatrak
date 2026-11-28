@@ -307,6 +307,15 @@ interface ChatActions {
     /** Group avatar tap: the classic onContactPictureLongClicked participant menu's visible entries; none outside a group. */
     fun senderMenu(uuid: String): List<MenuEntry> = emptyList()
 
+    /** The "who reacted" rows of a message, built from its live reactions; empty when it is gone. */
+    fun reactors(uuid: String): List<ReactorRow> = emptyList()
+
+    /** A reactor's avatar; called off the main thread; null while unavailable. */
+    suspend fun reactorAvatar(uuid: String, who: String, sizePx: Int): Bitmap? = null
+
+    /** Tap on another member's row: the avatar tap's participant menu; empty outside a group. */
+    fun reactorMenu(uuid: String, who: String): List<MenuEntry> = emptyList()
+
     /** The private-message bar's X: the classic composer's cancel, setNextCounterpart(null). */
     fun cancelPrivateMessage() {}
 
@@ -425,6 +434,8 @@ fun ChatScreen(
     var reactingTo by rememberSaveable(state.conversationUuid) { mutableStateOf<String?>(null) }
     val reactionPicker = remember { EmojiPickerSlot() }
     var infoFor by rememberSaveable(state.conversationUuid) { mutableStateOf<String?>(null) }
+    // message uuid and pressed emoji of the open "who reacted" sheet; dropped with the conversation
+    var reactorsFor by rememberSaveable(state.conversationUuid) { mutableStateOf(emptyList<String>()) }
     var wallpaperOpen by rememberSaveable { mutableStateOf(false) }
     var selection by rememberSaveable(state.conversationUuid) { mutableStateOf(emptyList<String>()) }
     // newest first like the list; messages that left the list drop out
@@ -491,6 +502,8 @@ fun ChatScreen(
                             selection = remember(selected) { selected.map { it.key } },
                             onSelectionChange = { if (!preview) selection = it },
                             onMenu = { item, bubble -> if (!selecting && !preview) menu.value = item.key to bounds(screen[0], bubble) },
+                            // the chip swallows its long press while selecting, so the message is not flipped either
+                            onReactors = if (preview) null else { item, emoji -> if (selection.isEmpty()) reactorsFor = listOf(item.key, emoji) },
                             bars = bars,
                             blurred = backdrop != null,
                             preview = preview,
@@ -582,6 +595,19 @@ fun ChatScreen(
     infoFor?.let { key ->
         (state.items.firstOrNull { it.key == key } as? MessageItem)?.let { item ->
             MessageInfoSheet(item, onOpenKey = { actions.openMessageKey(key) }, onDismiss = { infoFor = null })
+        }
+    }
+    if (reactorsFor.isNotEmpty()) {
+        val (uuid, emoji) = reactorsFor
+        val item = state.items.firstOrNull { it.key == uuid } as? MessageItem
+        if (item == null || item.reactions.isEmpty()) {
+            // the message left the list or lost its reactions (retracted, deleted, expired)
+            // not before the first load: a restored sheet waits for its message
+            if (state.loaded) LaunchedEffect(Unit) { reactorsFor = emptyList() }
+        } else {
+            // not remembered: a handful of reactions, rebuilt with each snapshot so a swap that keeps the counts still shows
+            val rows = actions.reactors(uuid)
+            ReactorsSheet(uuid, rows, item.reactions.map { it.emoji }, emoji, actions, onDismiss = { reactorsFor = emptyList() })
         }
     }
 }
@@ -802,6 +828,8 @@ private fun MessageList(
     selection: List<String>,
     onSelectionChange: (List<String>) -> Unit,
     onMenu: (MessageItem, LayoutCoordinates?) -> Unit,
+    /** Long press on a reaction chip; null (the preview): the chips have none. */
+    onReactors: ((MessageItem, String) -> Unit)?,
     /** Floating bars: their heights (the Scaffold's padding); the list runs under them, pads for them and fades into them. */
     bars: PaddingValues? = null,
     /** The bars blur the list under them: no fade at the bars, the messages stay visible beside and (blurred) under them. */
@@ -941,6 +969,7 @@ private fun MessageList(
                                 modifier = Modifier.animateItem().then(flash.modifier(item.key)).then(if (preview) Modifier.previewSpeech(previewSpeech(item)) else Modifier),
                                 selecting = selection.isNotEmpty(),
                                 selected = item.key in selectionSet,
+                                onReactors = onReactors,
                             )
                         is DateItem -> DateChip(item.day, Modifier.animateItem().padding(vertical = 6.dp))
                         is UnreadItem -> UnreadDivider(Modifier.animateItem())

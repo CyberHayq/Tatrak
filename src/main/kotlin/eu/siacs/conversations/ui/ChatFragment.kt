@@ -22,7 +22,10 @@ import am.cyberhayq.chat.ui.chat.SwipeMethod
 import am.cyberhayq.chat.ui.chat.MentionCandidate
 import am.cyberhayq.chat.ui.chat.MessageFocus
 import am.cyberhayq.chat.ui.chat.highlightInConference
+import am.cyberhayq.chat.ui.chat.ReactorRow
 import am.cyberhayq.chat.ui.chat.ReplyPreview
+import am.cyberhayq.chat.ui.chat.reactorRows
+import am.cyberhayq.chat.ui.chat.reactorWho
 import am.cyberhayq.chat.ui.chat.StickerStore
 import am.cyberhayq.chat.ui.chat.ScrollAnchor
 import am.cyberhayq.chat.ui.chat.SwipeBackLayout
@@ -1727,6 +1730,40 @@ class ChatFragment : XmppFragment(), ConversationHost, ChatActions {
         val activity = requireXmppActivity()
         return participantMenu(activity, user) { item, target ->
             MucDetailsContextMenuHelper.onContextItemSelected(item, target, activity, fingerprint)
+        }
+    }
+
+    override fun reactors(uuid: String): List<ReactorRow> =
+        message(uuid)?.let { reactorRows(it, getString(R.string.tatrak_you)) } ?: emptyList()
+
+    override suspend fun reactorAvatar(uuid: String, who: String, sizePx: Int): Bitmap? {
+        val message = message(uuid) ?: return null
+        val c = message.conversation as? Conversation ?: return null
+        val service = xmppConnectionService ?: return null
+        return withContext(mediaDecodeDispatcher) {
+            currentCoroutineContext().ensureActive()
+            val inGroup = c.mode == Conversation.MODE_MULTI && !message.isPrivateMessage
+            when {
+                who == "self" -> service.avatarService.get(c.account, sizePx, false)
+                c.mode != Conversation.MODE_MULTI -> service.avatarService.get(c.contact, sizePx, false)
+                else -> {
+                    val reaction = message.reactions.firstOrNull { reactorWho(it, inGroup) == who } ?: return@withContext null
+                    service.avatarService.get(c.mucOptions.getUserOrStub(reaction), sizePx, false)
+                }
+            }
+        }
+    }
+
+    /** [senderMenu] for a reactor: the same menu, without the message's fingerprint (it is not theirs). */
+    override fun reactorMenu(uuid: String, who: String): List<MenuEntry> {
+        val message = message(uuid) ?: return emptyList()
+        val c = message.conversation as? Conversation ?: return emptyList()
+        if (c.mode != Conversation.MODE_MULTI || message.isPrivateMessage) return emptyList()
+        val reaction = message.reactions.firstOrNull { it.received && reactorWho(it, true) == who } ?: return emptyList()
+        val user = c.mucOptions.getUserOrStub(reaction)
+        val activity = requireXmppActivity()
+        return participantMenu(activity, user) { item, target ->
+            MucDetailsContextMenuHelper.onContextItemSelected(item, target, activity, null)
         }
     }
 
