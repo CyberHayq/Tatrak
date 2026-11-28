@@ -7,6 +7,8 @@
   raw Markdown text with lines broken mid-sentence.
 - The Saved Messages avatar in the chat list is Telegram's blue with a white bookmark in every
   theme; on light accent colours the bookmark used to turn dark.
+- Floating bars: lists and messages stay visible under the bottom bar and fade out, as in Telegram,
+  instead of ending above it on a plain band.
 
 ## 0.6.0-beta.1 (pre-release)
 

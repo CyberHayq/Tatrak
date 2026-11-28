@@ -235,15 +235,23 @@ private class BackdropBlurNode(var backdrop: BarBackdrop, var shape: Shape) :
     }
 }
 
-/** Within a row's empty top / bottom margin (the text starts about 10 dp in), so a row at rest next to a bar is not dimmed. */
+/** Within a row's empty top margin (the text starts about 10 dp in), so a row at rest under the top bar is not dimmed. */
 private val FadeLength = 8.dp
 
+/** Telegram's fade under its floating tabs (MainTabsActivity, BlurredBackgroundWithFadeDrawable): over 60 dp from the slot's top. */
+private val BottomFadeLength = 60.dp
+
+/** The content's alpha along the bottom fade: Telegram's background-coloured stops 0x60, 0xB0, 0xE8 (of 285), inverted. */
+private val BottomFadeStops = listOf(1f, 1f - 0x60 / 285f, 1f - 0xB0 / 285f, 1f - 0xE8 / 285f).map { Color.Black.copy(alpha = it) }
+
 /**
- * The content fades out towards floating bars as high as [bars]' top and bottom (a Scaffold's padding; the screen's edges
- * included): gone under the bars, so the hidden archive row and rows behind the margins never show, and dimming over the
- * [FadeLength] before a bar's inner edge. One offscreen layer for the whole content, no per-item work; the heights are read
+ * The content fades towards floating bars as high as [bars]' top and bottom (a Scaffold's padding; the screen's edges
+ * included). Under the top bar it is gone, so the hidden archive row never shows in the pill's corners, and dims over the
+ * [FadeLength] before the bar's edge. Under the bottom bar it stays visible, as in Telegram: from the slot's top it fades
+ * over [BottomFadeLength] down to about a fifth and holds there to the screen's edge. A mask, not a colour, so the
+ * chat's wallpaper shows through. One offscreen layer for the whole content, no per-item work; the heights are read
  * in the draw cache, so a bar that grows (the keyboard under the chat's composer) redraws without recomposing. With blur the
- * pills show the content blurred from [backdropSource] inside this mask; nothing sharp shows in their rounded corners.
+ * pills show the content blurred from [backdropSource] inside this mask.
  */
 fun Modifier.fadeUnderBars(bars: PaddingValues): Modifier =
     graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen }
@@ -256,12 +264,12 @@ fun Modifier.fadeUnderBars(bars: PaddingValues): Modifier =
             val top = t
             val bottom = size.height - b
             val topMask = Brush.verticalGradient(opaque, top, top + fade)
-            val bottomMask = Brush.verticalGradient(opaque.reversed(), bottom - fade, bottom)
+            val bottomMask = Brush.verticalGradient(BottomFadeStops, bottom, bottom + BottomFadeLength.toPx())
             onDrawWithContent {
                 drawContent()
                 if (t > 0f) drawRect(topMask, size = Size(size.width, top + fade), blendMode = BlendMode.DstIn)
                 if (b > 0f) {
-                    drawRect(bottomMask, topLeft = Offset(0f, bottom - fade), size = Size(size.width, b + fade), blendMode = BlendMode.DstIn)
+                    drawRect(bottomMask, topLeft = Offset(0f, bottom), size = Size(size.width, b), blendMode = BlendMode.DstIn)
                 }
             }
         }
